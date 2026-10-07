@@ -38,7 +38,7 @@ The full spec is [spec.md](spec.md). This file is a summary; when the two disagr
 ## Phase 1 scope
 
 - [x] App shell (Tauri 2 + React + TypeScript scaffold runs on Windows; still the template UI)
-- [ ] SQLite with migrations
+- [x] SQLite with migrations (rusqlite + migration runner + `campaigns` table; 6 Rust tests)
 - [ ] Module registry
 - [ ] Campaigns
 - [ ] Library framework (folders, tags, search, trash)
@@ -46,7 +46,7 @@ The full spec is [spec.md](spec.md). This file is a summary; when the two disagr
 - [ ] Plain document editor
 - [ ] Basic command palette
 - [ ] Content pack export/import (backups)
-- [ ] Test build running on Android
+- [x] Test build running on Android (template app confirmed running on a physical phone)
 
 Later phases: 2 Dice, results, cards · 3 Random tables · 4 Worldbuilding · 5 Rulesets and encounters · 6 Time · 7 Maps · 8 GM screen and polish · 9 Sync and sharing.
 
@@ -57,7 +57,10 @@ Later phases: 2 Dice, results, cards · 3 Random tables · 4 Worldbuilding · 5 
 - TypeScript `strict` on; no `any` (use `unknown` and narrow).
 - React function components and hooks only.
 - npm is the package manager.
-- Logic with tricky rules (dice parser, draw rules, calendar math, pathfinding, migrations) gets automated tests (Vitest). UI is checked by running the app.
+- Logic with tricky rules (dice parser, draw rules, calendar math, pathfinding, migrations) gets automated tests. Logic written in Rust is tested with `cargo test` (in `#[cfg(test)]` modules, using in-memory SQLite); logic written in TypeScript uses Vitest (not set up yet). UI is checked by running the app.
+- **Database lives in Rust** (`rusqlite`, bundled SQLite) in `src-tauri/src/db/`. React never touches SQL; it calls Tauri commands. The DB file is `toolkit.db` in the app data dir.
+- **Migrations:** numbered `.sql` files in `src-tauri/migrations/`, registered in `src-tauri/src/db/migrations.rs`. Version is tracked in SQLite's `user_version`. To change the schema, add the next numbered file and entry; never edit an existing one.
+- **Library tables** use this base: `id TEXT` (UUID), `created_at`/`updated_at` (integer ms since Unix epoch, UTC), `deleted_at` (nullable; set = in trash). See `0001_create_campaigns.sql`.
 - Keep UI logic separate from data/engine logic so engines can be tested without React.
 - UI must work with touch and small screens (Android phone and tablet) as well as mouse and keyboard.
 - Honor a reduce-motion setting for any animation.
@@ -69,8 +72,11 @@ Later phases: 2 Dice, results, cards · 3 Random tables · 4 Worldbuilding · 5 
 | Install dependencies | `npm install` |
 | Run on Windows (dev, hot reload) | `npm run tauri dev` |
 | Type-check and build the front end | `npm run build` |
-| Run on Android | `npm run tauri android dev` (needs `npm run tauri android init` once; not yet done) |
-| Tests | `npm test` (Vitest not set up yet) |
+| Run on Android (phone on USB, same Wi-Fi as PC) | `npm run tauri android dev` |
+| Build a debug APK | `npm run tauri android build -- --debug --apk --target aarch64` |
+| Rust tests | `cargo test` (run inside `src-tauri/`) |
+| TypeScript type check | `npx tsc --noEmit` |
+| TS tests | `npm test` (Vitest not set up yet) |
 
 Notes:
 - The first `tauri dev` compiles all Rust dependencies; later runs are fast.
