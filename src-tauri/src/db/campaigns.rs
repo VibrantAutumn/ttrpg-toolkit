@@ -40,6 +40,15 @@ fn get(conn: &Connection, id: &str) -> Result<Campaign, DbError> {
     })
 }
 
+/// The campaign, unless it is missing or in the trash.
+pub fn get_live(conn: &Connection, id: &str) -> Result<Campaign, DbError> {
+    let campaign = get(conn, id)?;
+    if campaign.deleted_at.is_some() {
+        return Err(DbError::NotFound);
+    }
+    Ok(campaign)
+}
+
 /// Succeeds only if the campaign exists and is not in the trash.
 pub fn require_live(conn: &Connection, id: &str) -> Result<(), DbError> {
     let live: i64 = conn.query_row(

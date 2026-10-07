@@ -24,4 +24,11 @@ export const deleteCampaign = (id: string) =>
 export const restoreCampaign = (id: string) =>
   invoke<Campaign>("restore_campaign", { id });
 
+/** The campaign open on this device, or null if none is chosen. */
+export const getCurrentCampaign = () =>
+  invoke<Campaign | null>("get_current_campaign");
+
+export const setCurrentCampaign = (id: string) =>
+  invoke<Campaign>("set_current_campaign", { id });
+
 export const getSchemaVersion = () => invoke<number>("db_schema_version");

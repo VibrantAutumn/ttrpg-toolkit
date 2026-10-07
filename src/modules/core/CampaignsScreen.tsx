@@ -8,8 +8,10 @@ import {
   renameCampaign,
   restoreCampaign,
 } from "../../api/campaigns";
+import { useCurrentCampaign } from "../../state/CurrentCampaign";
 
 export function CampaignsScreen() {
+  const current = useCurrentCampaign();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -22,11 +24,12 @@ export function CampaignsScreen() {
     setCampaigns(await listCampaigns());
   }, []);
 
-  /** Runs a change, then reloads the list. Shows any error from Rust. */
+  /** Runs a change, then reloads the list and the open campaign. Shows any error from Rust. */
   async function run(action: () => Promise<unknown>) {
     try {
       await action();
       await refresh();
+      await current.refresh(); // renames, deletes and undo can all change the open campaign
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -116,6 +119,11 @@ export function CampaignsScreen() {
               ) : (
                 <div className="row">
                   <span className="name">{c.name}</span>
+                  {current.campaign?.id === c.id ? (
+                    <span className="badge">✓ Open</span>
+                  ) : (
+                    <button onClick={() => run(() => current.open(c.id))}>Open</button>
+                  )}
                   <button onClick={() => startEditing(c)}>Rename</button>
                   <button
                     onClick={() =>

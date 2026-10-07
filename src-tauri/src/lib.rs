@@ -1,51 +1,8 @@
+mod commands;
 mod db;
 
-use db::campaigns::{self, Campaign};
-use db::error::DbError;
-use rusqlite::Connection;
 use std::sync::Mutex;
 use tauri::Manager;
-
-/// Locks the shared connection, runs `f`, and turns errors into strings for the front end.
-fn with_conn<T>(
-    db: &db::Db,
-    f: impl FnOnce(&Connection) -> Result<T, DbError>,
-) -> Result<T, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
-    f(&conn).map_err(|e| e.to_string())
-}
-
-/// Reports the database's schema version (handy for diagnostics).
-#[tauri::command]
-fn db_schema_version(db: tauri::State<db::Db>) -> Result<u32, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
-    db::migrations::current_version(&conn).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn list_campaigns(db: tauri::State<db::Db>) -> Result<Vec<Campaign>, String> {
-    with_conn(&db, campaigns::list)
-}
-
-#[tauri::command]
-fn create_campaign(db: tauri::State<db::Db>, name: String) -> Result<Campaign, String> {
-    with_conn(&db, |c| campaigns::create(c, &name, db::now_ms()))
-}
-
-#[tauri::command]
-fn rename_campaign(db: tauri::State<db::Db>, id: String, name: String) -> Result<Campaign, String> {
-    with_conn(&db, |c| campaigns::rename(c, &id, &name, db::now_ms()))
-}
-
-#[tauri::command]
-fn delete_campaign(db: tauri::State<db::Db>, id: String) -> Result<(), String> {
-    with_conn(&db, |c| campaigns::soft_delete(c, &id, db::now_ms()))
-}
-
-#[tauri::command]
-fn restore_campaign(db: tauri::State<db::Db>, id: String) -> Result<Campaign, String> {
-    with_conn(&db, |c| campaigns::restore(c, &id, db::now_ms()))
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -60,12 +17,36 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            db_schema_version,
-            list_campaigns,
-            create_campaign,
-            rename_campaign,
-            delete_campaign,
-            restore_campaign
+            commands::db_schema_version,
+            commands::list_campaigns,
+            commands::create_campaign,
+            commands::rename_campaign,
+            commands::delete_campaign,
+            commands::restore_campaign,
+            commands::get_current_campaign,
+            commands::set_current_campaign,
+            commands::list_folders,
+            commands::create_folder,
+            commands::rename_folder,
+            commands::move_folder,
+            commands::delete_folder,
+            commands::list_items,
+            commands::create_item,
+            commands::rename_item,
+            commands::move_item,
+            commands::delete_item,
+            commands::list_trash,
+            commands::restore_item,
+            commands::restore_folder,
+            commands::purge_item,
+            commands::purge_folder,
+            commands::empty_trash,
+            commands::list_tags,
+            commands::create_tag,
+            commands::add_tag_to_item,
+            commands::remove_tag_from_item,
+            commands::list_tag_links,
+            commands::search_items,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

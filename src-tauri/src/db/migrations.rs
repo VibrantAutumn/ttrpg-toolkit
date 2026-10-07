@@ -24,6 +24,21 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "create_library",
         sql: include_str!("../../migrations/0002_create_library.sql"),
     },
+    Migration {
+        version: 3,
+        name: "create_tags",
+        sql: include_str!("../../migrations/0003_create_tags.sql"),
+    },
+    Migration {
+        version: 4,
+        name: "create_search",
+        sql: include_str!("../../migrations/0004_create_search.sql"),
+    },
+    Migration {
+        version: 5,
+        name: "create_app_settings",
+        sql: include_str!("../../migrations/0005_create_app_settings.sql"),
+    },
 ];
 
 #[derive(Debug)]

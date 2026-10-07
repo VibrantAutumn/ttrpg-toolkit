@@ -3,6 +3,9 @@ pub mod error;
 pub mod folders;
 pub mod items;
 pub mod migrations;
+pub mod search;
+pub mod settings;
+pub mod tags;
 pub mod trash;
 
 use migrations::MigrationError;
