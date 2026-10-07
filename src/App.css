@@ -36,6 +36,20 @@ body {
   padding: 1rem;
 }
 
+.nav {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.nav button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .row {
   display: flex;
   gap: 0.5rem;

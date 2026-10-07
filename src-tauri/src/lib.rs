@@ -1,6 +1,7 @@
 mod db;
 
-use db::campaigns::{self, Campaign, CampaignError};
+use db::campaigns::{self, Campaign};
+use db::error::DbError;
 use rusqlite::Connection;
 use std::sync::Mutex;
 use tauri::Manager;
@@ -8,7 +9,7 @@ use tauri::Manager;
 /// Locks the shared connection, runs `f`, and turns errors into strings for the front end.
 fn with_conn<T>(
     db: &db::Db,
-    f: impl FnOnce(&Connection) -> Result<T, CampaignError>,
+    f: impl FnOnce(&Connection) -> Result<T, DbError>,
 ) -> Result<T, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     f(&conn).map_err(|e| e.to_string())

@@ -13,11 +13,18 @@ pub struct Migration {
     pub sql: &'static str,
 }
 
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "create_campaigns",
-    sql: include_str!("../../migrations/0001_create_campaigns.sql"),
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "create_campaigns",
+        sql: include_str!("../../migrations/0001_create_campaigns.sql"),
+    },
+    Migration {
+        version: 2,
+        name: "create_library",
+        sql: include_str!("../../migrations/0002_create_library.sql"),
+    },
+];
 
 #[derive(Debug)]
 pub enum MigrationError {

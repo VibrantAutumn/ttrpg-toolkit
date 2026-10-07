@@ -39,8 +39,8 @@ The full spec is [spec.md](spec.md). This file is a summary; when the two disagr
 
 - [x] App shell (Tauri 2 + React + TypeScript scaffold runs on Windows; still the template UI)
 - [x] SQLite with migrations (rusqlite + migration runner + `campaigns` table; 6 Rust tests)
-- [ ] Module registry
-- [ ] Campaigns
+- [x] Module registry (TypeScript; tools, item types, commands; see Conventions)
+- [x] Campaigns (create, list, rename, soft-delete, restore; verified on Windows. Selecting an "open" campaign is deferred to campaign state in Phase 6)
 - [ ] Library framework (folders, tags, search, trash)
 - [ ] Links and backlinks
 - [ ] Plain document editor
@@ -57,9 +57,12 @@ Later phases: 2 Dice, results, cards · 3 Random tables · 4 Worldbuilding · 5 
 - TypeScript `strict` on; no `any` (use `unknown` and narrow).
 - React function components and hooks only.
 - npm is the package manager.
-- Logic with tricky rules (dice parser, draw rules, calendar math, pathfinding, migrations) gets automated tests. Logic written in Rust is tested with `cargo test` (in `#[cfg(test)]` modules, using in-memory SQLite); logic written in TypeScript uses Vitest (not set up yet). UI is checked by running the app.
+- Logic with tricky rules (dice parser, draw rules, calendar math, pathfinding, migrations) gets automated tests. Logic written in Rust is tested with `cargo test` (in `#[cfg(test)]` modules, using in-memory SQLite); logic written in TypeScript uses Vitest (`*.test.ts` next to the code). UI is checked by running the app.
 - **Database lives in Rust** (`rusqlite`, bundled SQLite) in `src-tauri/src/db/`. React never touches SQL; it calls Tauri commands. The DB file is `toolkit.db` in the app data dir.
 - **Migrations:** numbered `.sql` files in `src-tauri/migrations/`, registered in `src-tauri/src/db/migrations.rs`. Version is tracked in SQLite's `user_version`. To change the schema, add the next numbered file and entry; never edit an existing one.
+- **Module registry** (`src/registry/`): a module is a `ModuleDefinition` object (id plus optional `tools`, `itemTypes`, `commands`; types in `registry/types.ts`). To add a feature: create `src/modules/<name>/index.ts` exporting a module, then add it to the list in `src/registry/index.ts`. The app shell (`App.tsx`) builds its navigation from `registry.getTools()`; the command palette will read `registry.getCommands()`. Core code must never import a specific module's screens directly. New contribution kinds (embed types, field types, widgets...) are added to the registry when the first feature needs them. Duplicate ids throw at startup.
+- **Library items:** every item of every tool is a row in the shared `items` table (`library` = owning tool id, `item_type`, `folder_id`, `visibility` of `default|visible|secret`). Types needing more data get their own detail table keyed by the same id. Tags, links, search and trash work on `items`, so they work for every tool. Folders (`folders` table, nestable) belong to one tool's `library`; an item and its folder must share campaign and library. Data-layer code is in `src-tauri/src/db/{items,folders}.rs`; all errors use the shared `DbError` (`db/error.rs`).
+- **Trash semantics:** deleting a folder soft-deletes its subfolders and items with the *same* `deleted_at`, so restoring the folder restores only that group (things deleted earlier stay deleted). `db/trash.rs` lists "roots of deletion" only, restores items/folders (falling back to the top level if the original parent is still trashed), and permanently deletes (`purge_*`, `empty` with an optional "older than" cutoff). Only trashed rows can be purged. Any future table that references `items` (tags, links...) must use `ON DELETE CASCADE` so purging works. Test databases come from `db::open_in_memory()` so they match production (foreign keys on, fully migrated).
 - **Library tables** use this base: `id TEXT` (UUID), `created_at`/`updated_at` (integer ms since Unix epoch, UTC), `deleted_at` (nullable; set = in trash). See `0001_create_campaigns.sql`.
 - Keep UI logic separate from data/engine logic so engines can be tested without React.
 - UI must work with touch and small screens (Android phone and tablet) as well as mouse and keyboard.
@@ -76,7 +79,7 @@ Later phases: 2 Dice, results, cards · 3 Random tables · 4 Worldbuilding · 5 
 | Build a debug APK | `npm run tauri android build -- --debug --apk --target aarch64` |
 | Rust tests | `cargo test` (run inside `src-tauri/`) |
 | TypeScript type check | `npx tsc --noEmit` |
-| TS tests | `npm test` (Vitest not set up yet) |
+| TS tests | `npm test` (Vitest) |
 
 Notes:
 - The first `tauri dev` compiles all Rust dependencies; later runs are fast.

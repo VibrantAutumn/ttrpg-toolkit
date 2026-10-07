@@ -1,5 +1,9 @@
 pub mod campaigns;
+pub mod error;
+pub mod folders;
+pub mod items;
 pub mod migrations;
+pub mod trash;
 
 use migrations::MigrationError;
 use rusqlite::Connection;
@@ -20,8 +24,18 @@ pub struct Db(pub Mutex<Connection>);
 
 /// Opens (creating if needed) the database file and brings its schema up to date.
 pub fn open(path: &Path) -> Result<Connection, MigrationError> {
-    let mut conn = Connection::open(path)?;
+    init(Connection::open(path)?)
+}
+
+/// Settings and migrations every connection gets, real or test.
+fn init(mut conn: Connection) -> Result<Connection, MigrationError> {
     conn.pragma_update(None, "foreign_keys", true)?;
     migrations::migrate(&mut conn, migrations::MIGRATIONS)?;
     Ok(conn)
+}
+
+/// A fresh in-memory database set up exactly like the real one, for tests.
+#[cfg(test)]
+pub fn open_in_memory() -> Connection {
+    init(Connection::open_in_memory().unwrap()).unwrap()
 }

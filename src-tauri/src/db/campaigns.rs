@@ -3,7 +3,7 @@
 
 use rusqlite::{params, Connection, Row};
 use serde::Serialize;
-use std::fmt;
+use super::error::{clean_name, DbError};
 use uuid::Uuid;
 
 const COLUMNS: &str = "id, name, created_at, updated_at, deleted_at";
@@ -18,31 +18,6 @@ pub struct Campaign {
     pub deleted_at: Option<i64>,
 }
 
-#[derive(Debug)]
-pub enum CampaignError {
-    EmptyName,
-    NotFound,
-    Sqlite(rusqlite::Error),
-}
-
-impl fmt::Display for CampaignError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CampaignError::EmptyName => write!(f, "A campaign needs a name."),
-            CampaignError::NotFound => write!(f, "That campaign no longer exists."),
-            CampaignError::Sqlite(e) => write!(f, "database error: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for CampaignError {}
-
-impl From<rusqlite::Error> for CampaignError {
-    fn from(e: rusqlite::Error) -> Self {
-        CampaignError::Sqlite(e)
-    }
-}
-
 fn from_row(row: &Row) -> rusqlite::Result<Campaign> {
     Ok(Campaign {
         id: row.get("id")?,
@@ -53,28 +28,33 @@ fn from_row(row: &Row) -> rusqlite::Result<Campaign> {
     })
 }
 
-fn clean_name(name: &str) -> Result<&str, CampaignError> {
-    let name = name.trim();
-    if name.is_empty() {
-        Err(CampaignError::EmptyName)
-    } else {
-        Ok(name)
-    }
-}
-
-fn get(conn: &Connection, id: &str) -> Result<Campaign, CampaignError> {
+fn get(conn: &Connection, id: &str) -> Result<Campaign, DbError> {
     conn.query_row(
         &format!("SELECT {COLUMNS} FROM campaigns WHERE id = ?1"),
         [id],
         from_row,
     )
     .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => CampaignError::NotFound,
+        rusqlite::Error::QueryReturnedNoRows => DbError::NotFound,
         other => other.into(),
     })
 }
 
-pub fn create(conn: &Connection, name: &str, now: i64) -> Result<Campaign, CampaignError> {
+/// Succeeds only if the campaign exists and is not in the trash.
+pub fn require_live(conn: &Connection, id: &str) -> Result<(), DbError> {
+    let live: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM campaigns WHERE id = ?1 AND deleted_at IS NULL",
+        [id],
+        |row| row.get(0),
+    )?;
+    if live == 0 {
+        Err(DbError::NotFound)
+    } else {
+        Ok(())
+    }
+}
+
+pub fn create(conn: &Connection, name: &str, now: i64) -> Result<Campaign, DbError> {
     let name = clean_name(name)?;
     let id = Uuid::now_v7().to_string();
     conn.execute(
@@ -85,7 +65,7 @@ pub fn create(conn: &Connection, name: &str, now: i64) -> Result<Campaign, Campa
 }
 
 /// Live (not deleted) campaigns, alphabetical.
-pub fn list(conn: &Connection) -> Result<Vec<Campaign>, CampaignError> {
+pub fn list(conn: &Connection) -> Result<Vec<Campaign>, DbError> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {COLUMNS} FROM campaigns WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE, created_at"
     ))?;
@@ -93,37 +73,37 @@ pub fn list(conn: &Connection) -> Result<Vec<Campaign>, CampaignError> {
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
-pub fn rename(conn: &Connection, id: &str, name: &str, now: i64) -> Result<Campaign, CampaignError> {
+pub fn rename(conn: &Connection, id: &str, name: &str, now: i64) -> Result<Campaign, DbError> {
     let name = clean_name(name)?;
     let changed = conn.execute(
         "UPDATE campaigns SET name = ?2, updated_at = ?3 WHERE id = ?1 AND deleted_at IS NULL",
         params![id, name, now],
     )?;
     if changed == 0 {
-        return Err(CampaignError::NotFound);
+        return Err(DbError::NotFound);
     }
     get(conn, id)
 }
 
 /// Moves a campaign to the trash. The row is kept so it can be restored.
-pub fn soft_delete(conn: &Connection, id: &str, now: i64) -> Result<(), CampaignError> {
+pub fn soft_delete(conn: &Connection, id: &str, now: i64) -> Result<(), DbError> {
     let changed = conn.execute(
         "UPDATE campaigns SET deleted_at = ?2, updated_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
         params![id, now],
     )?;
     if changed == 0 {
-        return Err(CampaignError::NotFound);
+        return Err(DbError::NotFound);
     }
     Ok(())
 }
 
-pub fn restore(conn: &Connection, id: &str, now: i64) -> Result<Campaign, CampaignError> {
+pub fn restore(conn: &Connection, id: &str, now: i64) -> Result<Campaign, DbError> {
     let changed = conn.execute(
         "UPDATE campaigns SET deleted_at = NULL, updated_at = ?2 WHERE id = ?1 AND deleted_at IS NOT NULL",
         params![id, now],
     )?;
     if changed == 0 {
-        return Err(CampaignError::NotFound);
+        return Err(DbError::NotFound);
     }
     get(conn, id)
 }
@@ -131,13 +111,7 @@ pub fn restore(conn: &Connection, id: &str, now: i64) -> Result<Campaign, Campai
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::migrations::{migrate, MIGRATIONS};
-
-    fn test_db() -> Connection {
-        let mut conn = Connection::open_in_memory().unwrap();
-        migrate(&mut conn, MIGRATIONS).unwrap();
-        conn
-    }
+    use crate::db::open_in_memory as test_db;
 
     #[test]
     fn create_sets_uuid_timestamps_and_trims_name() {
@@ -153,9 +127,9 @@ mod tests {
     #[test]
     fn blank_names_are_rejected() {
         let conn = test_db();
-        assert!(matches!(create(&conn, "   ", 1), Err(CampaignError::EmptyName)));
+        assert!(matches!(create(&conn, "   ", 1), Err(DbError::EmptyName)));
         let c = create(&conn, "Real", 1).unwrap();
-        assert!(matches!(rename(&conn, &c.id, "", 2), Err(CampaignError::EmptyName)));
+        assert!(matches!(rename(&conn, &c.id, "", 2), Err(DbError::EmptyName)));
     }
 
     #[test]
@@ -203,15 +177,15 @@ mod tests {
         let conn = test_db();
         let c = create(&conn, "Gone", 1).unwrap();
         soft_delete(&conn, &c.id, 2).unwrap();
-        assert!(matches!(rename(&conn, &c.id, "X", 3), Err(CampaignError::NotFound)));
-        assert!(matches!(soft_delete(&conn, &c.id, 3), Err(CampaignError::NotFound)));
-        assert!(matches!(soft_delete(&conn, "nope", 3), Err(CampaignError::NotFound)));
+        assert!(matches!(rename(&conn, &c.id, "X", 3), Err(DbError::NotFound)));
+        assert!(matches!(soft_delete(&conn, &c.id, 3), Err(DbError::NotFound)));
+        assert!(matches!(soft_delete(&conn, "nope", 3), Err(DbError::NotFound)));
     }
 
     #[test]
     fn restoring_a_live_campaign_is_not_found() {
         let conn = test_db();
         let c = create(&conn, "Alive", 1).unwrap();
-        assert!(matches!(restore(&conn, &c.id, 2), Err(CampaignError::NotFound)));
+        assert!(matches!(restore(&conn, &c.id, 2), Err(DbError::NotFound)));
     }
 }
