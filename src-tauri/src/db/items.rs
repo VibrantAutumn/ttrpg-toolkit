@@ -65,6 +65,39 @@ pub fn get(conn: &Connection, id: &str) -> Result<Item, DbError> {
     })
 }
 
+/// Random tables are found by name (in `[Table name]` slots), so two live tables
+/// in a campaign can't share a name, in any folder, ignoring case. Other kinds of
+/// item may share names freely.
+fn needs_unique_name(library: &str, item_type: &str) -> bool {
+    library == "tables" && item_type == "table"
+}
+
+/// Refuses a name that another live item of the same kind already has, for the
+/// kinds that need unique names. `except_id` is the item being renamed or restored.
+pub(super) fn check_name_free(
+    conn: &Connection,
+    campaign_id: &str,
+    library: &str,
+    item_type: &str,
+    name: &str,
+    except_id: Option<&str>,
+) -> Result<(), DbError> {
+    if !needs_unique_name(library, item_type) {
+        return Ok(());
+    }
+    let taken: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM items
+         WHERE campaign_id = ?1 AND library = ?2 AND item_type = ?3 AND deleted_at IS NULL
+           AND name = ?4 COLLATE NOCASE AND (?5 IS NULL OR id <> ?5)",
+        params![campaign_id, library, item_type, name.trim(), except_id],
+        |r| r.get(0),
+    )?;
+    if taken > 0 {
+        return Err(DbError::Invalid("A table with that name already exists. Table names have to be different."));
+    }
+    Ok(())
+}
+
 pub fn create(
     conn: &Connection,
     campaign_id: &str,
@@ -79,6 +112,7 @@ pub fn create(
         return Err(DbError::Invalid("An item needs a library and a type."));
     }
     campaigns::require_live(conn, campaign_id)?;
+    check_name_free(conn, campaign_id, library, item_type, name, None)?;
     if let Some(folder) = folder_id {
         folders::require_live_in(conn, folder, campaign_id, library)?;
     }
@@ -109,6 +143,10 @@ pub fn list(
 
 pub fn rename(conn: &Connection, id: &str, name: &str, now: i64) -> Result<Item, DbError> {
     let name = clean_name(name)?;
+    let current = get(conn, id)?;
+    if current.deleted_at.is_none() {
+        check_name_free(conn, &current.campaign_id, &current.library, &current.item_type, name, Some(id))?;
+    }
     let changed = conn.execute(
         "UPDATE items SET name = ?2, updated_at = ?3 WHERE id = ?1 AND deleted_at IS NULL",
         params![id, name, now],

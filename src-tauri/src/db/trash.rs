@@ -46,8 +46,24 @@ pub fn list(conn: &Connection, campaign_id: &str, library: &str) -> Result<Trash
     Ok(Trash { folders, items })
 }
 
+/// The message for a restore that would make two tables share a name.
+fn name_clash_on_restore(e: DbError) -> DbError {
+    match e {
+        DbError::Invalid(_) => DbError::Invalid(
+            "A table with the same name exists now, so this can't be restored yet. Rename the other table first.",
+        ),
+        other => other,
+    }
+}
+
 /// Brings an item back. If its folder is still in the trash it returns to the top level.
 pub fn restore_item(conn: &Connection, id: &str, now: i64) -> Result<Item, DbError> {
+    let item = items::get(conn, id)?;
+    if item.deleted_at.is_some() {
+        // Kinds that need unique names (tables) can't come back beside a live item with the same name.
+        items::check_name_free(conn, &item.campaign_id, &item.library, &item.item_type, &item.name, Some(id))
+            .map_err(name_clash_on_restore)?;
+    }
     let changed = conn.execute(
         "UPDATE items
          SET deleted_at = NULL, updated_at = ?2,
@@ -69,6 +85,22 @@ pub fn restore_item(conn: &Connection, id: &str, now: i64) -> Result<Item, DbErr
 pub fn restore_folder(conn: &Connection, id: &str, now: i64) -> Result<Folder, DbError> {
     let folder = folders::get(conn, id)?;
     let stamp = folder.deleted_at.ok_or(DbError::NotFound)?;
+    // Tables in the folder can't come back beside a live table with the same name.
+    let coming_back: Vec<(String, String, String, String, String)> = {
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id, campaign_id, library, item_type, name FROM items
+             WHERE deleted_at = ?2 AND folder_id IN ({})",
+            folders::SUBTREE
+        ))?;
+        let rows = stmt.query_map(params![id, stamp], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()?
+    };
+    for (item_id, campaign_id, library, item_type, name) in &coming_back {
+        items::check_name_free(conn, campaign_id, library, item_type, name, Some(item_id))
+            .map_err(name_clash_on_restore)?;
+    }
     let tx = conn.unchecked_transaction()?;
     tx.execute(
         "UPDATE folders SET parent_id = NULL

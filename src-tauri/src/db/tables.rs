@@ -329,6 +329,7 @@ pub fn add_entries(conn: &Connection, table_id: &str, inputs: &[EntryInput], now
 }
 
 /// Adds one entry at the end.
+#[cfg(test)]
 pub fn add_entry(conn: &Connection, table_id: &str, text: &str, weight: i64, now: i64) -> Result<Entry, DbError> {
     let input = EntryInput { text: text.to_string(), weight };
     Ok(add_entries(conn, table_id, &[input], now)?.remove(0))
@@ -877,11 +878,18 @@ mod tests {
         assert_eq!(rows[0].item_id, a.id);
     }
 
+    /// Makes two tables share a name the way data from before the rule could (the rule itself refuses this).
+    fn legacy_duplicate(conn: &Connection, camp: &str) -> (Item, Item) {
+        let old = items::create(conn, camp, LIBRARY, TABLE_TYPE, "Rumors", None, 10).unwrap();
+        let new = items::create(conn, camp, LIBRARY, TABLE_TYPE, "Other name", None, 20).unwrap();
+        conn.execute("UPDATE items SET name = 'rumors' WHERE id = ?1", [&new.id]).unwrap();
+        (old, items::get(conn, &new.id).unwrap())
+    }
+
     #[test]
-    fn same_named_tables_are_flagged_and_the_oldest_is_found_by_slots() {
+    fn old_same_named_tables_are_flagged_and_the_oldest_is_found_by_slots() {
         let (conn, camp) = setup();
-        let old = items::create(&conn, &camp, LIBRARY, TABLE_TYPE, "Rumors", None, 10).unwrap();
-        let new = items::create(&conn, &camp, LIBRARY, TABLE_TYPE, "rumors", None, 20).unwrap();
+        let (old, new) = legacy_duplicate(&conn, &camp);
         let unique = table(&conn, &camp, "Names");
         let (old_d, new_d, uniq_d) =
             (get(&conn, &old.id).unwrap(), get(&conn, &new.id).unwrap(), get(&conn, &unique.id).unwrap());
@@ -899,10 +907,84 @@ mod tests {
         items::soft_delete(&conn, &old.id, 30).unwrap();
         let n = get(&conn, &new.id).unwrap();
         assert_eq!((n.duplicate_name, n.found_by_slots), (false, true));
-        // Tables of other kinds or campaigns with the same name don't count.
+        // Tables of other campaigns with the same name don't count.
         let other = campaigns::create(&conn, "Other", 31).unwrap();
         table(&conn, &other.id, "rumors");
         assert!(!get(&conn, &new.id).unwrap().duplicate_name);
+    }
+
+    #[test]
+    fn two_tables_cannot_share_a_name_ignoring_case_and_spaces() {
+        let (conn, camp) = setup();
+        let first = table(&conn, &camp, "Rumors");
+        for name in ["Rumors", "rumors", "  RUMORS  "] {
+            let err = items::create(&conn, &camp, LIBRARY, TABLE_TYPE, name, None, 2).unwrap_err();
+            assert!(matches!(err, DbError::Invalid(_)), "{name}");
+            assert!(err.to_string().contains("already exists"));
+        }
+        // Folders don't make a name different.
+        let folder = crate::db::folders::create(&conn, &camp, LIBRARY, None, "North", 2).unwrap();
+        assert!(items::create(&conn, &camp, LIBRARY, TABLE_TYPE, "Rumors", Some(&folder.id), 2).is_err());
+        // The refused attempts left nothing behind.
+        assert_eq!(list(&conn, &camp).unwrap().len(), 1);
+        assert_eq!(list(&conn, &camp).unwrap()[0].item_id, first.id);
+    }
+
+    #[test]
+    fn the_same_name_is_fine_for_other_campaigns_other_kinds_and_trashed_tables() {
+        let (conn, camp) = setup();
+        let first = table(&conn, &camp, "Rumors");
+        let other = campaigns::create(&conn, "Other", 2).unwrap();
+        table(&conn, &other.id, "Rumors");
+        items::create(&conn, &camp, "worldbuilding", "document", "Rumors", None, 3).unwrap();
+        items::create(&conn, &camp, LIBRARY, "other", "Rumors", None, 3).unwrap();
+        // A trashed table gives its name up.
+        items::soft_delete(&conn, &first.id, 4).unwrap();
+        table(&conn, &camp, "Rumors");
+    }
+
+    #[test]
+    fn renaming_to_a_taken_name_is_refused_but_changing_your_own_case_is_fine() {
+        let (conn, camp) = setup();
+        let a = table(&conn, &camp, "Rumors");
+        let b = table(&conn, &camp, "Names");
+        assert!(matches!(items::rename(&conn, &b.id, "RUMORS", 5), Err(DbError::Invalid(_))));
+        assert_eq!(items::get(&conn, &b.id).unwrap().name, "Names");
+        assert_eq!(items::rename(&conn, &a.id, "rumors", 6).unwrap().name, "rumors");
+        assert_eq!(items::rename(&conn, &b.id, "Quests", 7).unwrap().name, "Quests");
+        // Items that don't need unique names can be renamed to anything.
+        let doc = items::create(&conn, &camp, "worldbuilding", "document", "Doc", None, 8).unwrap();
+        items::create(&conn, &camp, "worldbuilding", "document", "Other doc", None, 8).unwrap();
+        items::rename(&conn, &doc.id, "Other doc", 9).unwrap();
+    }
+
+    #[test]
+    fn a_trashed_table_cannot_come_back_beside_a_table_with_its_name() {
+        let (conn, camp) = setup();
+        let old = table(&conn, &camp, "Rumors");
+        items::soft_delete(&conn, &old.id, 2).unwrap();
+        let replacement = table(&conn, &camp, "Rumors");
+        let err = trash::restore_item(&conn, &old.id, 3).unwrap_err();
+        assert!(matches!(err, DbError::Invalid(_)));
+        assert!(err.to_string().contains("Rename the other table"));
+        assert!(items::get(&conn, &old.id).unwrap().deleted_at.is_some());
+        // Once the other one is renamed (or trashed) it can come back.
+        items::rename(&conn, &replacement.id, "Rumors (new)", 4).unwrap();
+        trash::restore_item(&conn, &old.id, 5).unwrap();
+        assert!(items::get(&conn, &old.id).unwrap().deleted_at.is_none());
+    }
+
+    #[test]
+    fn restoring_a_folder_is_refused_if_a_table_in_it_would_clash() {
+        let (conn, camp) = setup();
+        let folder = crate::db::folders::create(&conn, &camp, LIBRARY, None, "North", 1).unwrap();
+        let inside = items::create(&conn, &camp, LIBRARY, TABLE_TYPE, "Rumors", Some(&folder.id), 1).unwrap();
+        crate::db::folders::soft_delete(&conn, &folder.id, 2).unwrap();
+        table(&conn, &camp, "Rumors");
+        assert!(matches!(trash::restore_folder(&conn, &folder.id, 3), Err(DbError::Invalid(_))));
+        // Nothing was restored.
+        assert!(items::get(&conn, &inside.id).unwrap().deleted_at.is_some());
+        assert!(crate::db::folders::get(&conn, &folder.id).unwrap().deleted_at.is_some());
     }
 
     #[test]
