@@ -9,7 +9,7 @@
 use super::format::*;
 use super::PackError;
 use crate::db::campaigns::{self, Campaign};
-use crate::db::{documents, settings};
+use crate::db::{documents, saved_rolls, settings};
 use rusqlite::{params, Connection, ErrorCode};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -46,6 +46,7 @@ pub struct ParsedPack {
     pub item_tags: Vec<ItemTagRecord>,
     pub links: Vec<LinkRecord>,
     pub documents: Vec<DocumentRecord>,
+    pub saved_rolls: Vec<SavedRollRecord>,
     /// Plain-language notes about anything that had to be fixed or skipped.
     pub warnings: Vec<String>,
 }
@@ -60,6 +61,7 @@ impl ParsedPack {
             item_tags: self.item_tags.len() as u32,
             links: self.links.len() as u32,
             documents: self.documents.len() as u32,
+            saved_rolls: self.saved_rolls.len() as u32,
         }
     }
 }
@@ -127,6 +129,7 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         item_tags: read_list(&mut archive, ITEM_TAGS_FILE, limits, &mut total)?,
         links: read_list(&mut archive, LINKS_FILE, limits, &mut total)?,
         documents: read_list(&mut archive, DOCUMENTS_FILE, limits, &mut total)?,
+        saved_rolls: read_list(&mut archive, SAVED_ROLLS_FILE, limits, &mut total)?,
         warnings: Vec::new(),
     };
     sanitize(&mut pack);
@@ -425,6 +428,15 @@ fn sanitize(pack: &mut ParsedPack) {
     });
     note(before - pack.documents.len(), "document text(s) belonged to something missing or were too long and were skipped.");
 
+    let before = pack.saved_rolls.len();
+    let mut seen = HashSet::new();
+    pack.saved_rolls.retain(|r| {
+        item_type.get(r.item_id.as_str()) == Some(&saved_rolls::SAVED_ROLL_TYPE)
+            && saved_rolls::validate(&r.notation, &r.text, &r.result_json).is_ok()
+            && seen.insert(r.item_id.clone())
+    });
+    note(before - pack.saved_rolls.len(), "saved roll(s) belonged to something missing or were unreadable and were skipped.");
+
     pack.warnings = warnings;
 }
 
@@ -521,6 +533,15 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
         tx.execute(
             "INSERT INTO document_content (item_id, body, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
             params![item_ids[&d.item_id], d.body, d.created_at, d.updated_at],
+        )
+        .map_err(db_error)?;
+    }
+
+    for r in &pack.saved_rolls {
+        tx.execute(
+            "INSERT INTO saved_rolls (item_id, notation, seed, text, result_json, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![item_ids[&r.item_id], r.notation, r.seed, r.text, r.result_json, r.created_at, r.updated_at],
         )
         .map_err(db_error)?;
     }

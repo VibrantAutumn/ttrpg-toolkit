@@ -10,6 +10,7 @@ use crate::db::error::DbError;
 use crate::db::folders::{self, Folder};
 use crate::db::items::{self, Item};
 use crate::db::links;
+use crate::db::saved_rolls::{self, NewSavedRoll, SavedRoll};
 use crate::db::tags::{self, Tag, TagLink};
 use crate::db::trash::{self, Trash};
 use crate::db::{self, search, settings};
@@ -85,6 +86,41 @@ pub fn get_current_campaign(db: Db) -> Result<Option<Campaign>, String> {
 #[tauri::command]
 pub fn set_current_campaign(db: Db, id: String) -> Result<Campaign, String> {
     with_conn(&db, |c| settings::set_current_campaign(c, &id, db::now_ms()))
+}
+
+// ---- Saved dice rolls ----
+
+/// Saves a finished roll as a new item in the Dice library.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn save_roll(
+    db: Db,
+    campaign_id: String,
+    name: String,
+    folder_id: Option<String>,
+    notation: String,
+    seed: i64,
+    text: String,
+    result_json: String,
+) -> Result<Item, String> {
+    with_conn(&db, |c| {
+        let new = NewSavedRoll {
+            campaign_id: &campaign_id,
+            name: &name,
+            folder_id: folder_id.as_deref(),
+            notation: &notation,
+            seed,
+            text: &text,
+            result_json: &result_json,
+        };
+        saved_rolls::create(c, new, db::now_ms()).map(|(item, _)| item)
+    })
+}
+
+/// A saved roll's details (notation, seed, readable text and the full result).
+#[tauri::command]
+pub fn get_saved_roll(db: Db, item_id: String) -> Result<SavedRoll, String> {
+    with_conn(&db, |c| saved_rolls::get(c, &item_id))
 }
 
 // ---- Content packs ----

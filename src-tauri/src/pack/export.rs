@@ -22,6 +22,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     let item_tags = read_item_tags(conn, campaign_id)?;
     let links = read_links(conn, campaign_id)?;
     let documents = read_documents(conn, campaign_id)?;
+    let saved_rolls = read_saved_rolls(conn, campaign_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -38,6 +39,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
             item_tags: item_tags.len() as u32,
             links: links.len() as u32,
             documents: documents.len() as u32,
+            saved_rolls: saved_rolls.len() as u32,
         },
     };
 
@@ -50,6 +52,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     put(&mut zip, options, ITEM_TAGS_FILE, &item_tags, false)?;
     put(&mut zip, options, LINKS_FILE, &links, false)?;
     put(&mut zip, options, DOCUMENTS_FILE, &documents, false)?;
+    put(&mut zip, options, SAVED_ROLLS_FILE, &saved_rolls, false)?;
     let cursor = zip.finish().map_err(|e| PackError::Failed(e.to_string()))?;
     Ok(cursor.into_inner())
 }
@@ -183,6 +186,26 @@ fn read_documents(conn: &Connection, campaign_id: &str) -> Result<Vec<DocumentRe
             body: r.get(1)?,
             created_at: r.get(2)?,
             updated_at: r.get(3)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_saved_rolls(conn: &Connection, campaign_id: &str) -> Result<Vec<SavedRollRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT s.item_id, s.notation, s.seed, s.text, s.result_json, s.created_at, s.updated_at
+         FROM saved_rolls s JOIN items i ON i.id = s.item_id
+         WHERE i.campaign_id = ?1 ORDER BY s.created_at, s.item_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(SavedRollRecord {
+            item_id: r.get(0)?,
+            notation: r.get(1)?,
+            seed: r.get(2)?,
+            text: r.get(3)?,
+            result_json: r.get(4)?,
+            created_at: r.get(5)?,
+            updated_at: r.get(6)?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)

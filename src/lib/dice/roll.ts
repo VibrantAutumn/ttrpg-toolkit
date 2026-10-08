@@ -6,7 +6,15 @@
  * die in turn, its first roll, then its rerolls, then each explosion (which is
  * itself rerolled and may explode again), before the next die is rolled.
  */
-import { type Compare, type DiceExpression, type DiceTerm, type ParseError, matchesCompare, parseDice } from "./parse";
+import {
+  type Compare,
+  type DiceExpression,
+  type DiceTerm,
+  type ParseError,
+  type Term,
+  matchesCompare,
+  parseDice,
+} from "./parse";
 import type { Rng } from "./rng";
 
 /** Most extra dice one die can explode into, and most rerolls of one die. */
@@ -34,6 +42,8 @@ export interface DiceTermResult {
   dice: DieRecord[];
   /** Signed contribution to the total (sum of kept dice, or success count). */
   subtotal: number;
+  /** True if an explosion or reroll limit stopped this term early. */
+  capped: boolean;
 }
 
 export interface ConstantTermResult {
@@ -56,17 +66,43 @@ export interface DiceResult {
 export type RollNotationResult = { ok: true; result: DiceResult } | { ok: false; error: ParseError };
 
 export function rollDice(expression: DiceExpression, rng: Rng): DiceResult {
-  let capped = false;
-  const terms: TermResult[] = expression.terms.map((term) => {
-    if (term.kind === "constant") {
-      return { kind: "constant", sign: term.sign, value: term.value, subtotal: term.sign * term.value };
-    }
-    const rolled = rollDiceTerm(term, rng);
-    if (rolled.capped) capped = true;
-    return rolled.result;
-  });
-  const total = terms.reduce((sum, t) => sum + t.subtotal, 0);
-  return { notation: expression.notation, total, terms, capped };
+  return assemble(expression, expression.terms.map((term) => rollTerm(term, rng)));
+}
+
+/**
+ * Rolls again, but keeps the terms at the `locked` positions exactly as they
+ * were in `previous` (which must come from the same expression). Only the
+ * unlocked terms use randomness, in order.
+ */
+export function rerollDice(
+  expression: DiceExpression,
+  previous: DiceResult,
+  locked: ReadonlySet<number>,
+  rng: Rng,
+): DiceResult {
+  if (previous.notation !== expression.notation || previous.terms.length !== expression.terms.length) {
+    throw new Error("rerollDice needs a previous result of the same formula");
+  }
+  return assemble(
+    expression,
+    expression.terms.map((term, i) => (locked.has(i) ? previous.terms[i] : rollTerm(term, rng))),
+  );
+}
+
+function assemble(expression: DiceExpression, terms: TermResult[]): DiceResult {
+  return {
+    notation: expression.notation,
+    total: terms.reduce((sum, t) => sum + t.subtotal, 0),
+    terms,
+    capped: terms.some((t) => t.kind === "dice" && t.capped),
+  };
+}
+
+function rollTerm(term: Term, rng: Rng): TermResult {
+  if (term.kind === "constant") {
+    return { kind: "constant", sign: term.sign, value: term.value, subtotal: term.sign * term.value };
+  }
+  return rollDiceTerm(term, rng);
 }
 
 /** Parse and roll in one step. */
@@ -76,7 +112,7 @@ export function rollNotation(notation: string, rng: Rng): RollNotationResult {
   return { ok: true, result: rollDice(parsed.expression, rng) };
 }
 
-function rollDiceTerm(term: DiceTerm, rng: Rng): { result: DiceTermResult; capped: boolean } {
+function rollDiceTerm(term: DiceTerm, rng: Rng): DiceTermResult {
   let capped = false;
   const dice: DieRecord[] = [];
   const draw = (): number => (term.die.type === "fate" ? rng.int(-1, 1) : rng.int(1, term.die.sides));
@@ -135,10 +171,7 @@ function rollDiceTerm(term: DiceTerm, rng: Rng): { result: DiceTermResult; cappe
     ? dice.filter((d) => d.success).length
     : dice.reduce((sum, d) => (d.kept ? sum + d.value : sum), 0);
 
-  return {
-    result: { kind: "dice", sign: term.sign, dice, subtotal: term.sign * raw },
-    capped,
-  };
+  return { kind: "dice", sign: term.sign, dice, subtotal: term.sign * raw, capped };
 }
 
 /** Marks dice as not kept. Ties are settled by roll order (earlier dice rank lower). */

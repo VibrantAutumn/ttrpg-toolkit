@@ -8,6 +8,7 @@
 //!   data/item_tags.json
 //!   data/links.json
 //!   data/documents.json
+//!   data/saved_rolls.json    (added later; older packs simply lack it)
 //!   assets/                  reserved for future use (images, ...)
 //!
 //! These types are deliberately separate from the database structs so changing
@@ -29,6 +30,7 @@ pub const TAGS_FILE: &str = "data/tags.json";
 pub const ITEM_TAGS_FILE: &str = "data/item_tags.json";
 pub const LINKS_FILE: &str = "data/links.json";
 pub const DOCUMENTS_FILE: &str = "data/documents.json";
+pub const SAVED_ROLLS_FILE: &str = "data/saved_rolls.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,6 +62,7 @@ pub struct Counts {
     pub item_tags: u32,
     pub links: u32,
     pub documents: u32,
+    pub saved_rolls: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +130,19 @@ pub struct LinkRecord {
 pub struct DocumentRecord {
     pub item_id: String,
     pub body: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedRollRecord {
+    pub item_id: String,
+    pub notation: String,
+    pub seed: i64,
+    pub text: String,
+    /// The finished roll as a JSON text (kept as text so its shape can grow).
+    pub result_json: String,
     pub created_at: i64,
     pub updated_at: i64,
 }

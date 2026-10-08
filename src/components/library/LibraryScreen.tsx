@@ -26,6 +26,7 @@ import {
 import type { ItemTypeDefinition } from "../../registry/types";
 import { useCurrentCampaign } from "../../state/CurrentCampaign";
 import { useNavigation } from "../../state/Navigation";
+import { useDataVersion } from "../../state/dataVersion";
 import { ConfirmButton } from "../ConfirmButton";
 import { childFolders, folderOptions, folderPath, tagsByItem } from "./helpers";
 import { TagChips } from "./TagChips";
@@ -46,14 +47,19 @@ export function LibraryScreen({
   library,
   title,
   itemTypes,
+  allowNewItems = true,
 }: {
   library: string;
   title: string;
   itemTypes: ItemTypeDefinition[];
+  /** False for libraries whose items are made elsewhere (e.g. saved rolls): hides the "New item" form. */
+  allowNewItems?: boolean;
 }) {
   const { campaign, loading } = useCurrentCampaign();
   const { openItem } = useNavigation();
   const campaignId = campaign?.id ?? null;
+  // Changes made elsewhere (an item's page, saving a roll) make this list reload.
+  const dataVersion = useDataVersion();
 
   const [folderId, setFolderId] = useState<string | null>(null);
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -89,7 +95,7 @@ export function LibraryScreen({
     setLinks(l);
     setTrash(tr);
     setVersion((v) => v + 1);
-  }, [campaignId, library, folderId]);
+  }, [campaignId, library, folderId, dataVersion]);
 
   /** Runs a change, then reloads everything. Shows any error from Rust. */
   const run = useCallback(
@@ -395,6 +401,7 @@ export function LibraryScreen({
             <button type="submit">New folder</button>
           </form>
 
+          {allowNewItems && (
           <form
             className="row"
             onSubmit={(e) => {
@@ -428,12 +435,15 @@ export function LibraryScreen({
               New {typeLabel.toLowerCase()}
             </button>
           </form>
+          )}
 
           {subfolders.length === 0 && items.length === 0 ? (
             <p className="empty">
               {folderId
                 ? "This folder is empty."
-                : `Nothing here yet. Create a folder or a ${typeLabel.toLowerCase()} above.`}
+                : allowNewItems
+                  ? `Nothing here yet. Create a folder or a ${typeLabel.toLowerCase()} above.`
+                  : "Nothing here yet. Create a folder above, or save a roll."}
             </p>
           ) : (
             <ul className="list">

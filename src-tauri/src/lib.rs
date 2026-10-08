@@ -44,6 +44,8 @@ pub fn run() {
             commands::get_item,
             commands::get_document_body,
             commands::set_document_body,
+            commands::save_roll,
+            commands::get_saved_roll,
             commands::list_links,
             commands::list_backlinks,
             commands::add_link,

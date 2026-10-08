@@ -342,3 +342,21 @@ button.link {
   color: var(--accent);
   text-decoration: underline;
 }
+
+/* Dice: roll log and saved rolls */
+.roll-entry {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.roll-text {
+  font-family: ui-monospace, Consolas, Menlo, monospace;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+[role="tab"].active,
+button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}

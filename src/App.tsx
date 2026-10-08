@@ -5,6 +5,7 @@ import { StatusBar } from "./components/StatusBar";
 import { registry } from "./registry";
 import { CurrentCampaignProvider, useCurrentCampaign } from "./state/CurrentCampaign";
 import { NavigationProvider } from "./state/Navigation";
+import { rollLog } from "./state/rollLog";
 import "./App.css";
 
 /** The app shell: navigation is built from whatever tools modules have registered. */
@@ -28,6 +29,8 @@ function Shell() {
   const campaignId = campaign?.id;
   useEffect(() => {
     setItemStack([]);
+    // Rolls can be saved into a campaign, so each campaign starts with a fresh log.
+    rollLog.clear();
   }, [campaignId]);
 
   function openTool(id: string) {

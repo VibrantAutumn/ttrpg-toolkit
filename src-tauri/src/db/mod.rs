@@ -5,6 +5,7 @@ pub mod folders;
 pub mod items;
 pub mod links;
 pub mod migrations;
+pub mod saved_rolls;
 pub mod search;
 pub mod settings;
 pub mod tags;

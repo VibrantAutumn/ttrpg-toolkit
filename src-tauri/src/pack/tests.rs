@@ -2,6 +2,7 @@ use super::export::export_campaign;
 use super::format::*;
 use super::import::{import_pack, import_parsed, parent_first, read_pack, read_pack_with, Limits};
 use super::PackError;
+use crate::db::saved_rolls::{self, NewSavedRoll};
 use crate::db::{campaigns, documents, folders, items, links, open_in_memory, search, settings, tags};
 use rusqlite::types::Value;
 use rusqlite::Connection;
@@ -12,7 +13,8 @@ use zip::{write::SimpleFileOptions, ZipWriter};
 /// A campaign exercising everything a pack carries, with fixed timestamps:
 /// nested folders, items in and out of folders, a map, document text, nested and
 /// coloured tags, attached and removed tags, links (one removed), and trash
-/// (a deleted item, a deleted folder with a deleted item inside, a deleted tag).
+/// (a deleted item, a deleted folder with a deleted item inside, a deleted tag),
+/// and two saved dice rolls (one in the trash).
 fn populate(conn: &Connection) -> String {
     let camp = campaigns::create(conn, "Strahd", 1000).unwrap();
     let c = camp.id.as_str();
@@ -53,6 +55,22 @@ fn populate(conn: &Connection) -> String {
     links::add(conn, &barovia.id, &ireena.id, links::MANUAL, 2420).unwrap();
     links::remove(conn, &barovia.id, &ireena.id, links::MANUAL, 2500).unwrap();
 
+    let roll = |name: &str, seed: i64, at: i64| {
+        let new = NewSavedRoll {
+            campaign_id: c,
+            name,
+            folder_id: None,
+            notation: "2d6+3",
+            seed,
+            text: "2d6+3 → [4, 5] + 3 = 12",
+            result_json: r#"{"notation":"2d6+3","total":12,"terms":[],"capped":false}"#,
+        };
+        saved_rolls::create(conn, new, at).unwrap().0
+    };
+    roll("Sneak attack", 4_000_000_000, 2600);
+    let old_roll = roll("Old roll", 7, 2650);
+    items::soft_delete(conn, &old_roll.id, 2700).unwrap();
+
     camp.id
 }
 
@@ -84,6 +102,7 @@ struct Snapshot {
     item_tags: Vec<String>,
     links: Vec<String>,
     documents: Vec<String>,
+    saved_rolls: Vec<String>,
 }
 
 fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
@@ -108,6 +127,9 @@ fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
         documents: lines(conn,
             "SELECT i.name, d.body, d.created_at, d.updated_at
              FROM document_content d JOIN items i ON i.id = d.item_id WHERE i.campaign_id = ?1", campaign_id),
+        saved_rolls: lines(conn,
+            "SELECT i.name, i.library, s.notation, s.seed, s.text, s.result_json, s.created_at, s.updated_at, i.deleted_at
+             FROM saved_rolls s JOIN items i ON i.id = s.item_id WHERE i.campaign_id = ?1", campaign_id),
     }
 }
 
@@ -158,7 +180,8 @@ fn the_manifest_describes_the_pack() {
     assert_eq!(
         m.counts,
         // 4 documents have text: Strahd, Ireena, Barovia and Old Note ("Scrap" and the map have none).
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4 }
+        // The 2 saved rolls are items too (8 items: 5 documents, a map and 2 rolls).
+        Counts { folders: 3, items: 8, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 2 }
     );
     assert_eq!(pack.counts(), m.counts);
     assert!(pack.warnings.is_empty(), "a normal export needs no repairs: {:?}", pack.warnings);
@@ -187,7 +210,7 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
         )
         .unwrap();
     assert_eq!(shared, 0);
-    assert_eq!(count(&conn, "items"), 12);
+    assert_eq!(count(&conn, "items"), 16);
 }
 
 #[test]
@@ -235,7 +258,7 @@ fn imported_items_remember_where_they_came_from() {
             .map(|r| r.unwrap())
             .collect()
     };
-    assert_eq!(rows.len(), 6);
+    assert_eq!(rows.len(), 8);
     for (name, origin_pack, origin_item) in rows {
         assert_eq!(origin_pack.as_deref(), Some(pack_id.as_str()), "{name}");
         // The origin id is the item's id in the ORIGINAL campaign.
@@ -507,7 +530,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
     assert!(pack.warnings.iter().all(|w| w.chars().next().unwrap().is_ascii_digit()));
     assert_eq!(
         pack.counts(),
-        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1 }
+        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0 }
     );
 
     let conn = open_in_memory();
@@ -628,7 +651,7 @@ fn the_committed_version_1_pack_still_imports() {
     assert_eq!(result.campaign.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4 }
+        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0 }
     );
     let camp = result.campaign.id;
 
@@ -682,4 +705,70 @@ fn bad_files_never_create_a_campaign() {
     let _ = import_pack(&conn, b"garbage", 1);
     let _ = import_pack(&conn, &make_zip(&[(MANIFEST_FILE, manifest_json(2).as_bytes())]), 1);
     assert_eq!(count(&conn, "campaigns"), before);
+}
+
+#[test]
+fn a_failed_import_also_rolls_back_saved_rolls() {
+    let source = open_in_memory();
+    let camp = populate(&source);
+    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+
+    // Break only the LAST thing the importer writes.
+    let target = open_in_memory();
+    target.execute_batch("DROP TABLE saved_rolls").unwrap();
+    assert!(import_pack(&target, &bytes, 6000).is_err());
+    for table in ["campaigns", "folders", "items", "tags", "document_content"] {
+        assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
+    }
+}
+
+#[test]
+fn saved_rolls_keep_their_trash_state_and_stay_in_the_dice_library() {
+    let conn = open_in_memory();
+    let original = populate(&conn);
+    let bytes = export_campaign(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+
+    let live = items::list(&conn, &imported, "dice", None).unwrap();
+    assert_eq!(live.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(), ["Sneak attack"]);
+    let roll = saved_rolls::get(&conn, &live[0].id).unwrap();
+    assert_eq!(roll.seed, 4_000_000_000);
+    assert_eq!(roll.text, "2d6+3 → [4, 5] + 3 = 12");
+
+    let trash = crate::db::trash::list(&conn, &imported, "dice").unwrap();
+    assert_eq!(trash.items.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(), ["Old roll"]);
+    // And the roll's text is searchable after import.
+    assert_eq!(search::search(&conn, &imported, "sneak", Some("dice"), 10).unwrap().len(), 1);
+}
+
+#[test]
+fn unreadable_or_orphaned_saved_rolls_are_skipped_with_a_warning() {
+    let good = r#"{"notation":"1d6","total":3}"#;
+    let bytes = pack_with(&[
+        (ITEMS_FILE, json!([
+            { "id": "r1", "library": "dice", "itemType": "saved_roll", "name": "Good", "icon": null,
+              "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+            { "id": "r2", "library": "dice", "itemType": "saved_roll", "name": "Broken", "icon": null,
+              "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+            { "id": "d1", "library": "worldbuilding", "itemType": "document", "name": "Doc", "icon": null,
+              "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+        ])),
+        (SAVED_ROLLS_FILE, json!([
+            { "itemId": "r1", "notation": "1d6", "seed": 1, "text": "1d6 → [3] = 3", "resultJson": good, "createdAt": 1, "updatedAt": 1 },
+            { "itemId": "r2", "notation": "1d6", "seed": 1, "text": "1d6 → [3] = 3", "resultJson": "not json", "createdAt": 1, "updatedAt": 1 },
+            { "itemId": "d1", "notation": "1d6", "seed": 1, "text": "x", "resultJson": good, "createdAt": 1, "updatedAt": 1 },
+            { "itemId": "ghost", "notation": "1d6", "seed": 1, "text": "x", "resultJson": good, "createdAt": 1, "updatedAt": 1 },
+            { "itemId": "r1", "notation": "1d6", "seed": 2, "text": "dupe", "resultJson": good, "createdAt": 1, "updatedAt": 1 },
+        ])),
+    ]);
+    let pack = read_pack(&bytes).unwrap();
+    assert_eq!(pack.saved_rolls.len(), 1);
+    assert_eq!(pack.warnings.len(), 1);
+    assert!(pack.warnings[0].starts_with("4 saved roll(s)"), "{:?}", pack.warnings);
+
+    // The item whose details were dropped still imports (as an item without details).
+    let conn = open_in_memory();
+    let camp = import_parsed(&conn, &pack, 10).unwrap().campaign.id;
+    assert_eq!(items::list(&conn, &camp, "dice", None).unwrap().len(), 2);
+    assert_eq!(count(&conn, "saved_rolls"), 1);
 }

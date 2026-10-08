@@ -1,17 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   addLink,
+  deleteItem,
   getItem,
   listBacklinks,
   listItemTags,
   listLinks,
+  listTags,
   removeLink,
+  renameItem,
+  restoreItem,
   type Item,
   type Tag,
 } from "../../api/library";
 import { registry } from "../../registry";
 import { useNavigation } from "../../state/Navigation";
+import { bumpDataVersion } from "../../state/dataVersion";
+import { ConfirmButton } from "../ConfirmButton";
 import { TagChips } from "../library/TagChips";
+import { TagEditor } from "../library/TagEditor";
 import { itemIcon, itemTypeLabel, libraryLabel } from "./itemDisplay";
 import { LinkPicker } from "./LinkPicker";
 
@@ -24,6 +31,10 @@ export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => voi
   const [backlinks, setBacklinks] = useState<Item[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [editingTags, setEditingTags] = useState(false);
+  const [allTags, setAllTags] = useState<Tag[]>([]);
 
   const reload = useCallback(async () => {
     try {
@@ -53,9 +64,36 @@ export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => voi
     try {
       await action();
       await reload();
+      // Library lists (kept mounted behind this page) must pick the change up.
+      bumpDataVersion();
     } catch (e) {
       setError(String(e));
     }
+  }
+
+  /** Like `run`, for the tag editor: also refreshes the list of tags to choose from. */
+  async function runTags(action: () => Promise<unknown>) {
+    await run(action);
+    if (item) {
+      try {
+        setAllTags(await listTags(item.campaignId));
+      } catch (e) {
+        setError(String(e));
+      }
+    }
+  }
+
+  async function toggleTagEditor() {
+    if (!item) return;
+    if (!editingTags) {
+      try {
+        setAllTags(await listTags(item.campaignId));
+      } catch (e) {
+        setError(String(e));
+        return;
+      }
+    }
+    setEditingTags(!editingTags);
   }
 
   function itemButton(other: Item) {
@@ -71,6 +109,7 @@ export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => voi
 
   // Each item type can bring its own editor (registered by its module).
   const Editor = item ? registry.getItemType(item.itemType)?.editor : undefined;
+  const trashed = item?.deletedAt != null;
 
   return (
     <section>
@@ -91,7 +130,67 @@ export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => voi
           </p>
           {error && <p className="error">{error}</p>}
 
-          {Editor ? (
+          {trashed ? (
+            <p className="notice">
+              This {itemTypeLabel(item).toLowerCase()} is in the trash.{" "}
+              <button onClick={() => run(() => restoreItem(item.id))}>Restore</button>
+            </p>
+          ) : renaming ? (
+            <form
+              className="row"
+              onSubmit={(e) => {
+                e.preventDefault();
+                run(async () => {
+                  await renameItem(item.id, newName);
+                  setRenaming(false);
+                });
+              }}
+            >
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.currentTarget.value)}
+                aria-label="New name"
+                autoFocus
+              />
+              <button type="submit">Save name</button>
+              <button type="button" onClick={() => setRenaming(false)}>
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <div className="row wrap">
+              <button
+                onClick={() => {
+                  setNewName(item.name);
+                  setRenaming(true);
+                }}
+              >
+                Rename
+              </button>
+              <button onClick={toggleTagEditor} aria-expanded={editingTags}>
+                {editingTags ? "Done with tags" : "Tags"}
+              </button>
+              <ConfirmButton
+                label="Delete"
+                confirmLabel="Tap again to delete"
+                onConfirm={() => {
+                  setEditingTags(false);
+                  run(() => deleteItem(item.id));
+                }}
+              />
+            </div>
+          )}
+          {editingTags && !trashed && (
+            <TagEditor
+              campaignId={item.campaignId}
+              itemId={item.id}
+              itemTags={tags}
+              allTags={allTags}
+              run={runTags}
+            />
+          )}
+
+          {trashed ? null : Editor ? (
             <Editor key={item.id} itemId={item.id} />
           ) : (
             <p className="empty">
@@ -128,7 +227,9 @@ export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => voi
               onClose={() => setPicking(false)}
             />
           ) : (
-            <button onClick={() => setPicking(true)}>Add link</button>
+            <button onClick={() => setPicking(true)} disabled={trashed}>
+              Add link
+            </button>
           )}
 
           <h2>Linked from</h2>
