@@ -1,5 +1,5 @@
-//! Search over item names and their tags' names, using the FTS5 index that
-//! database triggers keep up to date (see migration 0004).
+//! Search over item names, their tags' names and document text, using the FTS5
+//! index that database triggers keep up to date (migrations 0004 and 0007).
 
 use super::error::DbError;
 use super::items::{self, Item};
@@ -22,8 +22,8 @@ fn fts_query(text: &str) -> Option<String> {
     }
 }
 
-/// Live items in a campaign whose name or tag names match `text`, best matches
-/// first (name matches outrank tag-only matches). Optionally limited to one
+/// Live items in a campaign whose name, tag names or document text match `text`,
+/// best matches first (name matches outrank tag matches, which outrank text). Optionally limited to one
 /// library. Blank or punctuation-only input finds nothing.
 pub fn search(
     conn: &Connection,
@@ -42,7 +42,7 @@ pub fn search(
          WHERE search_index MATCH ?1
            AND i.campaign_id = ?2 AND i.deleted_at IS NULL
            AND (?3 IS NULL OR i.library = ?3)
-         ORDER BY bm25(search_index, 0.0, 10.0, 1.0), i.name COLLATE NOCASE
+         ORDER BY bm25(search_index, 0.0, 10.0, 2.0, 1.0), i.name COLLATE NOCASE
          LIMIT ?4"
     ))?;
     let rows = stmt.query_map(
@@ -56,7 +56,7 @@ pub fn search(
 mod tests {
     use super::*;
     use crate::db::migrations::{migrate, MIGRATIONS};
-    use crate::db::{campaigns, folders, open_in_memory, tags, trash};
+    use crate::db::{campaigns, documents, folders, open_in_memory, tags, trash};
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
@@ -220,6 +220,70 @@ mod tests {
         assert_eq!(only_maps.len(), 1);
         assert_eq!(only_maps[0].name, "Dragon Map");
         assert_eq!(search(&conn, &camp, "dragon", None, 1).unwrap().len(), 1);
+    }
+
+    fn new_doc(conn: &Connection, camp: &str, name: &str, body: &str) -> Item {
+        let d = items::create(conn, camp, "w", documents::DOCUMENT_TYPE, name, None, 1).unwrap();
+        documents::set_body(conn, &d.id, body, 2).unwrap();
+        d
+    }
+
+    #[test]
+    fn finds_words_inside_document_text_and_follows_edits() {
+        let (conn, camp) = setup();
+        let d = new_doc(&conn, &camp, "Lair", "The dragon sleeps beneath Mount Doom.");
+        assert_eq!(find(&conn, &camp, "doom"), ["Lair"]);
+        assert_eq!(find(&conn, &camp, "slee beneath"), ["Lair"]);
+
+        documents::set_body(&conn, &d.id, "Now it is a quiet tavern.", 3).unwrap();
+        assert!(find(&conn, &camp, "doom").is_empty());
+        assert_eq!(find(&conn, &camp, "tavern"), ["Lair"]);
+
+        documents::set_body(&conn, &d.id, "", 4).unwrap();
+        assert!(find(&conn, &camp, "tavern").is_empty());
+    }
+
+    #[test]
+    fn document_text_of_trashed_items_is_hidden_until_restored() {
+        let (conn, camp) = setup();
+        let d = new_doc(&conn, &camp, "Secret", "buried treasure");
+        items::soft_delete(&conn, &d.id, 3).unwrap();
+        assert!(find(&conn, &camp, "treasure").is_empty());
+        trash::restore_item(&conn, &d.id, 4).unwrap();
+        assert_eq!(find(&conn, &camp, "treasure"), ["Secret"]);
+    }
+
+    #[test]
+    fn name_matches_outrank_tag_matches_which_outrank_text_matches() {
+        let (conn, camp) = setup();
+        new_doc(&conn, &camp, "Dragon Lair", "A cave.");
+        new_doc(&conn, &camp, "Aardvark", "Once there was a dragon, long ago, in a land far away.");
+        let tagged = new_doc(&conn, &camp, "Zebra", "Stripes.");
+        let t = tags::create(&conn, &camp, None, "Dragon", None, 1).unwrap();
+        tags::add_to_item(&conn, &tagged.id, &t.id, 2).unwrap();
+        assert_eq!(find(&conn, &camp, "dragon"), ["Dragon Lair", "Zebra", "Aardvark"]);
+    }
+
+    #[test]
+    fn upgrading_keeps_names_and_tags_searchable_and_adds_text_search() {
+        // A database at schema version 6 (before document text existed).
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", true).unwrap();
+        migrate(&mut conn, &MIGRATIONS[..6]).unwrap();
+        let camp = campaigns::create(&conn, "Old", 1).unwrap();
+        let item = items::create(&conn, &camp.id, "w", "document", "Ancient Scroll", None, 1).unwrap();
+        let t = tags::create(&conn, &camp.id, None, "Relic", None, 1).unwrap();
+        tags::add_to_item(&conn, &item.id, &t.id, 2).unwrap();
+
+        migrate(&mut conn, MIGRATIONS).unwrap();
+
+        assert_eq!(find(&conn, &camp.id, "scroll"), ["Ancient Scroll"]);
+        assert_eq!(find(&conn, &camp.id, "relic"), ["Ancient Scroll"]);
+        documents::set_body(&conn, &item.id, "Written in elvish.", 3).unwrap();
+        assert_eq!(find(&conn, &camp.id, "elvish"), ["Ancient Scroll"]);
+        // New items still get indexed by the original triggers.
+        let fresh = new_item(&conn, &camp.id, "w", "Fresh");
+        assert_eq!(find(&conn, &camp.id, "fresh"), [fresh.name]);
     }
 
     #[test]

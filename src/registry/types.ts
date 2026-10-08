@@ -22,6 +22,8 @@ export interface ItemTypeDefinition {
   label: string;
   icon: string;
   toolId: string;
+  /** The editor shown on the item's page, if this type has content to edit. */
+  editor?: ComponentType<{ itemId: string }>;
 }
 
 /** An action the command palette can list and run. */

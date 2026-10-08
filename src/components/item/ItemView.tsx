@@ -9,6 +9,7 @@ import {
   type Item,
   type Tag,
 } from "../../api/library";
+import { registry } from "../../registry";
 import { useNavigation } from "../../state/Navigation";
 import { TagChips } from "../library/TagChips";
 import { itemIcon, itemTypeLabel, libraryLabel } from "./itemDisplay";
@@ -68,6 +69,9 @@ export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => voi
     );
   }
 
+  // Each item type can bring its own editor (registered by its module).
+  const Editor = item ? registry.getItemType(item.itemType)?.editor : undefined;
+
   return (
     <section>
       <button onClick={onBack}>← Back</button>
@@ -87,10 +91,13 @@ export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => voi
           </p>
           {error && <p className="error">{error}</p>}
 
-          <p className="empty">
-            This {itemTypeLabel(item).toLowerCase()} has no text yet. The text
-            editor is the next piece to be built.
-          </p>
+          {Editor ? (
+            <Editor key={item.id} itemId={item.id} />
+          ) : (
+            <p className="empty">
+              This {itemTypeLabel(item).toLowerCase()} has nothing to edit yet.
+            </p>
+          )}
 
           <h2>Links</h2>
           {outgoing.length === 0 && !picking && (

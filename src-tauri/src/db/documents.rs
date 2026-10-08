@@ -1,0 +1,140 @@
+//! Document text: the Markdown body of items whose type is `document`.
+
+use super::error::DbError;
+use super::items;
+use rusqlite::{params, Connection, OptionalExtension};
+
+/// The item type this module stores text for.
+pub const DOCUMENT_TYPE: &str = "document";
+
+/// A safety limit (in bytes) so a runaway paste can't bloat the database.
+pub const MAX_BODY_BYTES: usize = 2_000_000;
+
+/// Checks the item exists, is live, and is a document.
+fn require_live_document(conn: &Connection, item_id: &str) -> Result<(), DbError> {
+    let item = items::get(conn, item_id)?;
+    if item.deleted_at.is_some() {
+        return Err(DbError::NotFound);
+    }
+    if item.item_type != DOCUMENT_TYPE {
+        return Err(DbError::Invalid("This item doesn't hold document text."));
+    }
+    Ok(())
+}
+
+/// The document's Markdown text ("" if nothing has been written yet).
+pub fn get_body(conn: &Connection, item_id: &str) -> Result<String, DbError> {
+    require_live_document(conn, item_id)?;
+    let body: Option<String> = conn
+        .query_row(
+            "SELECT body FROM document_content WHERE item_id = ?1",
+            [item_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(body.unwrap_or_default())
+}
+
+/// Replaces the document's text. Also marks the item as updated.
+pub fn set_body(conn: &Connection, item_id: &str, body: &str, now: i64) -> Result<(), DbError> {
+    require_live_document(conn, item_id)?;
+    if body.len() > MAX_BODY_BYTES {
+        return Err(DbError::Invalid("That document is too long to save."));
+    }
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "INSERT INTO document_content (item_id, body, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?3)
+         ON CONFLICT (item_id) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at",
+        params![item_id, body, now],
+    )?;
+    tx.execute("UPDATE items SET updated_at = ?2 WHERE id = ?1", params![item_id, now])?;
+    tx.commit()?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{campaigns, open_in_memory, trash};
+
+    fn setup() -> (Connection, String) {
+        let conn = open_in_memory();
+        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        (conn, c.id)
+    }
+
+    fn doc(conn: &Connection, camp: &str, name: &str) -> items::Item {
+        items::create(conn, camp, "worldbuilding", DOCUMENT_TYPE, name, None, 1).unwrap()
+    }
+
+    #[test]
+    fn a_new_document_has_an_empty_body() {
+        let (conn, camp) = setup();
+        let d = doc(&conn, &camp, "Notes");
+        assert_eq!(get_body(&conn, &d.id).unwrap(), "");
+    }
+
+    #[test]
+    fn text_round_trips_exactly_and_can_be_replaced() {
+        let (conn, camp) = setup();
+        let d = doc(&conn, &camp, "Notes");
+        let text = "# Waterdeep\n\n  Indented *line*\twith tab\r\nand unicode: café 🐉\n";
+        set_body(&conn, &d.id, text, 10).unwrap();
+        assert_eq!(get_body(&conn, &d.id).unwrap(), text);
+        set_body(&conn, &d.id, "short", 20).unwrap();
+        assert_eq!(get_body(&conn, &d.id).unwrap(), "short");
+        set_body(&conn, &d.id, "", 30).unwrap();
+        assert_eq!(get_body(&conn, &d.id).unwrap(), "");
+    }
+
+    #[test]
+    fn saving_marks_the_item_as_updated() {
+        let (conn, camp) = setup();
+        let d = doc(&conn, &camp, "Notes");
+        set_body(&conn, &d.id, "x", 500).unwrap();
+        assert_eq!(items::get(&conn, &d.id).unwrap().updated_at, 500);
+    }
+
+    #[test]
+    fn only_live_documents_have_text() {
+        let (conn, camp) = setup();
+        let map = items::create(&conn, &camp, "maps", "map", "Map", None, 1).unwrap();
+        assert!(matches!(get_body(&conn, &map.id), Err(DbError::Invalid(_))));
+        assert!(matches!(set_body(&conn, &map.id, "x", 2), Err(DbError::Invalid(_))));
+        assert!(matches!(get_body(&conn, "nope"), Err(DbError::NotFound)));
+
+        let d = doc(&conn, &camp, "Gone");
+        set_body(&conn, &d.id, "text", 2).unwrap();
+        items::soft_delete(&conn, &d.id, 3).unwrap();
+        assert!(matches!(get_body(&conn, &d.id), Err(DbError::NotFound)));
+        assert!(matches!(set_body(&conn, &d.id, "new", 4), Err(DbError::NotFound)));
+        // The text survives in the trash and returns on restore.
+        trash::restore_item(&conn, &d.id, 5).unwrap();
+        assert_eq!(get_body(&conn, &d.id).unwrap(), "text");
+    }
+
+    #[test]
+    fn oversized_text_is_refused_and_leaves_the_old_text() {
+        let (conn, camp) = setup();
+        let d = doc(&conn, &camp, "Notes");
+        set_body(&conn, &d.id, "keep me", 2).unwrap();
+        let huge = "a".repeat(MAX_BODY_BYTES + 1);
+        assert!(matches!(set_body(&conn, &d.id, &huge, 3), Err(DbError::Invalid(_))));
+        assert_eq!(get_body(&conn, &d.id).unwrap(), "keep me");
+        set_body(&conn, &d.id, &"a".repeat(MAX_BODY_BYTES), 4).unwrap();
+    }
+
+    #[test]
+    fn purging_the_item_removes_its_text() {
+        let (conn, camp) = setup();
+        let d = doc(&conn, &camp, "Notes");
+        set_body(&conn, &d.id, "text", 2).unwrap();
+        items::soft_delete(&conn, &d.id, 3).unwrap();
+        trash::purge_item(&conn, &d.id).unwrap();
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM document_content", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(rows, 0);
+    }
+}

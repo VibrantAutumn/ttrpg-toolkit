@@ -36,6 +36,8 @@ pub fn run() {
             commands::move_item,
             commands::delete_item,
             commands::get_item,
+            commands::get_document_body,
+            commands::set_document_body,
             commands::list_links,
             commands::list_backlinks,
             commands::add_link,

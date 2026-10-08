@@ -85,6 +85,12 @@ export const deleteItem = (id: string) => invoke<void>("delete_item", { id });
 
 export const getItem = (id: string) => invoke<Item>("get_item", { id });
 
+// Document text (Markdown)
+export const getDocumentBody = (itemId: string) =>
+  invoke<string>("get_document_body", { itemId });
+export const setDocumentBody = (itemId: string, body: string) =>
+  invoke<void>("set_document_body", { itemId, body });
+
 // Links (items this item links to) and backlinks (items that link to it)
 export const listLinks = (itemId: string) =>
   invoke<Item[]>("list_links", { itemId });

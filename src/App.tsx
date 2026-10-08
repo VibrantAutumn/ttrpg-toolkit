@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ItemView } from "./components/item/ItemView";
+import { CommandPalette } from "./components/palette/CommandPalette";
 import { StatusBar } from "./components/StatusBar";
 import { registry } from "./registry";
 import { CurrentCampaignProvider, useCurrentCampaign } from "./state/CurrentCampaign";
@@ -34,6 +35,19 @@ function Shell() {
     setActiveId(id);
   }
 
+  // Ctrl+K (Cmd+K on a Mac) opens or closes the command palette.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
     <NavigationProvider value={navigation}>
       <div className="shell">
@@ -41,7 +55,11 @@ function Shell() {
           onChangeCampaign={() =>
             registry.getCommand("core.open-campaigns")?.run({ openTool })
           }
+          onOpenPalette={() => setPaletteOpen(true)}
         />
+        {paletteOpen && (
+          <CommandPalette onClose={() => setPaletteOpen(false)} onOpenTool={openTool} />
+        )}
         <nav className="nav" aria-label="Tools">
           {tools.map((t) => (
             <button

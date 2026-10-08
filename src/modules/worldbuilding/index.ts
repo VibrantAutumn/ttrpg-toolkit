@@ -1,5 +1,6 @@
 import type { ModuleDefinition } from "../../registry/types";
-import { documentType, WorldbuildingScreen } from "./WorldbuildingScreen";
+import { documentType } from "./documentType";
+import { WorldbuildingScreen } from "./WorldbuildingScreen";
 
 /** Documents organised in folders. The rich editor and tabs arrive in Phase 4. */
 export const worldbuildingModule: ModuleDefinition = {

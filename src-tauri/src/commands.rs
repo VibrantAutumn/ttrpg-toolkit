@@ -5,6 +5,7 @@
 //! the snake_case names below.
 
 use crate::db::campaigns::{self, Campaign};
+use crate::db::documents;
 use crate::db::error::DbError;
 use crate::db::folders::{self, Folder};
 use crate::db::items::{self, Item};
@@ -162,6 +163,19 @@ pub fn get_item(db: Db, id: String) -> Result<Item, String> {
         }
         Ok(item)
     })
+}
+
+// ---- Documents ----
+
+/// A document's Markdown text.
+#[tauri::command]
+pub fn get_document_body(db: Db, item_id: String) -> Result<String, String> {
+    with_conn(&db, |c| documents::get_body(c, &item_id))
+}
+
+#[tauri::command]
+pub fn set_document_body(db: Db, item_id: String, body: String) -> Result<(), String> {
+    with_conn(&db, |c| documents::set_body(c, &item_id, &body, db::now_ms()))
 }
 
 // ---- Library: links ----

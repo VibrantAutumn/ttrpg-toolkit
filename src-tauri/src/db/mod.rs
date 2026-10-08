@@ -1,4 +1,5 @@
 pub mod campaigns;
+pub mod documents;
 pub mod error;
 pub mod folders;
 pub mod items;

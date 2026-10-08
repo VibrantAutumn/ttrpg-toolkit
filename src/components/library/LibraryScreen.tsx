@@ -331,7 +331,7 @@ export function LibraryScreen({
         type="search"
         value={searchText}
         onChange={(e) => setSearchText(e.currentTarget.value)}
-        placeholder="Search names and tags..."
+        placeholder="Search names, text and tags..."
         aria-label={`Search ${title}`}
       />
 
