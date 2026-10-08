@@ -25,8 +25,10 @@ import {
 } from "../../api/library";
 import type { ItemTypeDefinition } from "../../registry/types";
 import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useNavigation } from "../../state/Navigation";
 import { ConfirmButton } from "../ConfirmButton";
 import { childFolders, folderOptions, folderPath, tagsByItem } from "./helpers";
+import { TagChips } from "./TagChips";
 import { TagEditor } from "./TagEditor";
 import { TrashPanel } from "./TrashPanel";
 
@@ -34,23 +36,6 @@ type EditMode = "rename" | "move" | "tags";
 interface Notice {
   text: string;
   undo: () => Promise<unknown>;
-}
-
-function TagChips({ tags }: { tags: Tag[] }) {
-  if (tags.length === 0) return null;
-  return (
-    <span className="chips">
-      {tags.map((t) => (
-        <span
-          key={t.id}
-          className="chip static"
-          style={t.color ? { borderColor: t.color } : undefined}
-        >
-          {t.name}
-        </span>
-      ))}
-    </span>
-  );
 }
 
 /**
@@ -67,6 +52,7 @@ export function LibraryScreen({
   itemTypes: ItemTypeDefinition[];
 }) {
   const { campaign, loading } = useCurrentCampaign();
+  const { openItem } = useNavigation();
   const campaignId = campaign?.id ?? null;
 
   const [folderId, setFolderId] = useState<string | null>(null);
@@ -292,7 +278,10 @@ export function LibraryScreen({
         ) : (
           <div className="row wrap">
             <span className="name">
-              {itemIcon(item)} {item.name} <TagChips tags={itemTags} />
+              <button className="link name" onClick={() => openItem(item.id)}>
+                {itemIcon(item)} {item.name}
+              </button>{" "}
+              <TagChips tags={itemTags} />
             </span>
             {inSearch && (
               <button

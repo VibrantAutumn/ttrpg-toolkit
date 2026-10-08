@@ -35,11 +35,7 @@ pub fn search(
     let Some(query) = fts_query(text) else {
         return Ok(Vec::new());
     };
-    let columns = items::COLUMNS
-        .split(", ")
-        .map(|c| format!("i.{c}"))
-        .collect::<Vec<_>>()
-        .join(", ");
+    let columns = items::qualified_columns("i");
     let mut stmt = conn.prepare(&format!(
         "SELECT {columns} FROM search_index
          JOIN items i ON i.id = search_index.item_id

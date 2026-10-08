@@ -2,6 +2,7 @@ pub mod campaigns;
 pub mod error;
 pub mod folders;
 pub mod items;
+pub mod links;
 pub mod migrations;
 pub mod search;
 pub mod settings;

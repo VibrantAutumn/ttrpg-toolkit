@@ -83,6 +83,18 @@ export const moveItem = (id: string, folderId: string | null) =>
   invoke<Item>("move_item", { id, folderId });
 export const deleteItem = (id: string) => invoke<void>("delete_item", { id });
 
+export const getItem = (id: string) => invoke<Item>("get_item", { id });
+
+// Links (items this item links to) and backlinks (items that link to it)
+export const listLinks = (itemId: string) =>
+  invoke<Item[]>("list_links", { itemId });
+export const listBacklinks = (itemId: string) =>
+  invoke<Item[]>("list_backlinks", { itemId });
+export const addLink = (sourceItemId: string, targetItemId: string) =>
+  invoke<void>("add_link", { sourceItemId, targetItemId });
+export const removeLink = (sourceItemId: string, targetItemId: string) =>
+  invoke<void>("remove_link", { sourceItemId, targetItemId });
+
 // Trash
 export const listTrash = (campaignId: string, library: string) =>
   invoke<Trash>("list_trash", { campaignId, library });
@@ -103,6 +115,8 @@ export const createTag = (
   name: string,
   color: string | null,
 ) => invoke<Tag>("create_tag", { campaignId, parentId, name, color });
+export const listItemTags = (itemId: string) =>
+  invoke<Tag[]>("list_item_tags", { itemId });
 export const addTagToItem = (itemId: string, tagId: string) =>
   invoke<void>("add_tag_to_item", { itemId, tagId });
 export const removeTagFromItem = (itemId: string, tagId: string) =>

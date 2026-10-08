@@ -10,6 +10,16 @@ use uuid::Uuid;
 pub(super) const COLUMNS: &str =
     "id, campaign_id, library, item_type, name, icon, folder_id, visibility, created_at, updated_at, deleted_at";
 
+/// The item columns prefixed with a table alias (`i.id, i.name, ...`), for joins
+/// where bare names would be ambiguous.
+pub(super) fn qualified_columns(alias: &str) -> String {
+    COLUMNS
+        .split(", ")
+        .map(|c| format!("{alias}.{c}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Item {

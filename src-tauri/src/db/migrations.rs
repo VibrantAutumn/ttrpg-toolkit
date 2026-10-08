@@ -39,6 +39,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "create_app_settings",
         sql: include_str!("../../migrations/0005_create_app_settings.sql"),
     },
+    Migration {
+        version: 6,
+        name: "create_links",
+        sql: include_str!("../../migrations/0006_create_links.sql"),
+    },
 ];
 
 #[derive(Debug)]

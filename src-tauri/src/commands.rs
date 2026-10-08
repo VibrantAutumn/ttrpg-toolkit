@@ -8,6 +8,7 @@ use crate::db::campaigns::{self, Campaign};
 use crate::db::error::DbError;
 use crate::db::folders::{self, Folder};
 use crate::db::items::{self, Item};
+use crate::db::links;
 use crate::db::tags::{self, Tag, TagLink};
 use crate::db::trash::{self, Trash};
 use crate::db::{self, search, settings};
@@ -151,6 +152,46 @@ pub fn delete_item(db: Db, id: String) -> Result<(), String> {
     with_conn(&db, |c| items::soft_delete(c, &id, db::now_ms()))
 }
 
+/// One live item by id (for the item view).
+#[tauri::command]
+pub fn get_item(db: Db, id: String) -> Result<Item, String> {
+    with_conn(&db, |c| {
+        let item = items::get(c, &id)?;
+        if item.deleted_at.is_some() {
+            return Err(DbError::NotFound);
+        }
+        Ok(item)
+    })
+}
+
+// ---- Library: links ----
+
+/// Items this item links to.
+#[tauri::command]
+pub fn list_links(db: Db, item_id: String) -> Result<Vec<Item>, String> {
+    with_conn(&db, |c| links::outgoing(c, &item_id))
+}
+
+/// Items that link to this item.
+#[tauri::command]
+pub fn list_backlinks(db: Db, item_id: String) -> Result<Vec<Item>, String> {
+    with_conn(&db, |c| links::backlinks(c, &item_id))
+}
+
+#[tauri::command]
+pub fn add_link(db: Db, source_item_id: String, target_item_id: String) -> Result<(), String> {
+    with_conn(&db, |c| {
+        links::add(c, &source_item_id, &target_item_id, links::MANUAL, db::now_ms())
+    })
+}
+
+#[tauri::command]
+pub fn remove_link(db: Db, source_item_id: String, target_item_id: String) -> Result<(), String> {
+    with_conn(&db, |c| {
+        links::remove(c, &source_item_id, &target_item_id, links::MANUAL, db::now_ms())
+    })
+}
+
 // ---- Library: trash ----
 
 #[tauri::command]
@@ -202,6 +243,12 @@ pub fn create_tag(
     with_conn(&db, |c| {
         tags::create(c, &campaign_id, parent_id.as_deref(), &name, color.as_deref(), db::now_ms())
     })
+}
+
+/// The live tags on one item.
+#[tauri::command]
+pub fn list_item_tags(db: Db, item_id: String) -> Result<Vec<Tag>, String> {
+    with_conn(&db, |c| tags::for_item(c, &item_id))
 }
 
 #[tauri::command]
