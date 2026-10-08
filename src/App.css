@@ -635,3 +635,40 @@ input.narrow {
   text-align: left;
   font-weight: 600;
 }
+
+/* Random tables */
+.table-entries {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+}
+
+.table-entry {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.table-entry textarea,
+.table-add textarea {
+  flex: 1 1 14rem;
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  color: inherit;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.entry-range {
+  min-width: 3.5rem;
+  font-family: ui-monospace, Consolas, Menlo, monospace;
+  font-weight: 600;
+}
+
+.table-add {
+  margin: 1rem 0;
+}
