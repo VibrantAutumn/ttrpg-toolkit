@@ -102,7 +102,19 @@ Notes:
 ## Working with Katie
 
 - Katie is a junior developer. Explain what you are doing and why, and define unfamiliar terms briefly.
-- Work in small steps: one feature at a time, run it, then commit. Katie commits after each working step; suggest a commit message.
-- For product decisions, propose options with tradeoffs and let Katie choose.
-- Katie runs the app on Windows and her Android phone and reports errors; diagnose from pasted errors and screenshots.
+- Work in small steps: one feature at a time, then verify, then commit.
+- For product decisions, propose options with tradeoffs and let Katie choose (a quick multiple-choice question works well for real design forks such as storage formats). For routine choices, pick the obvious option, say so, and keep going.
 - Ask before installing software or changing system settings.
+- Before building a feature, say the plan in a few lines (steps, decisions, what is deliberately out of scope). After building, record the new design rules in this file.
+
+**Verify routine** (this is what "done" means here):
+1. Run the automated checks: `cargo test` (in `src-tauri/`), `npm test`, `npx tsc --noEmit`, `npm run build`. Say exactly what passed.
+2. Launch the app for Katie: `npm run tauri dev` (Windows) or `npm run tauri android dev` (phone; she connects it by USB, same Wi-Fi as the PC).
+3. Give her a short numbered checklist of what to try, including the awkward cases. She reports back; never claim a screen works until she has confirmed it. Anything touching files, IPC, the keyboard or screen edges must be tried on the phone, because Android differs (see the Android notes above and the content-pack section).
+
+**Git habits**
+- Katie asks for commits when a step works ("commit please"). Write a clear message and **commit with `git commit -F <message file>`** (write the message with the file tool into the scratchpad): Windows PowerShell 5.1 mangles quotes inside `-m`/here-string messages and the commit fails. Show git's full output; don't filter it, so a failure can't hide.
+- Katie pushes herself with `git push` (remote `origin` on GitHub, branch `main`, private repo). Don't push without being asked.
+- Line-ending warnings ("LF will be replaced by CRLF") are harmless.
+
+**Environment** (Windows 11): shell is Windows PowerShell 5.1 (no `&&`, no `-Recurse` on `Select-String`; use the search tools instead). Env vars for Android (`JAVA_HOME`, `ANDROID_HOME`, `NDK_HOME`) are set at user level; a long-running tool shell may need them re-read from the registry. Dev servers started in the background exit when Katie closes the app window; check the log for a panic before assuming a crash.
