@@ -159,6 +159,37 @@ export function parseSetup(text: string): NameSetup | null {
   return { mode, sources, tagIds, tagMatch, join1, join2, capitalisation, mergeDoubles };
 }
 
+/**
+ * The last setup used is only a convenience kept in the browser's storage on this
+ * device: it can be missing or blocked (a private window, cleared site data), and
+ * then the generator simply starts from the defaults.
+ */
+export const LAST_SETUP_KEY = "names.lastSetup";
+
+type ReadableStorage = Pick<Storage, "getItem">;
+type WritableStorage = Pick<Storage, "setItem">;
+
+/** The setup last used here, or the defaults if there is none or it can't be read. */
+export function loadLastSetup(storage: ReadableStorage | undefined): NameSetup {
+  try {
+    const raw = storage?.getItem(LAST_SETUP_KEY);
+    return (raw ? parseSetup(raw) : null) ?? DEFAULT_SETUP;
+  } catch {
+    return DEFAULT_SETUP;
+  }
+}
+
+/** Remembers the setup. Returns false (never throws) if the storage refuses. */
+export function saveLastSetup(storage: WritableStorage | undefined, setup: NameSetup): boolean {
+  if (!storage) return false;
+  try {
+    storage.setItem(LAST_SETUP_KEY, serializeSetup(setup));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** A table as the generator needs it: its entries, each with its tags. */
 export interface SourceTable {
   id: string;

@@ -25,6 +25,7 @@ export function RollerPanel() {
           <option value="dice">Dice</option>
           <option value="draw">Card draws</option>
           <option value="table">Table rolls</option>
+          <option value="name">Names</option>
         </select>
       </div>
       <RollLogList

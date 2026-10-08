@@ -466,3 +466,112 @@ describe("table results in the log", () => {
     expect(log.entries("table")[0].savedItemId).toBe("item-1");
   });
 });
+
+describe("name results in the log", () => {
+  const entries = (...texts: string[]) => texts.map((text, i) => ({ id: `${text}-${i}`, text, weight: 1 }));
+  const generator = {
+    id: "names",
+    name: "Names",
+    settings: {
+      mode: "two" as const,
+      join1: "none" as const,
+      join2: "none" as const,
+      capitalisation: "firstLetter" as const,
+      mergeDoubles: false,
+    },
+    parts: { full: [], first: entries("ael", "cal"), middle: [], last: entries("wen", "dor") },
+  };
+
+  it("logs a generated name with its seed, newest first", () => {
+    const log = makeLog();
+    log.roll("1d6", 1);
+    const r = log.generateName(generator, 7);
+    if (!r.ok) throw new Error(r.message);
+    expect(r.entry).toMatchObject({ kind: "name", seed: 7, locked: [], savedItemId: null, label: null });
+    expect(r.entry.text).toMatch(/^Name → (Ael|Cal)(wen|dor)$/);
+    expect(r.entry.name).toMatch(/^(Ael|Cal)(wen|dor)$/);
+    expect(r.entry.picks.map((p) => p.part)).toEqual(["first", "last"]);
+    expect(log.entries()[0]).toBe(r.entry);
+    expect(log.entries("name")).toEqual([r.entry]);
+    expect(log.entries("dice")).toHaveLength(1);
+  });
+
+  it("calls the result by the setup's name when it has one", () => {
+    const r = makeLog().generateName(generator, 3, "Elven name");
+    if (!r.ok) throw new Error(r.message);
+    expect(r.entry.label).toBe("Elven name");
+    expect(r.entry.text.startsWith("Elven name → ")).toBe(true);
+  });
+
+  it("is reproducible from its seed", () => {
+    const a = makeLog().generateName(generator, 42);
+    const b = makeLog().generateName(generator, 42);
+    if (!a.ok || !b.ok) throw new Error("should generate");
+    expect(a.entry.name).toBe(b.entry.name);
+  });
+
+  it("logs nothing and says why when a list is empty", () => {
+    const log = makeLog();
+    const r = log.generateName({ ...generator, parts: { ...generator.parts, last: [] } }, 1);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toMatch(/suffix/i);
+    expect(log.entries()).toEqual([]);
+  });
+
+  it("locks and unlocks a part by its place in the name", () => {
+    const log = makeLog();
+    const r = log.generateName(generator, 1);
+    if (!r.ok) throw new Error(r.message);
+    log.toggleLock(r.entry.id, 1);
+    expect(log.entries("name")[0].locked).toEqual(["last"]);
+    log.toggleLock(r.entry.id, 0);
+    expect(log.entries("name")[0].locked).toEqual(["first", "last"]); // in the order of the parts
+    log.toggleLock(r.entry.id, 1);
+    expect(log.entries("name")[0].locked).toEqual(["first"]);
+    log.toggleLock(r.entry.id, 5); // no such part
+    log.toggleLock(r.entry.id, -1);
+    expect(log.entries("name")[0].locked).toEqual(["first"]);
+  });
+
+  it("rerolls the parts that aren't locked as a new entry, from the same lists", () => {
+    const log = makeLog();
+    const first = log.generateName(generator, 3, "Elven name");
+    if (!first.ok) throw new Error(first.message);
+    log.toggleLock(first.entry.id, 0);
+
+    // Many rerolls: the locked first part never changes, and the name always uses the entry's own lists.
+    let again = first.entry;
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 30; seed++) {
+      const next = log.rerollName(first.entry.id, seed);
+      if (!next) throw new Error("should reroll");
+      expect(next.picks[0]).toEqual(first.entry.picks[0]);
+      expect(next.locked).toEqual(["first"]);
+      expect(next.label).toBe("Elven name");
+      expect(next.seed).toBe(seed);
+      expect(next.id).not.toBe(first.entry.id);
+      seen.add(next.picks[1].text);
+      again = next;
+    }
+    expect(seen).toEqual(new Set(["wen", "dor"]));
+    expect(log.entries()[0]).toBe(again);
+    expect(log.entries("name")).toHaveLength(31);
+  });
+
+  it("rerolls everything when nothing is locked", () => {
+    const log = makeLog();
+    const first = log.generateName(generator, 1);
+    if (!first.ok) throw new Error(first.message);
+    const names = new Set<string>();
+    for (let seed = 1; seed <= 40; seed++) names.add(log.rerollName(first.entry.id, seed)!.name);
+    expect(names.size).toBe(4);
+  });
+
+  it("returns null when asked to reroll something that isn't a name", () => {
+    const log = makeLog();
+    const d = log.roll("1d6", 1);
+    if (!d.ok) throw new Error("should parse");
+    expect(log.rerollName(d.entry.id)).toBeNull();
+    expect(log.rerollName("nope")).toBeNull();
+  });
+});

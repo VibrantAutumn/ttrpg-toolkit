@@ -3,10 +3,13 @@ import { scripted } from "../dice/testing";
 import { generateName } from "./nameGen";
 import {
   DEFAULT_SETUP,
+  LAST_SETUP_KEY,
   buildGenerator,
   entryMatchesTags,
   filterByTags,
+  loadLastSetup,
   parseSetup,
+  saveLastSetup,
   serializeSetup,
 } from "./nameSetup";
 import type { NameSetup, SourceTable, TagInfo } from "./nameSetup";
@@ -242,5 +245,48 @@ describe("buildGenerator", () => {
   it("can use the same table for two parts", () => {
     const g = build({ ...base, sources: { first: "pre", last: "pre" } }, [prefixes]);
     expect(g.parts.first).toEqual(g.parts.last);
+  });
+});
+
+describe("remembering the last setup on this device", () => {
+  const setup: NameSetup = { ...DEFAULT_SETUP, mode: "three", sources: { first: "a", middle: "b", last: "c" }, tagIds: ["elf"] };
+
+  /** A stand-in for localStorage. */
+  function fakeStorage(initial: Record<string, string> = {}) {
+    const data = { ...initial };
+    return {
+      data,
+      getItem: (key: string) => (key in data ? data[key] : null),
+      setItem: (key: string, value: string) => {
+        data[key] = value;
+      },
+    };
+  }
+  const broken = {
+    getItem: () => {
+      throw new Error("storage is blocked");
+    },
+    setItem: () => {
+      throw new Error("storage is blocked");
+    },
+  };
+
+  it("reads back what was saved", () => {
+    const storage = fakeStorage();
+    expect(saveLastSetup(storage, setup)).toBe(true);
+    expect(loadLastSetup(storage)).toEqual(setup);
+  });
+
+  it("starts from the defaults when nothing usable is there", () => {
+    expect(loadLastSetup(fakeStorage())).toEqual(DEFAULT_SETUP);
+    expect(loadLastSetup(undefined)).toEqual(DEFAULT_SETUP);
+    expect(loadLastSetup(fakeStorage({ [LAST_SETUP_KEY]: "not json" }))).toEqual(DEFAULT_SETUP);
+    expect(loadLastSetup(fakeStorage({ [LAST_SETUP_KEY]: '{"mode":"seven"}' }))).toEqual(DEFAULT_SETUP);
+  });
+
+  it("never throws when the storage is blocked", () => {
+    expect(loadLastSetup(broken)).toEqual(DEFAULT_SETUP);
+    expect(saveLastSetup(broken, setup)).toBe(false);
+    expect(saveLastSetup(undefined, setup)).toBe(false);
   });
 });
