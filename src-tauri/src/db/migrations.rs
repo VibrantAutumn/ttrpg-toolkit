@@ -59,6 +59,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "create_saved_rolls",
         sql: include_str!("../../migrations/0009_create_saved_rolls.sql"),
     },
+    Migration {
+        version: 10,
+        name: "create_formulas",
+        sql: include_str!("../../migrations/0010_create_formulas.sql"),
+    },
 ];
 
 #[derive(Debug)]

@@ -23,6 +23,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     let links = read_links(conn, campaign_id)?;
     let documents = read_documents(conn, campaign_id)?;
     let saved_rolls = read_saved_rolls(conn, campaign_id)?;
+    let formulas = read_formulas(conn, campaign_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -40,6 +41,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
             links: links.len() as u32,
             documents: documents.len() as u32,
             saved_rolls: saved_rolls.len() as u32,
+            formulas: formulas.len() as u32,
         },
     };
 
@@ -53,6 +55,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     put(&mut zip, options, LINKS_FILE, &links, false)?;
     put(&mut zip, options, DOCUMENTS_FILE, &documents, false)?;
     put(&mut zip, options, SAVED_ROLLS_FILE, &saved_rolls, false)?;
+    put(&mut zip, options, FORMULAS_FILE, &formulas, false)?;
     let cursor = zip.finish().map_err(|e| PackError::Failed(e.to_string()))?;
     Ok(cursor.into_inner())
 }
@@ -206,6 +209,23 @@ fn read_saved_rolls(conn: &Connection, campaign_id: &str) -> Result<Vec<SavedRol
             result_json: r.get(4)?,
             created_at: r.get(5)?,
             updated_at: r.get(6)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_formulas(conn: &Connection, campaign_id: &str) -> Result<Vec<FormulaRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT f.item_id, f.notation, f.created_at, f.updated_at
+         FROM formulas f JOIN items i ON i.id = f.item_id
+         WHERE i.campaign_id = ?1 ORDER BY f.created_at, f.item_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(FormulaRecord {
+            item_id: r.get(0)?,
+            notation: r.get(1)?,
+            created_at: r.get(2)?,
+            updated_at: r.get(3)?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)

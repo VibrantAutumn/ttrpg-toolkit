@@ -94,6 +94,23 @@ describe("createRollLog", () => {
     expect(log.entries()).not.toBe(before);
   });
 
+  describe("labels (a formula's name)", () => {
+    it("has no label unless one is given", () => {
+      const log = makeLog();
+      const r = log.roll("1d6", 1);
+      if (!r.ok) throw new Error("should parse");
+      expect(r.entry.label).toBeNull();
+    });
+
+    it("keeps the label on the entry and on rerolls of it", () => {
+      const log = makeLog();
+      const r = log.roll("1d20+5", 1, "Attack");
+      if (!r.ok) throw new Error("should parse");
+      expect(r.entry.label).toBe("Attack");
+      expect(log.reroll(r.entry.id, 2)?.label).toBe("Attack");
+    });
+  });
+
   describe("locking and rerolling", () => {
     it("locks and unlocks a term of a result", () => {
       const log = makeLog();

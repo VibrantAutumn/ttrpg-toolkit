@@ -28,3 +28,35 @@ export const saveRoll = (
 
 export const getSavedRoll = (itemId: string) =>
   invoke<SavedRoll>("get_saved_roll", { itemId });
+
+/** Mirrors the Rust `Formula`. */
+export interface Formula {
+  itemId: string;
+  notation: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** One row of the roller's flat list of formulas. */
+export interface FormulaEntry {
+  itemId: string;
+  name: string;
+  notation: string;
+  folderId: string | null;
+}
+
+/** Saves a formula as a new Dice library item. Check the notation with `checkFormula` first. */
+export const createFormula = (
+  campaignId: string,
+  name: string,
+  folderId: string | null,
+  notation: string,
+) => invoke<Item>("create_formula", { campaignId, name, folderId, notation });
+
+export const getFormula = (itemId: string) => invoke<Formula>("get_formula", { itemId });
+
+export const setFormulaNotation = (itemId: string, notation: string) =>
+  invoke<void>("set_formula_notation", { itemId, notation });
+
+export const listFormulas = (campaignId: string) =>
+  invoke<FormulaEntry[]>("list_formulas", { campaignId });

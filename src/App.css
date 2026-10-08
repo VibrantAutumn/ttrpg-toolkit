@@ -343,7 +343,11 @@ button.link {
   text-decoration: underline;
 }
 
-/* Dice: roll log and saved rolls */
+/* Dice: quick rolls, roll log and saved rolls */
+.quick-rolls {
+  margin-top: 0.5rem;
+}
+
 .roll-entry {
   padding: 0.5rem 0;
   border-bottom: 1px solid var(--border);

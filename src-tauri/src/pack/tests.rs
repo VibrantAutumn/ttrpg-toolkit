@@ -2,6 +2,7 @@ use super::export::export_campaign;
 use super::format::*;
 use super::import::{import_pack, import_parsed, parent_first, read_pack, read_pack_with, Limits};
 use super::PackError;
+use crate::db::formulas;
 use crate::db::saved_rolls::{self, NewSavedRoll};
 use crate::db::{campaigns, documents, folders, items, links, open_in_memory, search, settings, tags};
 use rusqlite::types::Value;
@@ -14,7 +15,7 @@ use zip::{write::SimpleFileOptions, ZipWriter};
 /// nested folders, items in and out of folders, a map, document text, nested and
 /// coloured tags, attached and removed tags, links (one removed), and trash
 /// (a deleted item, a deleted folder with a deleted item inside, a deleted tag),
-/// and two saved dice rolls (one in the trash).
+/// two saved dice rolls (one in the trash), and two formulas (one in the trash).
 fn populate(conn: &Connection) -> String {
     let camp = campaigns::create(conn, "Strahd", 1000).unwrap();
     let c = camp.id.as_str();
@@ -71,6 +72,10 @@ fn populate(conn: &Connection) -> String {
     let old_roll = roll("Old roll", 7, 2650);
     items::soft_delete(conn, &old_roll.id, 2700).unwrap();
 
+    formulas::create(conn, c, "Attack", None, "1d20+5", 2800).unwrap();
+    let old_formula = formulas::create(conn, c, "Old formula", None, "1d4", 2850).unwrap();
+    items::soft_delete(conn, &old_formula.id, 2900).unwrap();
+
     camp.id
 }
 
@@ -103,6 +108,7 @@ struct Snapshot {
     links: Vec<String>,
     documents: Vec<String>,
     saved_rolls: Vec<String>,
+    formulas: Vec<String>,
 }
 
 fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
@@ -130,6 +136,9 @@ fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
         saved_rolls: lines(conn,
             "SELECT i.name, i.library, s.notation, s.seed, s.text, s.result_json, s.created_at, s.updated_at, i.deleted_at
              FROM saved_rolls s JOIN items i ON i.id = s.item_id WHERE i.campaign_id = ?1", campaign_id),
+        formulas: lines(conn,
+            "SELECT i.name, i.library, f.notation, f.created_at, f.updated_at, i.deleted_at
+             FROM formulas f JOIN items i ON i.id = f.item_id WHERE i.campaign_id = ?1", campaign_id),
     }
 }
 
@@ -180,8 +189,8 @@ fn the_manifest_describes_the_pack() {
     assert_eq!(
         m.counts,
         // 4 documents have text: Strahd, Ireena, Barovia and Old Note ("Scrap" and the map have none).
-        // The 2 saved rolls are items too (8 items: 5 documents, a map and 2 rolls).
-        Counts { folders: 3, items: 8, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 2 }
+        // The 2 saved rolls and 2 formulas are items too (10 items: 5 documents, a map, 2 rolls, 2 formulas).
+        Counts { folders: 3, items: 10, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 2, formulas: 2 }
     );
     assert_eq!(pack.counts(), m.counts);
     assert!(pack.warnings.is_empty(), "a normal export needs no repairs: {:?}", pack.warnings);
@@ -210,7 +219,7 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
         )
         .unwrap();
     assert_eq!(shared, 0);
-    assert_eq!(count(&conn, "items"), 16);
+    assert_eq!(count(&conn, "items"), 20);
 }
 
 #[test]
@@ -258,7 +267,7 @@ fn imported_items_remember_where_they_came_from() {
             .map(|r| r.unwrap())
             .collect()
     };
-    assert_eq!(rows.len(), 8);
+    assert_eq!(rows.len(), 10);
     for (name, origin_pack, origin_item) in rows {
         assert_eq!(origin_pack.as_deref(), Some(pack_id.as_str()), "{name}");
         // The origin id is the item's id in the ORIGINAL campaign.
@@ -530,7 +539,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
     assert!(pack.warnings.iter().all(|w| w.chars().next().unwrap().is_ascii_digit()));
     assert_eq!(
         pack.counts(),
-        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0 }
+        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0 }
     );
 
     let conn = open_in_memory();
@@ -651,7 +660,7 @@ fn the_committed_version_1_pack_still_imports() {
     assert_eq!(result.campaign.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0 }
+        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0 }
     );
     let camp = result.campaign.id;
 
@@ -730,13 +739,15 @@ fn saved_rolls_keep_their_trash_state_and_stay_in_the_dice_library() {
     let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
 
     let live = items::list(&conn, &imported, "dice", None).unwrap();
-    assert_eq!(live.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(), ["Sneak attack"]);
-    let roll = saved_rolls::get(&conn, &live[0].id).unwrap();
+    assert_eq!(live.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(), ["Attack", "Sneak attack"]);
+    let roll = saved_rolls::get(&conn, &live[1].id).unwrap();
     assert_eq!(roll.seed, 4_000_000_000);
     assert_eq!(roll.text, "2d6+3 → [4, 5] + 3 = 12");
 
     let trash = crate::db::trash::list(&conn, &imported, "dice").unwrap();
-    assert_eq!(trash.items.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(), ["Old roll"]);
+    let mut trashed: Vec<_> = trash.items.iter().map(|i| i.name.as_str()).collect();
+    trashed.sort();
+    assert_eq!(trashed, ["Old formula", "Old roll"]);
     // And the roll's text is searchable after import.
     assert_eq!(search::search(&conn, &imported, "sneak", Some("dice"), 10).unwrap().len(), 1);
 }
@@ -771,4 +782,61 @@ fn unreadable_or_orphaned_saved_rolls_are_skipped_with_a_warning() {
     let camp = import_parsed(&conn, &pack, 10).unwrap().campaign.id;
     assert_eq!(items::list(&conn, &camp, "dice", None).unwrap().len(), 2);
     assert_eq!(count(&conn, "saved_rolls"), 1);
+}
+
+#[test]
+fn formulas_round_trip_with_their_trash_state() {
+    let conn = open_in_memory();
+    let original = populate(&conn);
+    let bytes = export_campaign(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+
+    let list = formulas::list(&conn, &imported).unwrap();
+    assert_eq!(list.len(), 1, "the trashed formula is not in the live list");
+    assert_eq!((list[0].name.as_str(), list[0].notation.as_str()), ("Attack", "1d20+5"));
+    // The trashed one came back as trash, with its notation, and can be restored.
+    let trash = crate::db::trash::list(&conn, &imported, "dice").unwrap();
+    let old = trash.items.iter().find(|i| i.name == "Old formula").unwrap();
+    crate::db::trash::restore_item(&conn, &old.id, 7000).unwrap();
+    assert_eq!(formulas::get(&conn, &old.id).unwrap().notation, "1d4");
+    // Formula notation is searchable after import.
+    assert_eq!(search::search(&conn, &imported, "1d20", Some("dice"), 10).unwrap().len(), 1);
+}
+
+#[test]
+fn unreadable_or_orphaned_formulas_are_skipped_with_a_warning() {
+    let item = |id: &str, kind: &str| json!({
+        "id": id, "library": "dice", "itemType": kind, "name": id, "icon": null,
+        "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null
+    });
+    let bytes = pack_with(&[
+        (ITEMS_FILE, json!([item("f1", "formula"), item("f2", "formula"), item("r1", "saved_roll")])),
+        (FORMULAS_FILE, json!([
+            { "itemId": "f1", "notation": "1d20+5", "createdAt": 1, "updatedAt": 1 },
+            { "itemId": "f2", "notation": "   ", "createdAt": 1, "updatedAt": 1 },
+            { "itemId": "r1", "notation": "1d6", "createdAt": 1, "updatedAt": 1 },
+            { "itemId": "ghost", "notation": "1d6", "createdAt": 1, "updatedAt": 1 },
+            { "itemId": "f1", "notation": "dupe", "createdAt": 1, "updatedAt": 1 },
+        ])),
+    ]);
+    let pack = read_pack(&bytes).unwrap();
+    assert_eq!(pack.formulas.len(), 1);
+    assert_eq!(pack.warnings.len(), 1);
+    assert!(pack.warnings[0].starts_with("4 formula(s)"), "{:?}", pack.warnings);
+    let conn = open_in_memory();
+    import_parsed(&conn, &pack, 10).unwrap();
+    assert_eq!(count(&conn, "formulas"), 1);
+}
+
+#[test]
+fn a_failed_import_also_rolls_back_formulas() {
+    let source = open_in_memory();
+    let camp = populate(&source);
+    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let target = open_in_memory();
+    target.execute_batch("DROP TABLE formulas").unwrap();
+    assert!(import_pack(&target, &bytes, 6000).is_err());
+    for table in ["campaigns", "items", "saved_rolls", "document_content"] {
+        assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
+    }
 }

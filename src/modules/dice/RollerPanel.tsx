@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { saveRoll } from "../../api/dice";
 import { ConfirmButton } from "../../components/ConfirmButton";
+import { describeParseError, QUICK_ROLLS } from "../../lib/dice/formula";
 import { termTexts } from "../../lib/results/format";
 import type { RollLogEntry } from "../../lib/results/rollLog";
 import { useCurrentCampaign } from "../../state/CurrentCampaign";
@@ -8,6 +9,7 @@ import { bumpDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
 import { rollLog, useRollLog } from "../../state/rollLog";
 import { copyText } from "./copyText";
+import { FormulaList } from "./FormulaList";
 
 /** The roller: a formula box, and the roll log below it. */
 export function RollerPanel() {
@@ -24,7 +26,7 @@ export function RollerPanel() {
     if (outcome.ok) {
       setError(null);
     } else {
-      setError(`${outcome.error.message} (at character ${outcome.error.position + 1})`);
+      setError(describeParseError(outcome.error));
     }
   }
 
@@ -37,7 +39,7 @@ export function RollerPanel() {
     try {
       const item = await saveRoll(
         campaign.id,
-        "",
+        entry.label ?? "",
         null,
         entry.notation,
         entry.seed,
@@ -73,8 +75,25 @@ export function RollerPanel() {
         />
         <button type="submit">Roll</button>
       </form>
+      <div className="row wrap quick-rolls" role="group" aria-label="Quick rolls">
+        {QUICK_ROLLS.map((q) => (
+          <button
+            key={q.label}
+            type="button"
+            onClick={() => {
+              setError(null);
+              setNote(null);
+              rollLog.roll(q.notation);
+            }}
+          >
+            {q.label}
+          </button>
+        ))}
+      </div>
       {error && <p className="error" role="alert">{error}</p>}
       {note && <p className="meta" role="status">{note}</p>}
+
+      <FormulaList />
 
       <h2>Roll log</h2>
       {entries.length === 0 ? (
@@ -87,6 +106,7 @@ export function RollerPanel() {
               const texts = termTexts(entry.result);
               return (
                 <li key={entry.id} className="roll-entry">
+                  {entry.label && <strong>{entry.label}</strong>}
                   <div className="roll-text">{entry.text}</div>
                   {diceTerms > 1 && (
                     <div className="row wrap">

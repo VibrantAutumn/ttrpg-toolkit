@@ -443,7 +443,7 @@ export function LibraryScreen({
                 ? "This folder is empty."
                 : allowNewItems
                   ? `Nothing here yet. Create a folder or a ${typeLabel.toLowerCase()} above.`
-                  : "Nothing here yet. Create a folder above, or save a roll."}
+                  : "Nothing here yet. Create a folder above, or add a formula or save a roll in the Roll tab."}
             </p>
           ) : (
             <ul className="list">

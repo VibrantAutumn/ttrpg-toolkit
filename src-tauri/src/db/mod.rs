@@ -2,6 +2,7 @@ pub mod campaigns;
 pub mod documents;
 pub mod error;
 pub mod folders;
+pub mod formulas;
 pub mod items;
 pub mod links;
 pub mod migrations;

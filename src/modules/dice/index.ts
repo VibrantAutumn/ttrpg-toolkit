@@ -1,8 +1,9 @@
 import type { ModuleDefinition } from "../../registry/types";
 import { DiceScreen } from "./DiceScreen";
+import { formulaType } from "./formulaType";
 import { savedRollType } from "./savedRollType";
 
-/** Rolling dice (the notation parser lives in `lib/dice`), the roll log, and saved rolls. */
+/** Rolling dice (the notation parser lives in `lib/dice`), the roll log, formulas and saved rolls. */
 export const diceModule: ModuleDefinition = {
   id: "dice",
   tools: [
@@ -14,7 +15,7 @@ export const diceModule: ModuleDefinition = {
       component: DiceScreen,
     },
   ],
-  itemTypes: [savedRollType],
+  itemTypes: [formulaType, savedRollType],
   commands: [
     {
       id: "dice.open",

@@ -9,6 +9,7 @@ use crate::db::documents;
 use crate::db::error::DbError;
 use crate::db::folders::{self, Folder};
 use crate::db::items::{self, Item};
+use crate::db::formulas::{self, Formula, FormulaEntry};
 use crate::db::links;
 use crate::db::saved_rolls::{self, NewSavedRoll, SavedRoll};
 use crate::db::tags::{self, Tag, TagLink};
@@ -121,6 +122,39 @@ pub fn save_roll(
 #[tauri::command]
 pub fn get_saved_roll(db: Db, item_id: String) -> Result<SavedRoll, String> {
     with_conn(&db, |c| saved_rolls::get(c, &item_id))
+}
+
+// ---- Saved dice formulas ----
+
+/// Saves a formula as a new item in the Dice library. (The app's dice parser
+/// has already checked the notation; the database only keeps it.)
+#[tauri::command]
+pub fn create_formula(
+    db: Db,
+    campaign_id: String,
+    name: String,
+    folder_id: Option<String>,
+    notation: String,
+) -> Result<Item, String> {
+    with_conn(&db, |c| {
+        formulas::create(c, &campaign_id, &name, folder_id.as_deref(), &notation, db::now_ms())
+    })
+}
+
+#[tauri::command]
+pub fn get_formula(db: Db, item_id: String) -> Result<Formula, String> {
+    with_conn(&db, |c| formulas::get(c, &item_id))
+}
+
+#[tauri::command]
+pub fn set_formula_notation(db: Db, item_id: String, notation: String) -> Result<(), String> {
+    with_conn(&db, |c| formulas::set_notation(c, &item_id, &notation, db::now_ms()))
+}
+
+/// Every live formula in the campaign, for the roller's list.
+#[tauri::command]
+pub fn list_formulas(db: Db, campaign_id: String) -> Result<Vec<FormulaEntry>, String> {
+    with_conn(&db, |c| formulas::list(c, &campaign_id))
 }
 
 // ---- Content packs ----

@@ -14,6 +14,8 @@ export interface RollLogEntry {
   /** The seed of the random source that produced this roll. */
   seed: number;
   notation: string;
+  /** What the roll is called (a formula's name), or null for a plain roll. */
+  label: string | null;
   /** The readable one-line form (also what "copy" and "save" use). */
   text: string;
   result: DiceResult;
@@ -28,7 +30,7 @@ export type RollOutcome = { ok: true; entry: RollLogEntry } | { ok: false; error
 export interface RollLog {
   /** Newest first. The same array is returned until the log changes. */
   entries(kind?: ResultKind | "all"): readonly RollLogEntry[];
-  roll(notation: string, seed?: number): RollOutcome;
+  roll(notation: string, seed?: number, label?: string): RollOutcome;
   /** Rolls an entry again (keeping its locked terms) as a new entry; null if unknown. */
   reroll(id: string, seed?: number): RollLogEntry | null;
   toggleLock(id: string, termIndex: number): void;
@@ -73,13 +75,19 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
     set(list.map((e) => (e.id === id ? change(e) : e)));
   }
 
-  function makeEntry(result: DiceResult, seed: number, locked: number[]): RollLogEntry {
+  function makeEntry(
+    result: DiceResult,
+    seed: number,
+    locked: number[],
+    label: string | null,
+  ): RollLogEntry {
     return {
       id: newId(),
       kind: "dice",
       createdAt: now(),
       seed,
       notation: result.notation,
+      label,
       text: formatDiceResult(result),
       result,
       locked,
@@ -96,10 +104,10 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
       return filtered.out;
     },
 
-    roll(notation, seed = newSeed()) {
+    roll(notation, seed = newSeed(), label) {
       const parsed = parseDice(notation);
       if (!parsed.ok) return parsed;
-      const entry = makeEntry(rollDice(parsed.expression, createRng(seed)), seed, []);
+      const entry = makeEntry(rollDice(parsed.expression, createRng(seed)), seed, [], label ?? null);
       push(entry);
       return { ok: true, entry };
     },
@@ -110,7 +118,7 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
       const parsed = parseDice(old.notation);
       if (!parsed.ok) return null; // can't happen: the notation parsed when it was rolled
       const result = rerollDice(parsed.expression, old.result, new Set(old.locked), createRng(seed));
-      const entry = makeEntry(result, seed, [...old.locked]);
+      const entry = makeEntry(result, seed, [...old.locked], old.label);
       push(entry);
       return entry;
     },
