@@ -3,13 +3,14 @@ import { resolveCollectionCards, saveDraw } from "../../api/cards";
 import { saveRoll } from "../../api/dice";
 import { termTexts } from "../../lib/results/format";
 import { copyText } from "../../lib/copyText";
-import type { DiceLogEntry, DrawLogEntry, RollLogEntry } from "../../lib/results/rollLog";
+import type { DiceLogEntry, DrawLogEntry, RollLogEntry, TableLogEntry } from "../../lib/results/rollLog";
 import { useCurrentCampaign } from "../../state/CurrentCampaign";
 import { bumpDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
 import { drawFromPlayDeck } from "../../state/playActions";
 import { drawSpreadById } from "../../state/spreadActions";
 import { rollLog } from "../../state/rollLog";
+import { rerollTableResult, rollTableById } from "../../state/tableActions";
 import { DrawnCards } from "../cards/DrawnCards";
 
 /**
@@ -28,7 +29,8 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
   }
 
   async function save() {
-    if (!campaign) return;
+    // Table results are copied for now; saving them waits for sessions (Phase 6).
+    if (!campaign || entry.kind === "table") return;
     try {
       const item =
         entry.kind === "dice"
@@ -94,30 +96,94 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
     }
   }
 
+  /** Rolls the whole table again (a new entry, possibly a different one). */
+  async function rollAgain(e: TableLogEntry) {
+    setNote(null);
+    const outcome = await rollTableById(e.tableId);
+    setError(outcome.ok ? null : outcome.message);
+  }
+
+  /** Rerolls the slots that aren't locked, keeping the entry. */
+  async function rerollSlots(e: TableLogEntry) {
+    if (!campaign) return;
+    setNote(null);
+    const outcome = await rerollTableResult(e.id, campaign.id);
+    setError(outcome.ok ? null : outcome.message);
+  }
+
   return (
     <li className="roll-entry">
       {entry.kind === "dice" && entry.label && <strong>{entry.label}</strong>}
       <div className="roll-text">{entry.text}</div>
       {entry.kind === "draw" && <DrawnCards cards={entry.cards} positions={entry.positions} />}
       {entry.kind === "dice" && <LockButtons entry={entry} />}
+      {entry.kind === "table" && <TableDetails entry={entry} />}
       <div className="row wrap">
-        {entry.kind === "dice" ? (
-          <button onClick={() => rollLog.reroll(entry.id)}>Reroll</button>
-        ) : (
-          <button onClick={() => void drawAgain(entry)}>Draw again</button>
+        {entry.kind === "dice" && <button onClick={() => rollLog.reroll(entry.id)}>Reroll</button>}
+        {entry.kind === "draw" && <button onClick={() => void drawAgain(entry)}>Draw again</button>}
+        {entry.kind === "table" && (
+          <>
+            <button onClick={() => void rollAgain(entry)}>Roll again</button>
+            {lockableSlots(entry).length > 0 && (
+              <button onClick={() => void rerollSlots(entry)} disabled={!campaign}>
+                Reroll slots
+              </button>
+            )}
+          </>
         )}
         <button onClick={() => void copy()}>Copy</button>
-        {entry.savedItemId ? (
-          <button onClick={() => openItem(entry.savedItemId!)}>Saved ✓ Open</button>
-        ) : (
-          <button onClick={() => void save()} disabled={!campaign}>
-            Save
-          </button>
-        )}
+        {entry.kind !== "table" &&
+          (entry.savedItemId ? (
+            <button onClick={() => openItem(entry.savedItemId!)}>Saved ✓ Open</button>
+          ) : (
+            <button onClick={() => void save()} disabled={!campaign}>
+              Save
+            </button>
+          ))}
       </div>
       {note && <p className="meta" role="status">{note}</p>}
       {error && <p className="error" role="alert">{error}</p>}
     </li>
+  );
+}
+
+/** The slots of a table result that can be locked (text and references can't). */
+function lockableSlots(entry: TableLogEntry) {
+  return entry.roll.parts
+    .map((part, index) => ({ part, index }))
+    .filter(({ part }) => part.kind === "slot" && part.slot.type !== "ref");
+}
+
+/** What a table result adds to its text: the cards drawn, warnings, and which slots a reroll keeps. */
+function TableDetails({ entry }: { entry: TableLogEntry }) {
+  const slots = lockableSlots(entry);
+  const cards = entry.roll.parts.flatMap((p) => (p.kind === "slot" && p.outcome.type === "draw" ? p.outcome.cards : []));
+  return (
+    <>
+      {cards.length > 0 && <DrawnCards cards={cards} />}
+      {entry.roll.warnings.length > 0 && (
+        <ul className="meta">
+          {entry.roll.warnings.map((w) => (
+            <li key={w}>⚠ {w}</li>
+          ))}
+        </ul>
+      )}
+      {slots.length > 1 && (
+        <div className="row wrap">
+          <small className="meta">Keep when rerolling:</small>
+          {slots.map(({ part, index }) => (
+            <button
+              key={index}
+              aria-pressed={entry.locked.includes(index)}
+              className={entry.locked.includes(index) ? "active" : undefined}
+              onClick={() => rollLog.toggleLock(entry.id, index)}
+            >
+              {entry.locked.includes(index) ? "🔒" : "🔓"} {part.kind === "slot" ? part.text : ""}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

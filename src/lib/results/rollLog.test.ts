@@ -353,3 +353,116 @@ describe("createRollLog: spread readings", () => {
     expect(entry.text).toBe("S → The Raven, The Ghost (reversed), The Darklord");
   });
 });
+
+describe("table results in the log", () => {
+  const people = {
+    id: "person",
+    name: "Person",
+    avoidRecent: 0,
+    entries: [
+      { id: "ann", text: "Ann", weight: 1 },
+      { id: "bob", text: "Bob", weight: 1 },
+      { id: "cy", text: "Cy", weight: 1 },
+    ],
+  };
+  const quests = {
+    id: "quests",
+    name: "Quests",
+    avoidRecent: 0,
+    entries: [{ id: "q", text: "[Person] meets [Person]", weight: 1 }],
+  };
+  const world = {
+    findTable: (name: string) => [people, quests].find((t) => t.name.toLowerCase() === name.toLowerCase()) ?? null,
+    findDeck: () => null,
+    recent: () => [] as string[],
+  };
+
+  it("logs a table roll with its name, text and seed, newest first", () => {
+    const log = makeLog();
+    log.roll("1d6", 1);
+    const r = log.rollTable(quests, world, 7);
+    if (!r.ok) throw new Error(r.message);
+    expect(r.entry).toMatchObject({
+      kind: "table",
+      tableId: "quests",
+      tableName: "Quests",
+      seed: 7,
+      locked: [],
+      savedItemId: null,
+      label: null,
+    });
+    expect(r.entry.text).toMatch(/^Quests → (Ann|Bob|Cy) meets (Ann|Bob|Cy)$/);
+    expect(r.entry.roll.picked[0]).toEqual({ tableId: "quests", entryId: "q" });
+    expect(log.entries()[0]).toBe(r.entry);
+    expect(log.entries("table")).toEqual([r.entry]);
+    expect(log.entries("dice")).toHaveLength(1);
+  });
+
+  it("is reproducible from its seed", () => {
+    const a = makeLog().rollTable(quests, world, 42);
+    const b = makeLog().rollTable(quests, world, 42);
+    if (!a.ok || !b.ok) throw new Error("should roll");
+    expect(a.entry.text).toBe(b.entry.text);
+  });
+
+  it("logs nothing and says why when the table can't be rolled", () => {
+    const log = makeLog();
+    const empty = { id: "e", name: "Empty", avoidRecent: 0, entries: [] };
+    const r = log.rollTable(empty, world, 1);
+    expect(r.ok).toBe(false);
+    expect(log.entries()).toEqual([]);
+  });
+
+  it("rerolls the unlocked slots as a new entry, keeping the locks and the entry", () => {
+    const log = makeLog();
+    const first = log.rollTable(quests, world, 3);
+    if (!first.ok) throw new Error(first.message);
+    log.toggleLock(first.entry.id, 0);
+    const locked = log.entries("table")[0];
+    expect(locked.locked).toEqual([0]);
+
+    const again = log.rerollTable(first.entry.id, world, 9);
+    if (!again) throw new Error("should reroll");
+    expect(again.id).not.toBe(first.entry.id);
+    expect(again.locked).toEqual([0]);
+    expect(again.seed).toBe(9);
+    expect(again.roll.entryId).toBe("q");
+    // The locked slot (part 0) is exactly what it was.
+    expect(again.roll.parts[0]).toEqual(first.entry.roll.parts[0]);
+    expect(log.entries()[0]).toBe(again);
+    expect(log.entries("table")).toHaveLength(2);
+  });
+
+  it("only picks slots as lockable: not text, not references, not unknown parts", () => {
+    const log = makeLog();
+    const labelled = { ...quests, entries: [{ id: "q", text: "[Person as A] is [A]", weight: 1 }] };
+    const r = log.rollTable(labelled, world, 1);
+    if (!r.ok) throw new Error(r.message);
+    const id = r.entry.id;
+    log.toggleLock(id, 1); // the text " is "
+    log.toggleLock(id, 2); // the reference [A]
+    log.toggleLock(id, 9); // nothing there
+    log.toggleLock(id, -1);
+    expect(log.entries("table")[0].locked).toEqual([]);
+    log.toggleLock(id, 0);
+    expect(log.entries("table")[0].locked).toEqual([0]);
+    log.toggleLock(id, 0); // toggles back off
+    expect(log.entries("table")[0].locked).toEqual([]);
+  });
+
+  it("returns null when asked to reroll something that isn't a table result", () => {
+    const log = makeLog();
+    const d = log.roll("1d6", 1);
+    if (!d.ok) throw new Error("should parse");
+    expect(log.rerollTable(d.entry.id, world)).toBeNull();
+    expect(log.rerollTable("nope", world)).toBeNull();
+  });
+
+  it("can be marked saved like any entry", () => {
+    const log = makeLog();
+    const r = log.rollTable(quests, world, 1);
+    if (!r.ok) throw new Error(r.message);
+    log.markSaved(r.entry.id, "item-1");
+    expect(log.entries("table")[0].savedItemId).toBe("item-1");
+  });
+});

@@ -3,10 +3,18 @@ import { formatSpreadResult } from "../cards/spread";
 import { parseDice, type ParseError } from "../dice/parse";
 import { createRng, newSeed } from "../dice/rng";
 import { rerollDice, rollDice, type DiceResult } from "../dice/roll";
+import { formatTableResult } from "../tables/format";
+import {
+  rerollTable as rerollTableRoll,
+  rollTable as rollTableRoll,
+  type RollableTable,
+  type TableRoll,
+  type TableWorld,
+} from "../tables/roll";
 import { formatDiceResult } from "./format";
 
-/** The kinds of result the log can hold. Tables and generators join later. */
-export type ResultKind = "dice" | "draw";
+/** The kinds of result the log can hold. Generators join later. */
+export type ResultKind = "dice" | "draw" | "table";
 
 /** What every kind of log entry has. */
 interface EntryBase {
@@ -45,16 +53,29 @@ export interface DrawLogEntry extends EntryBase {
   cards: DrawnCard[];
 }
 
+export interface TableLogEntry extends EntryBase {
+  kind: "table";
+  /** The table that was rolled (it may be deleted later). */
+  tableId: string;
+  tableName: string;
+  /** The filled-in result, with every part, so slots can be locked and rerolled. */
+  roll: TableRoll;
+  /** Positions of the slots (parts of the entry) that stay as they are when rerolling. */
+  locked: number[];
+}
+
 /** One line in the roll log. Entries are never edited in place; changes make a new object. */
-export type RollLogEntry = DiceLogEntry | DrawLogEntry;
+export type RollLogEntry = DiceLogEntry | DrawLogEntry | TableLogEntry;
 
 export type RollOutcome = { ok: true; entry: DiceLogEntry } | { ok: false; error: ParseError };
 export type DrawLogOutcome = { ok: true; entry: DrawLogEntry } | { ok: false; message: string };
+export type TableLogOutcome = { ok: true; entry: TableLogEntry } | { ok: false; message: string };
 
 export interface RollLog {
   /** Newest first. The same array is returned until the log changes. */
   entries(kind: "dice"): readonly DiceLogEntry[];
   entries(kind: "draw"): readonly DrawLogEntry[];
+  entries(kind: "table"): readonly TableLogEntry[];
   entries(kind?: ResultKind | "all"): readonly RollLogEntry[];
   roll(notation: string, seed?: number, label?: string): RollOutcome;
   /** Draws from `candidates` (a set, deck or pool's distinct cards) and logs the result. */
@@ -78,8 +99,12 @@ export interface RollLog {
   }): DrawLogEntry;
   /** Rolls a dice entry again (keeping its locked terms) as a new entry; null if unknown or not dice. */
   reroll(id: string, seed?: number): DiceLogEntry | null;
-  /** Dice only: keeps or releases one term of a result when rerolling. */
-  toggleLock(id: string, termIndex: number): void;
+  /** Rolls a table (the caller loads the table and its world) and logs the result. */
+  rollTable(table: RollableTable, world: TableWorld, seed?: number): TableLogOutcome;
+  /** Rerolls the unlocked slots of a table result as a new entry; null if unknown or not a table result. */
+  rerollTable(id: string, world: TableWorld, seed?: number): TableLogEntry | null;
+  /** Dice: keeps or releases one term of a result. Table: one slot of the entry (text and references can't be locked). */
+  toggleLock(id: string, index: number): void;
   markSaved(id: string, itemId: string): void;
   clear(): void;
   subscribe(listener: () => void): () => void;
@@ -141,6 +166,28 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
       result,
       locked,
       savedItemId: null,
+    };
+  }
+
+  function makeTableEntry(
+    tableId: string,
+    tableName: string,
+    roll: TableRoll,
+    seed: number,
+    locked: number[],
+  ): TableLogEntry {
+    return {
+      id: newId(),
+      kind: "table",
+      createdAt: now(),
+      seed,
+      label: null,
+      text: formatTableResult(tableName, roll.text),
+      savedItemId: null,
+      tableId,
+      tableName,
+      roll,
+      locked,
     };
   }
 
@@ -229,13 +276,37 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
       return entry;
     },
 
-    toggleLock(id, termIndex) {
+    rollTable(table, world, seed = newSeed()) {
+      const rolled = rollTableRoll(table, world, createRng(seed));
+      if (!rolled.ok) return rolled;
+      const entry = makeTableEntry(table.id, table.name, rolled.roll, seed, []);
+      push(entry);
+      return { ok: true, entry };
+    },
+
+    rerollTable(id, world, seed = newSeed()) {
+      const old = list.find((e) => e.id === id);
+      if (!old || old.kind !== "table") return null;
+      const rolled = rerollTableRoll(old.roll, new Set(old.locked), world, createRng(seed));
+      if (!rolled.ok) return null;
+      const entry = makeTableEntry(old.tableId, old.tableName, rolled.roll, seed, [...old.locked]);
+      push(entry);
+      return entry;
+    },
+
+    toggleLock(id, index) {
       replace(id, (e) => {
-        if (e.kind !== "dice") return e;
-        if (!Number.isInteger(termIndex) || termIndex < 0 || termIndex >= e.result.terms.length) return e;
-        const locked = e.locked.includes(termIndex)
-          ? e.locked.filter((i) => i !== termIndex)
-          : [...e.locked, termIndex].sort((a, b) => a - b);
+        if (e.kind === "dice") {
+          if (!Number.isInteger(index) || index < 0 || index >= e.result.terms.length) return e;
+        } else if (e.kind === "table") {
+          const part = Number.isInteger(index) ? e.roll.parts[index] : undefined;
+          if (!part || part.kind !== "slot" || part.slot.type === "ref") return e;
+        } else {
+          return e;
+        }
+        const locked = e.locked.includes(index)
+          ? e.locked.filter((i) => i !== index)
+          : [...e.locked, index].sort((a, b) => a - b);
         return { ...e, locked };
       });
     },
