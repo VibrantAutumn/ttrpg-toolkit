@@ -8,6 +8,7 @@ import { useCurrentCampaign } from "../../state/CurrentCampaign";
 import { bumpDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
 import { drawFromPlayDeck } from "../../state/playActions";
+import { drawSpreadById } from "../../state/spreadActions";
 import { rollLog } from "../../state/rollLog";
 import { DrawnCards } from "../cards/DrawnCards";
 
@@ -47,7 +48,13 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
               entry.sourceName,
               entry.seed,
               entry.text,
-              JSON.stringify({ sourceId: entry.sourceId, options: entry.options, cards: entry.cards }),
+              JSON.stringify({
+                sourceId: entry.sourceId,
+                options: entry.options,
+                cards: entry.cards,
+                positions: entry.positions,
+                spreadId: entry.spreadId,
+              }),
             );
       rollLog.markSaved(entry.id, item.id);
       bumpDataVersion();
@@ -69,6 +76,11 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
       setError(outcome.ok ? null : outcome.message);
       return;
     }
+    if (e.spreadId) {
+      const outcome = await drawSpreadById(e.spreadId);
+      setError(outcome.ok ? null : outcome.message);
+      return;
+    }
     try {
       const cards = await resolveCollectionCards(e.sourceId);
       const outcome = rollLog.drawFrom(
@@ -86,7 +98,7 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
     <li className="roll-entry">
       {entry.kind === "dice" && entry.label && <strong>{entry.label}</strong>}
       <div className="roll-text">{entry.text}</div>
-      {entry.kind === "draw" && <DrawnCards cards={entry.cards} />}
+      {entry.kind === "draw" && <DrawnCards cards={entry.cards} positions={entry.positions} />}
       {entry.kind === "dice" && <LockButtons entry={entry} />}
       <div className="row wrap">
         {entry.kind === "dice" ? (

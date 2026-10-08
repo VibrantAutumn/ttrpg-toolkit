@@ -11,7 +11,7 @@
 //!   data/saved_rolls.json    (added later; older packs simply lack it)
 //!   data/formulas.json       (likewise)
 //!   data/card_details.json, data/collection_members.json, data/card_images.json (likewise)
-//!   data/saved_draws.json, data/play_decks.json    (likewise)
+//!   data/saved_draws.json, data/play_decks.json, data/spreads.json, data/spread_positions.json    (likewise)
 //!   assets/cards/<id>.<ext>, assets/cards/<id>.thumb.<ext>   card pictures (one file each)
 //!   assets/                  reserved for future use (images, ...)
 //!
@@ -41,6 +41,8 @@ pub const COLLECTION_MEMBERS_FILE: &str = "data/collection_members.json";
 pub const CARD_IMAGES_FILE: &str = "data/card_images.json";
 pub const SAVED_DRAWS_FILE: &str = "data/saved_draws.json";
 pub const PLAY_DECKS_FILE: &str = "data/play_decks.json";
+pub const SPREADS_FILE: &str = "data/spreads.json";
+pub const SPREAD_POSITIONS_FILE: &str = "data/spread_positions.json";
 /// Card picture files live under this folder inside the zip.
 pub const CARD_ASSET_DIR: &str = "assets/cards/";
 
@@ -81,6 +83,8 @@ pub struct Counts {
     pub card_images: u32,
     pub saved_draws: u32,
     pub play_decks: u32,
+    pub spreads: u32,
+    pub spread_positions: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -229,4 +233,25 @@ pub struct PlayDeckRecord {
     pub state_json: String,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpreadRecord {
+    pub item_id: String,
+    pub notes: String,
+    pub reversals: bool,
+    pub reversal_percent: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpreadPositionRecord {
+    pub spread_id: String,
+    pub position: i64,
+    pub name: String,
+    pub source_id: Option<String>,
+    pub meaning: String,
 }

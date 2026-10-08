@@ -29,6 +29,8 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     let card_images = read_card_images(conn, campaign_id)?;
     let saved_draws = read_saved_draws(conn, campaign_id)?;
     let play_decks = read_play_decks(conn, campaign_id)?;
+    let spreads = read_spreads(conn, campaign_id)?;
+    let spread_positions = read_spread_positions(conn, campaign_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -52,6 +54,8 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
             card_images: card_images.len() as u32,
             saved_draws: saved_draws.len() as u32,
             play_decks: play_decks.len() as u32,
+            spreads: spreads.len() as u32,
+            spread_positions: spread_positions.len() as u32,
         },
     };
 
@@ -69,6 +73,8 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     put(&mut zip, options, CARD_DETAILS_FILE, &card_details, false)?;
     put(&mut zip, options, SAVED_DRAWS_FILE, &saved_draws, false)?;
     put(&mut zip, options, PLAY_DECKS_FILE, &play_decks, false)?;
+    put(&mut zip, options, SPREADS_FILE, &spreads, false)?;
+    put(&mut zip, options, SPREAD_POSITIONS_FILE, &spread_positions, false)?;
     put(&mut zip, options, COLLECTION_MEMBERS_FILE, &collection_members, false)?;
     let image_records: Vec<CardImageRecord> = card_images.iter().map(|(r, _, _)| r.clone()).collect();
     put(&mut zip, options, CARD_IMAGES_FILE, &image_records, false)?;
@@ -375,6 +381,43 @@ fn read_play_decks(conn: &Connection, campaign_id: &str) -> Result<Vec<PlayDeckR
             state_json: r.get(3)?,
             created_at: r.get(4)?,
             updated_at: r.get(5)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_spreads(conn: &Connection, campaign_id: &str) -> Result<Vec<SpreadRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT s.item_id, s.notes, s.reversals, s.reversal_percent, s.created_at, s.updated_at
+         FROM spreads s JOIN items i ON i.id = s.item_id
+         WHERE i.campaign_id = ?1 ORDER BY s.created_at, s.item_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(SpreadRecord {
+            item_id: r.get(0)?,
+            notes: r.get(1)?,
+            reversals: r.get(2)?,
+            reversal_percent: r.get(3)?,
+            created_at: r.get(4)?,
+            updated_at: r.get(5)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_spread_positions(conn: &Connection, campaign_id: &str) -> Result<Vec<SpreadPositionRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT p.spread_id, p.position, p.name, p.source_id, p.meaning
+         FROM spread_positions p JOIN items i ON i.id = p.spread_id
+         WHERE i.campaign_id = ?1 ORDER BY p.spread_id, p.position",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(SpreadPositionRecord {
+            spread_id: r.get(0)?,
+            position: r.get(1)?,
+            name: r.get(2)?,
+            source_id: r.get(3)?,
+            meaning: r.get(4)?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)

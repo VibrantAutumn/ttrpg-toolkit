@@ -5,6 +5,7 @@ use super::PackError;
 use crate::db::cards::{self, test_images};
 use crate::db::collections;
 use crate::db::formulas;
+use crate::db::spreads::{self, PositionInput};
 use crate::db::play_decks::{self, NewPlayDeck};
 use crate::db::saved_draws::{self, NewSavedDraw};
 use crate::db::saved_rolls::{self, NewSavedRoll};
@@ -123,6 +124,26 @@ fn populate(conn: &Connection) -> String {
     };
     play_decks::create(conn, game, 3900).unwrap();
 
+    let reading = items::create(conn, c, "cards", "spread", "Strahd reading", None, 4000).unwrap();
+    let position = |name: &str, source: Option<&str>, meaning: &str| PositionInput {
+        name: name.into(),
+        source_id: source.map(String::from),
+        meaning: meaning.into(),
+    };
+    spreads::set_positions(
+        conn,
+        &reading.id,
+        &[
+            position("Tome", Some(&tarot.id), "The history"),
+            position("Icon", Some(&omens.id), ""),
+            position("Unchosen", None, "Pick a source"),
+        ],
+        4010,
+    )
+    .unwrap();
+    spreads::set_notes(conn, &reading.id, "Read it aloud", 4020).unwrap();
+    spreads::set_reversals(conn, &reading.id, false, 10, 4030).unwrap();
+
     camp.id
 }
 
@@ -161,6 +182,8 @@ struct Snapshot {
     collection_members: Vec<String>,
     saved_draws: Vec<String>,
     play_decks: Vec<String>,
+    spreads: Vec<String>,
+    spread_positions: Vec<String>,
 }
 
 fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
@@ -207,6 +230,13 @@ fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
         play_decks: lines(conn,
             "SELECT i.name, i.library, p.source_name, p.state_json, p.created_at, p.updated_at, i.deleted_at
              FROM play_decks p JOIN items i ON i.id = p.item_id WHERE i.campaign_id = ?1", campaign_id),
+        spreads: lines(conn,
+            "SELECT i.name, s.notes, s.reversals, s.reversal_percent, s.created_at, s.updated_at, i.deleted_at
+             FROM spreads s JOIN items i ON i.id = s.item_id WHERE i.campaign_id = ?1", campaign_id),
+        spread_positions: lines(conn,
+            "SELECT i.name, p.position, p.name, src.name, p.meaning
+             FROM spread_positions p JOIN items i ON i.id = p.spread_id LEFT JOIN items src ON src.id = p.source_id
+             WHERE i.campaign_id = ?1", campaign_id),
     }
 }
 
@@ -258,10 +288,10 @@ fn the_manifest_describes_the_pack() {
         m.counts,
         // 4 documents have text: Strahd, Ireena, Barovia and Old Note ("Scrap" and the map have none).
         // The saved rolls, formulas and cards are items too (18 items: 5 documents, a map, 2 rolls,
-        // 2 formulas, 3 cards, a set, a deck, a pool, a saved draw and a deck in play). 2 cards have details, 1 a picture, 7 membership rows.
+        // 2 formulas, 3 cards, a set, a deck, a pool, a saved draw, a deck in play and a spread). 2 cards have details, 1 a picture, 7 membership rows.
         Counts {
-            folders: 3, items: 18, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 2, formulas: 2,
-            card_details: 2, collection_members: 7, card_images: 1, saved_draws: 1, play_decks: 1,
+            folders: 3, items: 19, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 2, formulas: 2,
+            card_details: 2, collection_members: 7, card_images: 1, saved_draws: 1, play_decks: 1, spreads: 1, spread_positions: 3,
         }
     );
     assert_eq!(pack.counts(), m.counts);
@@ -291,7 +321,7 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
         )
         .unwrap();
     assert_eq!(shared, 0);
-    assert_eq!(count(&conn, "items"), 36);
+    assert_eq!(count(&conn, "items"), 38);
 }
 
 #[test]
@@ -339,7 +369,7 @@ fn imported_items_remember_where_they_came_from() {
             .map(|r| r.unwrap())
             .collect()
     };
-    assert_eq!(rows.len(), 18);
+    assert_eq!(rows.len(), 19);
     for (name, origin_pack, origin_item) in rows {
         assert_eq!(origin_pack.as_deref(), Some(pack_id.as_str()), "{name}");
         // The origin id is the item's id in the ORIGINAL campaign.
@@ -611,7 +641,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
     assert!(pack.warnings.iter().all(|w| w.chars().next().unwrap().is_ascii_digit()));
     assert_eq!(
         pack.counts(),
-        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0 }
+        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0 }
     );
 
     let conn = open_in_memory();
@@ -732,7 +762,7 @@ fn the_committed_version_1_pack_still_imports() {
     assert_eq!(result.campaign.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0 }
+        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0 }
     );
     let camp = result.campaign.id;
 
@@ -1264,6 +1294,97 @@ fn a_failed_import_also_rolls_back_decks_in_play() {
     target.execute_batch("DROP TABLE play_decks").unwrap();
     assert!(import_pack(&target, &bytes, 6000).is_err());
     for table in ["campaigns", "items", "saved_draws", "collection_members", "formulas"] {
+        assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
+    }
+}
+
+#[test]
+fn spreads_round_trip_and_their_positions_point_at_the_imported_sources() {
+    let conn = open_in_memory();
+    let original = populate(&conn);
+    let bytes = export_campaign(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+
+    let find = |campaign: &str, name: &str| {
+        items::list(&conn, campaign, "cards", None).unwrap().into_iter().find(|i| i.name == name).unwrap()
+    };
+    let reading = find(&imported, "Strahd reading");
+    let spread = spreads::get(&conn, &reading.id).unwrap();
+    assert_eq!((spread.notes.as_str(), spread.reversals, spread.reversal_percent), ("Read it aloud", false, 10));
+    let summary: Vec<_> = spread
+        .positions
+        .iter()
+        .map(|p| (p.name.as_str(), p.source_name.as_deref(), p.meaning.as_str()))
+        .collect();
+    assert_eq!(
+        summary,
+        [("Tome", Some("Tarot"), "The history"), ("Icon", Some("Omens"), ""), ("Unchosen", None, "Pick a source")]
+    );
+    // The sources are the imported copies, not the original campaign's items.
+    assert_eq!(spread.positions[0].source_id.as_deref(), Some(find(&imported, "Tarot").id.as_str()));
+    assert_ne!(spread.positions[0].source_id.as_deref(), Some(find(&original, "Tarot").id.as_str()));
+    assert!(spread.positions.iter().all(|p| !p.source_missing));
+    // The original is untouched, and the imported spread is searchable.
+    let old = spreads::get(&conn, &find(&original, "Strahd reading").id).unwrap();
+    assert_eq!(old.positions[0].source_id.as_deref(), Some(find(&original, "Tarot").id.as_str()));
+    assert_eq!(search::search(&conn, &imported, "tome", Some("cards"), 10).unwrap().len(), 1);
+    assert!(spreads::list(&conn, &imported).unwrap().iter().all(|e| !e.ready), "one position has no source yet");
+}
+
+#[test]
+fn bad_spread_data_in_a_pack_is_repaired_or_skipped_with_warnings() {
+    let item = |id: &str, kind: &str| json!({
+        "id": id, "library": "cards", "itemType": kind, "name": id, "icon": null,
+        "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null
+    });
+    let pos = |spread: &str, n: i64, name: &str, source: Option<&str>| json!({
+        "spreadId": spread, "position": n, "name": name, "sourceId": source, "meaning": ""
+    });
+    let mut positions = vec![
+        pos("sp", 1, "Past", Some("deck")),    // fine
+        pos("sp", 2, "Present", Some("card")), // a card can't be a source: left unchosen
+        pos("sp", 3, "Future", Some("ghost")), // missing source: left unchosen
+        pos("sp", 3, "Duplicate place", None), // same place twice
+        pos("sp", 4, "  ", None),              // blank name
+        pos("doc", 1, "Not a spread", None),   // belongs to a document
+    ];
+    for n in 5..=14 {
+        positions.push(pos("sp", n, &format!("Extra {n}"), None)); // only 10 fit in all
+    }
+    let bytes = pack_with(&[
+        (ITEMS_FILE, json!([item("sp", "spread"), item("deck", "deck"), item("card", "card"), item("doc", "document")])),
+        (SPREADS_FILE, json!([
+            { "itemId": "sp", "notes": "ok", "reversals": true, "reversalPercent": 50, "createdAt": 1, "updatedAt": 1 },
+            { "itemId": "sp", "notes": "duplicate", "reversals": true, "reversalPercent": 50, "createdAt": 1, "updatedAt": 1 },
+            { "itemId": "deck", "notes": "not a spread", "reversals": true, "reversalPercent": 50, "createdAt": 1, "updatedAt": 1 },
+        ])),
+        (SPREAD_POSITIONS_FILE, json!(positions)),
+    ]);
+    let pack = read_pack(&bytes).unwrap();
+    assert_eq!(pack.spreads.len(), 1);
+    assert_eq!(pack.spread_positions.len(), 10, "no more than 10 positions per spread");
+    assert!(pack.warnings.iter().any(|w| w.starts_with("2 spread setting")), "{:?}", pack.warnings);
+    assert!(pack.warnings.iter().any(|w| w.contains("spread position(s) belonged")), "{:?}", pack.warnings);
+    assert!(pack.warnings.iter().any(|w| w.starts_with("2 spread position(s) pointed at a missing source")), "{:?}", pack.warnings);
+
+    let conn = open_in_memory();
+    let camp = import_parsed(&conn, &pack, 10).unwrap().campaign.id;
+    let sp = items::list(&conn, &camp, "cards", None).unwrap().into_iter().find(|i| i.item_type == "spread").unwrap();
+    let got = spreads::get(&conn, &sp.id).unwrap();
+    assert_eq!(got.positions.len(), 10);
+    assert_eq!(got.positions[0].source_name.as_deref(), Some("deck"));
+    assert_eq!((got.positions[1].source_id.clone(), got.positions[2].source_id.clone()), (None, None));
+}
+
+#[test]
+fn a_failed_import_also_rolls_back_spreads() {
+    let source = open_in_memory();
+    let camp = populate(&source);
+    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let target = open_in_memory();
+    target.execute_batch("DROP TABLE spread_positions").unwrap();
+    assert!(import_pack(&target, &bytes, 6000).is_err());
+    for table in ["campaigns", "items", "spreads", "play_decks", "saved_draws"] {
         assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
     }
 }

@@ -27,6 +27,17 @@ function cardsOf(resultJson: string): DrawnCard[] {
   }
 }
 
+/** The position names of a saved spread reading, if it has them (one per card). */
+function positionsOf(resultJson: string, cardCount: number): string[] | null {
+  try {
+    const list = (JSON.parse(resultJson) as { positions?: unknown }).positions;
+    if (!Array.isArray(list) || list.length !== cardCount) return null;
+    return list.map((p) => String(p));
+  } catch {
+    return null;
+  }
+}
+
 /** A saved draw's page: the cards as drawn (reversed ones upside-down), and your notes on them. */
 export function SavedDrawView({ itemId }: { itemId: string }) {
   const [draw, setDraw] = useState<SavedDraw | null>(null); // null while loading
@@ -74,7 +85,10 @@ export function SavedDrawView({ itemId }: { itemId: string }) {
   return (
     <div className="saved-draw">
       <p className="roll-text">{draw.text}</p>
-      <DrawnCards cards={cardsOf(draw.resultJson)} />
+      <DrawnCards
+        cards={cardsOf(draw.resultJson)}
+        positions={positionsOf(draw.resultJson, cardsOf(draw.resultJson).length)}
+      />
       <p className="meta">
         Drawn from {draw.sourceName} · seed {draw.seed} · saved {new Date(draw.createdAt).toLocaleString()}
       </p>

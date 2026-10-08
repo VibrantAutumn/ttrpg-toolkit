@@ -4,6 +4,7 @@ import { CollectionEditor } from "./CollectionEditor";
 import { cardTypeIcon } from "./icons";
 import { PlayDeckView } from "./PlayDeckView";
 import { SavedDrawView } from "./SavedDrawView";
+import { SpreadEditor } from "./SpreadEditor";
 
 export const cardType: ItemTypeDefinition = {
   id: "card",
@@ -57,4 +58,13 @@ export const playType: ItemTypeDefinition = {
   editor: PlayDeckView,
 };
 
-export const cardItemTypes = [cardType, setType, deckType, poolType, drawType, playType];
+/** A spread starts empty from the library's "New item" form; its page is where the positions are built. */
+export const spreadType: ItemTypeDefinition = {
+  id: "spread",
+  label: "Spread",
+  icon: cardTypeIcon("spread"),
+  toolId: "cards",
+  editor: SpreadEditor,
+};
+
+export const cardItemTypes = [cardType, setType, deckType, poolType, spreadType, drawType, playType];

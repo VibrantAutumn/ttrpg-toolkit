@@ -13,6 +13,7 @@ use crate::db::folders::{self, Folder};
 use crate::db::items::{self, Item};
 use crate::db::formulas::{self, Formula, FormulaEntry};
 use crate::db::links;
+use crate::db::spreads::{self, PositionInput, Spread, SpreadEntry};
 use crate::db::starters::{self, InstallResult};
 use crate::db::play_decks::{self, NewPlayDeck, PlayDeck, PlayDeckEntry};
 use crate::db::saved_draws::{self, NewSavedDraw, SavedDraw};
@@ -349,6 +350,35 @@ pub async fn install_card_bundle(
 #[tauri::command]
 pub fn list_installed_starters(db: Db, campaign_id: String) -> Result<Vec<String>, String> {
     with_conn(&db, |c| starters::installed(c, &campaign_id))
+}
+
+// ---- Spreads ----
+
+#[tauri::command]
+pub fn get_spread(db: Db, item_id: String) -> Result<Spread, String> {
+    with_conn(&db, |c| spreads::get(c, &item_id))
+}
+
+/// Replaces a spread's positions (3 to 10, each with one source to draw from).
+#[tauri::command]
+pub fn set_spread_positions(db: Db, item_id: String, positions: Vec<PositionInput>) -> Result<(), String> {
+    with_conn(&db, |c| spreads::set_positions(c, &item_id, &positions, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn set_spread_notes(db: Db, item_id: String, notes: String) -> Result<(), String> {
+    with_conn(&db, |c| spreads::set_notes(c, &item_id, &notes, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn set_spread_reversals(db: Db, item_id: String, reversals: bool, percent: i64) -> Result<(), String> {
+    with_conn(&db, |c| spreads::set_reversals(c, &item_id, reversals, percent, db::now_ms()))
+}
+
+/// Every spread in the campaign, and whether it is ready to draw.
+#[tauri::command]
+pub fn list_spreads(db: Db, campaign_id: String) -> Result<Vec<SpreadEntry>, String> {
+    with_conn(&db, |c| spreads::list(c, &campaign_id))
 }
 
 // ---- Content packs ----

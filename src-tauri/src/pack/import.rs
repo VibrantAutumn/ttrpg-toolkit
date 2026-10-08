@@ -9,7 +9,7 @@
 use super::format::*;
 use super::PackError;
 use crate::db::campaigns::{self, Campaign};
-use crate::db::{cards, collections, documents, formulas, play_decks, saved_draws, saved_rolls, settings};
+use crate::db::{cards, collections, documents, formulas, play_decks, saved_draws, saved_rolls, settings, spreads};
 use rusqlite::{params, Connection, ErrorCode};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -53,6 +53,8 @@ pub struct ParsedPack {
     pub card_images: Vec<ParsedCardImage>,
     pub saved_draws: Vec<SavedDrawRecord>,
     pub play_decks: Vec<PlayDeckRecord>,
+    pub spreads: Vec<SpreadRecord>,
+    pub spread_positions: Vec<SpreadPositionRecord>,
     /// Plain-language notes about anything that had to be fixed or skipped.
     pub warnings: Vec<String>,
 }
@@ -74,6 +76,8 @@ impl ParsedPack {
             card_images: self.card_images.len() as u32,
             saved_draws: self.saved_draws.len() as u32,
             play_decks: self.play_decks.len() as u32,
+            spreads: self.spreads.len() as u32,
+            spread_positions: self.spread_positions.len() as u32,
         }
     }
 }
@@ -164,6 +168,8 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         card_images,
         saved_draws: read_list(&mut archive, SAVED_DRAWS_FILE, limits, &mut total)?,
         play_decks: read_list(&mut archive, PLAY_DECKS_FILE, limits, &mut total)?,
+        spreads: read_list(&mut archive, SPREADS_FILE, limits, &mut total)?,
+        spread_positions: read_list(&mut archive, SPREAD_POSITIONS_FILE, limits, &mut total)?,
         warnings: Vec::new(),
     };
     sanitize(&mut pack);
@@ -543,6 +549,46 @@ fn sanitize(pack: &mut ParsedPack) {
     });
     note(before - pack.play_decks.len(), "deck(s) in play belonged to something missing or were unreadable and were skipped.");
 
+    let before = pack.spreads.len();
+    let mut seen = HashSet::new();
+    pack.spreads.retain(|s| {
+        item_type.get(s.item_id.as_str()) == Some(&spreads::SPREAD_TYPE)
+            && s.notes.len() <= cards::MAX_NOTES_BYTES
+            && (0..=100).contains(&s.reversal_percent)
+            && seen.insert(s.item_id.clone())
+    });
+    note(before - pack.spreads.len(), "spread setting(s) belonged to something missing or were unreadable and were skipped.");
+
+    // Positions: only for spreads, readable, at most 10 per spread, one per place.
+    let before = pack.spread_positions.len();
+    let mut seen = HashSet::new();
+    let mut per_spread: HashMap<String, usize> = HashMap::new();
+    pack.spread_positions.sort_by_key(|p| p.position);
+    pack.spread_positions.retain(|p| {
+        let keep = item_type.get(p.spread_id.as_str()) == Some(&spreads::SPREAD_TYPE)
+            && spreads::validate_position(&p.name, &p.meaning).is_ok()
+            && seen.insert((p.spread_id.clone(), p.position));
+        if !keep {
+            return false;
+        }
+        let n = per_spread.entry(p.spread_id.clone()).or_insert(0);
+        *n += 1;
+        *n <= spreads::MAX_POSITIONS
+    });
+    note(before - pack.spread_positions.len(), "spread position(s) belonged to something missing, were unreadable or were beyond the 10 allowed, and were skipped.");
+    // A position's source must be a set, deck or pool that is in the pack; otherwise it is left unchosen.
+    let mut cleared = 0;
+    for p in &mut pack.spread_positions {
+        let ok = p.source_id.as_deref().is_none_or(|s| {
+            item_type.get(s).is_some_and(|t| collections::allowed_members(t).len() > 0)
+        });
+        if !ok {
+            p.source_id = None;
+            cleared += 1;
+        }
+    }
+    note(cleared, "spread position(s) pointed at a missing source and were left without one.");
+
     pack.warnings = warnings;
 }
 
@@ -732,6 +778,23 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
                 item_ids[&d.item_id], d.source_name, d.seed, d.text, result_json, d.notes,
                 d.created_at, d.updated_at
             ],
+        )
+        .map_err(db_error)?;
+    }
+    for s in &pack.spreads {
+        tx.execute(
+            "INSERT INTO spreads (item_id, notes, reversals, reversal_percent, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![item_ids[&s.item_id], s.notes, s.reversals, s.reversal_percent, s.created_at, s.updated_at],
+        )
+        .map_err(db_error)?;
+    }
+    for p in &pack.spread_positions {
+        let source = p.source_id.as_ref().and_then(|s| item_ids.get(s));
+        tx.execute(
+            "INSERT INTO spread_positions (spread_id, position, name, source_id, meaning)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![item_ids[&p.spread_id], p.position, p.name.trim(), source, p.meaning],
         )
         .map_err(db_error)?;
     }

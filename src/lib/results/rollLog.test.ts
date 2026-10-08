@@ -303,3 +303,53 @@ describe("createRollLog: draws from a deck in play", () => {
     expect(log.entries().map((e) => e.kind)).toEqual(["draw", "draw"]);
   });
 });
+
+describe("createRollLog: spread readings", () => {
+  const options = { ...DEFAULT_DRAW_OPTIONS, count: 3, reversals: false };
+  const cards = [
+    { id: "a", name: "The Raven", reversed: false },
+    { id: "b", name: "The Ghost", reversed: true },
+    { id: "c", name: "The Darklord", reversed: false },
+  ];
+
+  it("logs a reading with each card's position name, in the text and on the entry", () => {
+    const log = makeLog();
+    const entry = log.logDraw({
+      sourceId: "spread-1",
+      sourceName: "Strahd reading",
+      playId: null,
+      spreadId: "spread-1",
+      positions: ["Tome", "Icon", "Enemy"],
+      options,
+      cards,
+      seed: 5,
+    });
+    expect(entry).toMatchObject({ kind: "draw", spreadId: "spread-1", positions: ["Tome", "Icon", "Enemy"] });
+    expect(entry.text).toBe("Strahd reading → Tome: The Raven; Icon: The Ghost (reversed); Enemy: The Darklord");
+  });
+
+  it("plain draws and games have no positions or spread", () => {
+    const log = makeLog();
+    const entry = log.logDraw({ sourceId: "p", sourceName: "P", playId: "p", options, cards, seed: 1 });
+    expect(entry.positions).toBeNull();
+    expect(entry.spreadId).toBeNull();
+    const r = log.drawFrom({ id: "d", name: "D" }, [{ id: "x", name: "X" }], { ...options, count: 1 }, 1);
+    if (!r.ok) throw new Error(r.message);
+    expect([r.entry.positions, r.entry.spreadId]).toEqual([null, null]);
+  });
+
+  it("ignores position names that don't line up with the cards", () => {
+    const entry = makeLog().logDraw({
+      sourceId: "s",
+      sourceName: "S",
+      playId: null,
+      spreadId: "s",
+      positions: ["Only one"],
+      options,
+      cards,
+      seed: 1,
+    });
+    expect(entry.positions).toBeNull();
+    expect(entry.text).toBe("S → The Raven, The Ghost (reversed), The Darklord");
+  });
+});

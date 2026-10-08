@@ -1,4 +1,5 @@
 import { drawCards, formatDrawResult, type DrawCard, type DrawnCard, type DrawOptions } from "../cards/draw";
+import { formatSpreadResult } from "../cards/spread";
 import { parseDice, type ParseError } from "../dice/parse";
 import { createRng, newSeed } from "../dice/rng";
 import { rerollDice, rollDice, type DiceResult } from "../dice/roll";
@@ -36,6 +37,10 @@ export interface DrawLogEntry extends EntryBase {
   sourceName: string;
   /** The deck in play this came from, or null for a plain draw from a set, deck or pool. */
   playId: string | null;
+  /** The spread this reading came from (it may be deleted later), or null for any other draw. */
+  spreadId: string | null;
+  /** For a spread reading: the position name of each card, in the same order as `cards`. */
+  positions: string[] | null;
   options: DrawOptions;
   cards: DrawnCard[];
 }
@@ -64,6 +69,9 @@ export interface RollLog {
     sourceId: string;
     sourceName: string;
     playId: string | null;
+    /** For a spread reading: which spread, and each card's position name (same order as `cards`). */
+    spreadId?: string | null;
+    positions?: readonly string[] | null;
     options: DrawOptions;
     cards: readonly DrawnCard[];
     seed: number;
@@ -148,22 +156,30 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
     sourceId: string;
     sourceName: string;
     playId: string | null;
+    spreadId?: string | null;
+    positions?: readonly string[] | null;
     options: DrawOptions;
     cards: readonly DrawnCard[];
     seed: number;
   }): DrawLogEntry {
     const cards = input.cards.map((c) => ({ id: c.id, name: c.name, reversed: c.reversed }));
+    // Position names only make sense if there is one for every card.
+    const positions = input.positions && input.positions.length === cards.length ? [...input.positions] : null;
     return {
       id: newId(),
       kind: "draw",
       createdAt: now(),
       seed: input.seed,
       label: null,
-      text: formatDrawResult(input.sourceName, cards),
+      text: positions
+        ? formatSpreadResult(input.sourceName, cards.map((c, i) => ({ ...c, position: positions[i] })))
+        : formatDrawResult(input.sourceName, cards),
       savedItemId: null,
       sourceId: input.sourceId,
       sourceName: input.sourceName,
       playId: input.playId,
+      spreadId: positions ? (input.spreadId ?? null) : null,
+      positions,
       options: { ...input.options },
       cards,
     };

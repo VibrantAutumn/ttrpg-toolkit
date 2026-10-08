@@ -113,3 +113,45 @@ export const setPlayDeckState = (itemId: string, stateJson: string) =>
   invoke<void>("set_play_deck_state", { itemId, stateJson });
 export const listPlayDecks = (campaignId: string) =>
   invoke<PlayDeckEntry[]>("list_play_decks", { campaignId });
+
+/** A position of a spread, as stored (mirrors the Rust `Position`). */
+export interface SpreadPosition {
+  name: string;
+  /** The set, deck or pool it draws from; null until one is chosen. */
+  sourceId: string | null;
+  /** That source's name, if it is live. */
+  sourceName: string | null;
+  /** A source was chosen but is gone: it needs choosing again. */
+  sourceMissing: boolean;
+  meaning: string;
+}
+
+/** Mirrors the Rust `Spread`. */
+export interface Spread {
+  itemId: string;
+  notes: string;
+  reversals: boolean;
+  reversalPercent: number;
+  positions: SpreadPosition[];
+}
+
+/** One row of the list of spreads. */
+export interface SpreadEntry {
+  itemId: string;
+  name: string;
+  positions: number;
+  /** Enough positions, and every one has a live source: it can be drawn. */
+  ready: boolean;
+}
+
+export const getSpread = (itemId: string) => invoke<Spread>("get_spread", { itemId });
+/** Replaces a spread's positions (3 to 10, in order). */
+export const setSpreadPositions = (
+  itemId: string,
+  positions: { name: string; sourceId: string | null; meaning: string }[],
+) => invoke<void>("set_spread_positions", { itemId, positions });
+export const setSpreadNotes = (itemId: string, notes: string) =>
+  invoke<void>("set_spread_notes", { itemId, notes });
+export const setSpreadReversals = (itemId: string, reversals: boolean, percent: number) =>
+  invoke<void>("set_spread_reversals", { itemId, reversals, percent });
+export const listSpreads = (campaignId: string) => invoke<SpreadEntry[]>("list_spreads", { campaignId });

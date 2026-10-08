@@ -79,6 +79,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "create_play_decks",
         sql: include_str!("../../migrations/0013_create_play_decks.sql"),
     },
+    Migration {
+        version: 14,
+        name: "create_spreads",
+        sql: include_str!("../../migrations/0014_create_spreads.sql"),
+    },
 ];
 
 #[derive(Debug)]

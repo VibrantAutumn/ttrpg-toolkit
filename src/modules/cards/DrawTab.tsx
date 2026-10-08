@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { listCollections, listPlayDecks, type PlayDeckEntry } from "../../api/cards";
+import { listCollections, listPlayDecks, listSpreads, type PlayDeckEntry, type SpreadEntry } from "../../api/cards";
 import type { Item } from "../../api/library";
 import { RollLogList } from "../../components/results/RollLogList";
 import { useCurrentCampaign } from "../../state/CurrentCampaign";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
 import { drawFromPlayDeck } from "../../state/playActions";
+import { drawSpreadById } from "../../state/spreadActions";
 import { cardTypeIcon } from "./icons";
 import { DrawPanel } from "./DrawPanel";
 
@@ -17,6 +18,7 @@ export function DrawTab() {
   const campaignId = campaign?.id ?? null;
   const [sources, setSources] = useState<Item[]>([]);
   const [plays, setPlays] = useState<PlayDeckEntry[]>([]);
+  const [spreads, setSpreads] = useState<SpreadEntry[]>([]);
   const [playCount, setPlayCount] = useState("1");
   const [chosenId, setChosenId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -25,11 +27,15 @@ export function DrawTab() {
     if (!campaignId) {
       setSources([]);
       setPlays([]);
+      setSpreads([]);
       return;
     }
     let active = true;
     listCollections(campaignId)
       .then((list) => active && setSources(list))
+      .catch((e) => active && setError(String(e)));
+    listSpreads(campaignId)
+      .then((list) => active && setSpreads(list))
       .catch((e) => active && setError(String(e)));
     listPlayDecks(campaignId)
       .then((list) => active && setPlays(list))
@@ -50,6 +56,12 @@ export function DrawTab() {
     const outcome = await drawFromPlayDeck(playId, playCount.trim() === "" ? NaN : Number(playCount));
     setError(outcome.ok ? null : outcome.message);
     // If the game turned out to be gone, reload the list so it stops being offered.
+    if (!outcome.ok) bumpDataVersion();
+  }
+
+  async function drawFromSpread(spreadId: string) {
+    const outcome = await drawSpreadById(spreadId);
+    setError(outcome.ok ? null : outcome.message);
     if (!outcome.ok) bumpDataVersion();
   }
 
@@ -79,6 +91,35 @@ export function DrawTab() {
           {chosen && <DrawPanel key={chosen.id} sourceId={chosen.id} sourceName={chosen.name} showResult={false} />}
         </>
       )}
+      <h2>Spreads</h2>
+      {spreads.length === 0 ? (
+        <p className="empty">
+          No spreads yet. Make one in the Library tab (New item, type Spread) and give each position a place to draw from.
+        </p>
+      ) : (
+        <ul className="list">
+          {spreads.map((s) => (
+            <li key={s.itemId} className="row wrap">
+              <span className="name">
+                <button className="link name" onClick={() => openItem(s.itemId)}>
+                  {cardTypeIcon("spread")} {s.name}
+                </button>{" "}
+                <small className="meta">
+                  {s.positions} positions{s.ready ? "" : " · needs finishing"}
+                </small>
+              </span>
+              <button
+                onClick={() => void drawFromSpread(s.itemId)}
+                disabled={!s.ready}
+                title={s.ready ? "Draw every position" : "Open it to finish its positions"}
+              >
+                Draw
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <h2>Decks in play</h2>
       {plays.length === 0 ? (
         <p className="empty">
