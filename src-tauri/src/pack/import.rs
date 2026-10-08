@@ -9,7 +9,7 @@
 use super::format::*;
 use super::PackError;
 use crate::db::campaigns::{self, Campaign};
-use crate::db::{documents, formulas, saved_rolls, settings};
+use crate::db::{cards, collections, documents, formulas, saved_rolls, settings};
 use rusqlite::{params, Connection, ErrorCode};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -29,7 +29,7 @@ pub struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Limits {
-            max_entries: 100,
+            max_entries: 5_000,
             max_entry_bytes: 100 * 1024 * 1024,
             max_total_bytes: 300 * 1024 * 1024,
         }
@@ -48,6 +48,9 @@ pub struct ParsedPack {
     pub documents: Vec<DocumentRecord>,
     pub saved_rolls: Vec<SavedRollRecord>,
     pub formulas: Vec<FormulaRecord>,
+    pub card_details: Vec<CardDetailRecord>,
+    pub collection_members: Vec<CollectionMemberRecord>,
+    pub card_images: Vec<ParsedCardImage>,
     /// Plain-language notes about anything that had to be fixed or skipped.
     pub warnings: Vec<String>,
 }
@@ -64,8 +67,19 @@ impl ParsedPack {
             documents: self.documents.len() as u32,
             saved_rolls: self.saved_rolls.len() as u32,
             formulas: self.formulas.len() as u32,
+            card_details: self.card_details.len() as u32,
+            collection_members: self.collection_members.len() as u32,
+            card_images: self.card_images.len() as u32,
         }
     }
+}
+
+/// A card picture with the bytes of its two files (empty if a file was missing).
+#[derive(Debug)]
+pub struct ParsedCardImage {
+    pub record: CardImageRecord,
+    pub image: Vec<u8>,
+    pub thumb: Vec<u8>,
 }
 
 /// What the import preview shows.
@@ -123,6 +137,14 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         .ok_or(PackError::NotAPack("it has no manifest"))?;
     let manifest = parse_manifest(&manifest_bytes)?;
 
+    let image_records: Vec<CardImageRecord> = read_list(&mut archive, CARD_IMAGES_FILE, limits, &mut total)?;
+    let mut card_images = Vec::with_capacity(image_records.len());
+    for record in image_records {
+        let image = read_asset(&mut archive, &record.image_file, limits, &mut total)?;
+        let thumb = read_asset(&mut archive, &record.thumb_file, limits, &mut total)?;
+        card_images.push(ParsedCardImage { record, image, thumb });
+    }
+
     let mut pack = ParsedPack {
         manifest,
         folders: read_list(&mut archive, FOLDERS_FILE, limits, &mut total)?,
@@ -133,6 +155,9 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         documents: read_list(&mut archive, DOCUMENTS_FILE, limits, &mut total)?,
         saved_rolls: read_list(&mut archive, SAVED_ROLLS_FILE, limits, &mut total)?,
         formulas: read_list(&mut archive, FORMULAS_FILE, limits, &mut total)?,
+        card_details: read_list(&mut archive, CARD_DETAILS_FILE, limits, &mut total)?,
+        collection_members: read_list(&mut archive, COLLECTION_MEMBERS_FILE, limits, &mut total)?,
+        card_images,
         warnings: Vec::new(),
     };
     sanitize(&mut pack);
@@ -186,6 +211,20 @@ fn read_entry<R: Read + Seek>(
         return Err(PackError::TooLarge);
     }
     Ok(Some(buf))
+}
+
+/// Reads a card picture file. Only files under `assets/cards/` are looked at; a
+/// missing or misplaced file gives empty bytes (the picture is then dropped when tidying).
+fn read_asset<R: Read + Seek>(
+    archive: &mut ZipArchive<R>,
+    name: &str,
+    limits: &Limits,
+    total: &mut u64,
+) -> Result<Vec<u8>, PackError> {
+    if !name.starts_with(CARD_ASSET_DIR) {
+        return Ok(Vec::new());
+    }
+    Ok(read_entry(archive, name, limits, total)?.unwrap_or_default())
 }
 
 /// Reads a JSON array entry. A missing entry counts as empty.
@@ -449,6 +488,37 @@ fn sanitize(pack: &mut ParsedPack) {
     });
     note(before - pack.formulas.len(), "formula(s) belonged to something missing or were unreadable and were skipped.");
 
+    let before = pack.card_details.len();
+    let mut seen = HashSet::new();
+    pack.card_details.retain(|d| {
+        item_type.get(d.item_id.as_str()) == Some(&cards::CARD_TYPE)
+            && cards::validate_details(&d.value, &d.notes).is_ok()
+            && seen.insert(d.item_id.clone())
+    });
+    note(before - pack.card_details.len(), "card value/notes were for something that isn't a card, were too long, or were duplicated and were skipped.");
+
+    let before = pack.card_images.len();
+    let mut seen = HashSet::new();
+    pack.card_images.retain(|p| {
+        item_type.get(p.record.item_id.as_str()) == Some(&cards::CARD_TYPE)
+            && cards::validate_image(&p.record.mime, &p.image, &p.thumb).is_ok()
+            && seen.insert(p.record.item_id.clone())
+    });
+    note(before - pack.card_images.len(), "card picture(s) were missing, damaged, too large or the wrong type and were skipped.");
+
+    let before = pack.collection_members.len();
+    let mut seen = HashSet::new();
+    pack.collection_members.retain(|m| {
+        let holds = match (item_type.get(m.collection_id.as_str()), item_type.get(m.member_id.as_str())) {
+            (Some(collection), Some(member)) => collections::may_hold(collection, member),
+            _ => false,
+        };
+        holds
+            && m.collection_id != m.member_id
+            && seen.insert((m.collection_id.clone(), m.member_id.clone()))
+    });
+    note(before - pack.collection_members.len(), "set/deck/pool entries referred to something missing or not allowed there and were skipped.");
+
     pack.warnings = warnings;
 }
 
@@ -562,6 +632,36 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
         tx.execute(
             "INSERT INTO formulas (item_id, notation, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
             params![item_ids[&f.item_id], f.notation, f.created_at, f.updated_at],
+        )
+        .map_err(db_error)?;
+    }
+
+    for d in &pack.card_details {
+        tx.execute(
+            "INSERT INTO card_details (item_id, value, notes, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![item_ids[&d.item_id], d.value, d.notes, d.created_at, d.updated_at],
+        )
+        .map_err(db_error)?;
+    }
+    for p in &pack.card_images {
+        tx.execute(
+            "INSERT INTO card_images (item_id, mime, image, thumb, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                item_ids[&p.record.item_id], p.record.mime, p.image, p.thumb,
+                p.record.created_at, p.record.updated_at
+            ],
+        )
+        .map_err(db_error)?;
+    }
+    for m in &pack.collection_members {
+        tx.execute(
+            "INSERT INTO collection_members (collection_id, member_id, position, created_at, updated_at, deleted_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                item_ids[&m.collection_id], item_ids[&m.member_id], m.position,
+                m.created_at, m.updated_at, m.deleted_at
+            ],
         )
         .map_err(db_error)?;
     }

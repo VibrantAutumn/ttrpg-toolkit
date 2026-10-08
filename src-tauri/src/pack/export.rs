@@ -24,6 +24,9 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     let documents = read_documents(conn, campaign_id)?;
     let saved_rolls = read_saved_rolls(conn, campaign_id)?;
     let formulas = read_formulas(conn, campaign_id)?;
+    let card_details = read_card_details(conn, campaign_id)?;
+    let collection_members = read_collection_members(conn, campaign_id)?;
+    let card_images = read_card_images(conn, campaign_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -42,6 +45,9 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
             documents: documents.len() as u32,
             saved_rolls: saved_rolls.len() as u32,
             formulas: formulas.len() as u32,
+            card_details: card_details.len() as u32,
+            collection_members: collection_members.len() as u32,
+            card_images: card_images.len() as u32,
         },
     };
 
@@ -56,6 +62,16 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     put(&mut zip, options, DOCUMENTS_FILE, &documents, false)?;
     put(&mut zip, options, SAVED_ROLLS_FILE, &saved_rolls, false)?;
     put(&mut zip, options, FORMULAS_FILE, &formulas, false)?;
+    put(&mut zip, options, CARD_DETAILS_FILE, &card_details, false)?;
+    put(&mut zip, options, COLLECTION_MEMBERS_FILE, &collection_members, false)?;
+    let image_records: Vec<CardImageRecord> = card_images.iter().map(|(r, _, _)| r.clone()).collect();
+    put(&mut zip, options, CARD_IMAGES_FILE, &image_records, false)?;
+    // Pictures are already compressed, so they are stored as they are.
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    for (record, image, thumb) in &card_images {
+        put_bytes(&mut zip, stored, &record.image_file, image)?;
+        put_bytes(&mut zip, stored, &record.thumb_file, thumb)?;
+    }
     let cursor = zip.finish().map_err(|e| PackError::Failed(e.to_string()))?;
     Ok(cursor.into_inner())
 }
@@ -227,6 +243,93 @@ fn read_formulas(conn: &Connection, campaign_id: &str) -> Result<Vec<FormulaReco
             created_at: r.get(2)?,
             updated_at: r.get(3)?,
         })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn put_bytes(
+    zip: &mut ZipWriter<Cursor<Vec<u8>>>,
+    options: SimpleFileOptions,
+    name: &str,
+    bytes: &[u8],
+) -> Result<(), PackError> {
+    zip.start_file(name, options)
+        .map_err(|e| PackError::Failed(e.to_string()))?;
+    zip.write_all(bytes).map_err(|e| PackError::Failed(e.to_string()))
+}
+
+fn read_card_details(conn: &Connection, campaign_id: &str) -> Result<Vec<CardDetailRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT d.item_id, d.value, d.notes, d.created_at, d.updated_at
+         FROM card_details d JOIN items i ON i.id = d.item_id
+         WHERE i.campaign_id = ?1 ORDER BY d.created_at, d.item_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(CardDetailRecord {
+            item_id: r.get(0)?,
+            value: r.get(1)?,
+            notes: r.get(2)?,
+            created_at: r.get(3)?,
+            updated_at: r.get(4)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_collection_members(
+    conn: &Connection,
+    campaign_id: &str,
+) -> Result<Vec<CollectionMemberRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT m.collection_id, m.member_id, m.position, m.created_at, m.updated_at, m.deleted_at
+         FROM collection_members m JOIN items c ON c.id = m.collection_id
+         WHERE c.campaign_id = ?1
+         ORDER BY m.collection_id, m.position, m.member_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(CollectionMemberRecord {
+            collection_id: r.get(0)?,
+            member_id: r.get(1)?,
+            position: r.get(2)?,
+            created_at: r.get(3)?,
+            updated_at: r.get(4)?,
+            deleted_at: r.get(5)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn extension_for(mime: &str) -> &'static str {
+    match mime {
+        "image/png" => "png",
+        "image/webp" => "webp",
+        _ => "jpg",
+    }
+}
+
+/// Each card picture with the record that names its two files in the zip.
+fn read_card_images(
+    conn: &Connection,
+    campaign_id: &str,
+) -> Result<Vec<(CardImageRecord, Vec<u8>, Vec<u8>)>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT c.item_id, c.mime, c.image, c.thumb, c.created_at, c.updated_at
+         FROM card_images c JOIN items i ON i.id = c.item_id
+         WHERE i.campaign_id = ?1 ORDER BY c.created_at, c.item_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        let item_id: String = r.get(0)?;
+        let mime: String = r.get(1)?;
+        let ext = extension_for(&mime);
+        let record = CardImageRecord {
+            image_file: format!("{CARD_ASSET_DIR}{item_id}.{ext}"),
+            thumb_file: format!("{CARD_ASSET_DIR}{item_id}.thumb.{ext}"),
+            item_id,
+            mime,
+            created_at: r.get(4)?,
+            updated_at: r.get(5)?,
+        };
+        Ok((record, r.get::<_, Vec<u8>>(2)?, r.get::<_, Vec<u8>>(3)?))
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
 }

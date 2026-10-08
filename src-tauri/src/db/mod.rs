@@ -1,4 +1,6 @@
 pub mod campaigns;
+pub mod cards;
+pub mod collections;
 pub mod documents;
 pub mod error;
 pub mod folders;

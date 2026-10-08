@@ -5,6 +5,8 @@
 //! the snake_case names below.
 
 use crate::db::campaigns::{self, Campaign};
+use crate::db::cards::{self, CardDetails, ImageData};
+use crate::db::collections;
 use crate::db::documents;
 use crate::db::error::DbError;
 use crate::db::folders::{self, Folder};
@@ -155,6 +157,86 @@ pub fn set_formula_notation(db: Db, item_id: String, notation: String) -> Result
 #[tauri::command]
 pub fn list_formulas(db: Db, campaign_id: String) -> Result<Vec<FormulaEntry>, String> {
     with_conn(&db, |c| formulas::list(c, &campaign_id))
+}
+
+// ---- Cards, sets, decks and pools ----
+
+#[tauri::command]
+pub fn get_card_details(db: Db, item_id: String) -> Result<CardDetails, String> {
+    with_conn(&db, |c| cards::get_details(c, &item_id))
+}
+
+#[tauri::command]
+pub fn set_card_details(db: Db, item_id: String, value: String, notes: String) -> Result<(), String> {
+    with_conn(&db, |c| cards::set_details(c, &item_id, &value, &notes, db::now_ms()))
+}
+
+/// Sets a card's picture. The pictures arrive as base64 text (never raw bytes:
+/// Android can't deliver them), already shrunk by the app.
+#[tauri::command]
+pub fn set_card_image(
+    db: Db,
+    item_id: String,
+    mime: String,
+    image: String,
+    thumb: String,
+) -> Result<(), String> {
+    with_conn(&db, |c| {
+        let image = cards::decode_base64(&image)?;
+        let thumb = cards::decode_base64(&thumb)?;
+        cards::set_image(c, &item_id, &mime, &image, &thumb, db::now_ms())
+    })
+}
+
+#[tauri::command]
+pub fn remove_card_image(db: Db, item_id: String) -> Result<(), String> {
+    with_conn(&db, |c| cards::remove_image(c, &item_id, db::now_ms()))
+}
+
+/// A card's full-size picture, if it has one.
+#[tauri::command]
+pub fn get_card_image(db: Db, item_id: String) -> Result<Option<ImageData>, String> {
+    with_conn(&db, |c| cards::get_image(c, &item_id))
+}
+
+/// Thumbnails for several cards at once (cards without a picture are left out).
+#[tauri::command]
+pub fn get_card_thumbs(db: Db, item_ids: Vec<String>) -> Result<Vec<ImageData>, String> {
+    with_conn(&db, |c| cards::get_thumbs(c, &item_ids))
+}
+
+#[tauri::command]
+pub fn add_to_collection(db: Db, collection_id: String, member_id: String) -> Result<(), String> {
+    with_conn(&db, |c| collections::add_member(c, &collection_id, &member_id, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn remove_from_collection(db: Db, collection_id: String, member_id: String) -> Result<(), String> {
+    with_conn(&db, |c| collections::remove_member(c, &collection_id, &member_id, db::now_ms()))
+}
+
+/// What is directly inside a set, deck or pool, in order.
+#[tauri::command]
+pub fn list_collection_members(db: Db, collection_id: String) -> Result<Vec<Item>, String> {
+    with_conn(&db, |c| collections::list_members(c, &collection_id))
+}
+
+/// The sets, decks and pools that directly hold an item.
+#[tauri::command]
+pub fn list_containers(db: Db, item_id: String) -> Result<Vec<Item>, String> {
+    with_conn(&db, |c| collections::containers_of(c, &item_id))
+}
+
+/// Every distinct card a set, deck or pool reaches.
+#[tauri::command]
+pub fn resolve_collection_cards(db: Db, collection_id: String) -> Result<Vec<Item>, String> {
+    with_conn(&db, |c| collections::resolve_cards(c, &collection_id))
+}
+
+/// What could still be added to a set, deck or pool.
+#[tauri::command]
+pub fn list_collection_candidates(db: Db, collection_id: String) -> Result<Vec<Item>, String> {
+    with_conn(&db, |c| collections::candidates(c, &collection_id))
 }
 
 // ---- Content packs ----

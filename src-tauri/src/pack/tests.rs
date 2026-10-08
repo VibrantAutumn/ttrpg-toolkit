@@ -2,6 +2,8 @@ use super::export::export_campaign;
 use super::format::*;
 use super::import::{import_pack, import_parsed, parent_first, read_pack, read_pack_with, Limits};
 use super::PackError;
+use crate::db::cards::{self, test_images};
+use crate::db::collections;
 use crate::db::formulas;
 use crate::db::saved_rolls::{self, NewSavedRoll};
 use crate::db::{campaigns, documents, folders, items, links, open_in_memory, search, settings, tags};
@@ -15,7 +17,8 @@ use zip::{write::SimpleFileOptions, ZipWriter};
 /// nested folders, items in and out of folders, a map, document text, nested and
 /// coloured tags, attached and removed tags, links (one removed), and trash
 /// (a deleted item, a deleted folder with a deleted item inside, a deleted tag),
-/// two saved dice rolls (one in the trash), and two formulas (one in the trash).
+/// two saved dice rolls (one in the trash), two formulas (one in the trash), and cards: a card with a picture, a set, a deck and a pool holding each other,
+/// a removed member and a trashed card.
 fn populate(conn: &Connection) -> String {
     let camp = campaigns::create(conn, "Strahd", 1000).unwrap();
     let c = camp.id.as_str();
@@ -76,6 +79,26 @@ fn populate(conn: &Connection) -> String {
     let old_formula = formulas::create(conn, c, "Old formula", None, "1d4", 2850).unwrap();
     items::soft_delete(conn, &old_formula.id, 2900).unwrap();
 
+    let card = |name: &str, at: i64| items::create(conn, c, "cards", "card", name, None, at).unwrap();
+    let fool = card("The Fool", 3000);
+    cards::set_details(conn, &fool.id, "0", "Beginnings", 3010).unwrap();
+    cards::set_image(conn, &fool.id, "image/png", &test_images::png(), &test_images::png()[..12], 3020).unwrap();
+    let cups = card("Two of Cups", 3100);
+    let lost = card("Lost card", 3200);
+    cards::set_details(conn, &lost.id, "99", "", 3210).unwrap();
+    let major = items::create(conn, c, "cards", "set", "Major Arcana", None, 3300).unwrap();
+    let tarot = items::create(conn, c, "cards", "deck", "Tarot", None, 3400).unwrap();
+    let omens = items::create(conn, c, "cards", "pool", "Omens", None, 3500).unwrap();
+    collections::add_member(conn, &major.id, &fool.id, 3600).unwrap();
+    collections::add_member(conn, &major.id, &lost.id, 3610).unwrap();
+    collections::add_member(conn, &tarot.id, &major.id, 3620).unwrap();
+    collections::add_member(conn, &tarot.id, &cups.id, 3630).unwrap();
+    collections::add_member(conn, &tarot.id, &fool.id, 3640).unwrap();
+    collections::remove_member(conn, &tarot.id, &fool.id, 3650).unwrap();
+    collections::add_member(conn, &omens.id, &tarot.id, 3660).unwrap();
+    collections::add_member(conn, &omens.id, &fool.id, 3670).unwrap();
+    items::soft_delete(conn, &lost.id, 3700).unwrap();
+
     camp.id
 }
 
@@ -109,6 +132,9 @@ struct Snapshot {
     documents: Vec<String>,
     saved_rolls: Vec<String>,
     formulas: Vec<String>,
+    card_details: Vec<String>,
+    card_images: Vec<String>,
+    collection_members: Vec<String>,
 }
 
 fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
@@ -139,6 +165,16 @@ fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
         formulas: lines(conn,
             "SELECT i.name, i.library, f.notation, f.created_at, f.updated_at, i.deleted_at
              FROM formulas f JOIN items i ON i.id = f.item_id WHERE i.campaign_id = ?1", campaign_id),
+        card_details: lines(conn,
+            "SELECT i.name, d.value, d.notes, d.created_at, d.updated_at, i.deleted_at
+             FROM card_details d JOIN items i ON i.id = d.item_id WHERE i.campaign_id = ?1", campaign_id),
+        card_images: lines(conn,
+            "SELECT i.name, c.mime, c.image, c.thumb, c.created_at, c.updated_at
+             FROM card_images c JOIN items i ON i.id = c.item_id WHERE i.campaign_id = ?1", campaign_id),
+        collection_members: lines(conn,
+            "SELECT h.name, m.name, k.position, k.created_at, k.updated_at, k.deleted_at
+             FROM collection_members k JOIN items h ON h.id = k.collection_id JOIN items m ON m.id = k.member_id
+             WHERE h.campaign_id = ?1", campaign_id),
     }
 }
 
@@ -189,8 +225,12 @@ fn the_manifest_describes_the_pack() {
     assert_eq!(
         m.counts,
         // 4 documents have text: Strahd, Ireena, Barovia and Old Note ("Scrap" and the map have none).
-        // The 2 saved rolls and 2 formulas are items too (10 items: 5 documents, a map, 2 rolls, 2 formulas).
-        Counts { folders: 3, items: 10, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 2, formulas: 2 }
+        // The saved rolls, formulas and cards are items too (16 items: 5 documents, a map, 2 rolls,
+        // 2 formulas, 3 cards, a set, a deck and a pool). 2 cards have details, 1 a picture, 7 membership rows.
+        Counts {
+            folders: 3, items: 16, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 2, formulas: 2,
+            card_details: 2, collection_members: 7, card_images: 1,
+        }
     );
     assert_eq!(pack.counts(), m.counts);
     assert!(pack.warnings.is_empty(), "a normal export needs no repairs: {:?}", pack.warnings);
@@ -219,7 +259,7 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
         )
         .unwrap();
     assert_eq!(shared, 0);
-    assert_eq!(count(&conn, "items"), 20);
+    assert_eq!(count(&conn, "items"), 32);
 }
 
 #[test]
@@ -267,7 +307,7 @@ fn imported_items_remember_where_they_came_from() {
             .map(|r| r.unwrap())
             .collect()
     };
-    assert_eq!(rows.len(), 10);
+    assert_eq!(rows.len(), 16);
     for (name, origin_pack, origin_item) in rows {
         assert_eq!(origin_pack.as_deref(), Some(pack_id.as_str()), "{name}");
         // The origin id is the item's id in the ORIGINAL campaign.
@@ -539,7 +579,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
     assert!(pack.warnings.iter().all(|w| w.chars().next().unwrap().is_ascii_digit()));
     assert_eq!(
         pack.counts(),
-        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0 }
+        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0 }
     );
 
     let conn = open_in_memory();
@@ -660,7 +700,7 @@ fn the_committed_version_1_pack_still_imports() {
     assert_eq!(result.campaign.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0 }
+        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0 }
     );
     let camp = result.campaign.id;
 
@@ -839,4 +879,170 @@ fn a_failed_import_also_rolls_back_formulas() {
     for table in ["campaigns", "items", "saved_rolls", "document_content"] {
         assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
     }
+}
+
+// ------------------------------------------------------------------ cards
+
+fn pool_cards(conn: &Connection, campaign: &str) -> Vec<String> {
+    let pool = items::list(conn, campaign, "cards", None)
+        .unwrap()
+        .into_iter()
+        .find(|i| i.name == "Omens")
+        .unwrap();
+    collections::resolve_cards(conn, &pool.id).unwrap().into_iter().map(|c| c.name).collect()
+}
+
+#[test]
+fn cards_pictures_and_membership_survive_a_round_trip() {
+    let conn = open_in_memory();
+    let original = populate(&conn);
+    // The pool reaches the Fool (via the set, and directly) and Two of Cups once each;
+    // the trashed card and the removed member do not count.
+    assert_eq!(pool_cards(&conn, &original), ["The Fool", "Two of Cups"]);
+
+    let bytes = export_campaign(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+    assert_eq!(pool_cards(&conn, &imported), ["The Fool", "Two of Cups"]);
+
+    let fool = items::list(&conn, &imported, "cards", None).unwrap().into_iter().find(|i| i.name == "The Fool").unwrap();
+    let details = cards::get_details(&conn, &fool.id).unwrap();
+    assert_eq!((details.value.as_str(), details.notes.as_str()), ("0", "Beginnings"));
+    let image = cards::get_image(&conn, &fool.id).unwrap().unwrap();
+    assert_eq!(image.mime, "image/png");
+    assert_eq!(cards::decode_base64(&image.data).unwrap(), test_images::png());
+    let containers: Vec<_> = collections::containers_of(&conn, &fool.id).unwrap().into_iter().map(|i| i.name).collect();
+    assert_eq!(containers, ["Omens", "Major Arcana"]);
+    // Search finds the card by its notes.
+    assert_eq!(search::search(&conn, &imported, "beginnings", Some("cards"), 10).unwrap().len(), 1);
+
+    // The trashed card came back as trash, and restoring it puts it back in its set.
+    let trash = crate::db::trash::list(&conn, &imported, "cards").unwrap();
+    assert_eq!(trash.items.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(), ["Lost card"]);
+    crate::db::trash::restore_item(&conn, &trash.items[0].id, 7000).unwrap();
+    assert_eq!(pool_cards(&conn, &imported), ["The Fool", "Lost card", "Two of Cups"]);
+}
+
+#[test]
+fn pictures_are_separate_files_and_many_cards_do_not_hit_the_entry_limit() {
+    let conn = open_in_memory();
+    let camp = campaigns::create(&conn, "Big deck", 1).unwrap().id;
+    let png = test_images::png();
+    for n in 0..150 {
+        let card = items::create(&conn, &camp, "cards", "card", &format!("Card {n}"), None, 10).unwrap();
+        cards::set_image(&conn, &card.id, "image/png", &png, &png[..12], 11).unwrap();
+    }
+    let bytes = export_campaign(&conn, &camp, 5000).unwrap();
+
+    let names: Vec<String> = {
+        let mut archive = zip::ZipArchive::new(Cursor::new(&bytes)).unwrap();
+        (0..archive.len()).map(|i| archive.by_index(i).unwrap().name().to_string()).collect()
+    };
+    // 150 pictures + 150 thumbnails as their own files, far past the old limit of 100 entries.
+    assert_eq!(names.iter().filter(|n| n.starts_with("assets/cards/")).count(), 300);
+    assert!(names.iter().any(|n| n.ends_with(".thumb.png")));
+
+    let pack = read_pack(&bytes).unwrap();
+    assert!(pack.warnings.is_empty(), "{:?}", pack.warnings);
+    assert_eq!(pack.counts().card_images, 150);
+    let imported = import_parsed(&open_in_memory(), &pack, 6000).unwrap();
+    assert_eq!(imported.counts.card_images, 150);
+}
+
+#[test]
+fn bad_card_data_in_a_pack_is_skipped_with_warnings() {
+    let item = |id: &str, library: &str, kind: &str| json!({
+        "id": id, "library": library, "itemType": kind, "name": id, "icon": null,
+        "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null
+    });
+    let png = test_images::png();
+    let jpeg = test_images::jpeg();
+    let member = |c: &str, m: &str| json!({
+        "collectionId": c, "memberId": m, "position": 1, "createdAt": 1, "updatedAt": 1, "deletedAt": null
+    });
+    let image = |id: &str, mime: &str, img: &str, thumb: &str| json!({
+        "itemId": id, "mime": mime, "imageFile": img, "thumbFile": thumb, "createdAt": 1, "updatedAt": 1
+    });
+    let manifest = manifest_json(1);
+    let items_json = json!([
+        item("card1", "cards", "card"), item("card2", "cards", "card"), item("card3", "cards", "card"),
+        item("set1", "cards", "set"), item("deck1", "cards", "deck"), item("doc1", "worldbuilding", "document"),
+    ])
+    .to_string();
+    let details = json!([
+        { "itemId": "card1", "value": "7", "notes": "fine", "createdAt": 1, "updatedAt": 1 },
+        { "itemId": "doc1", "value": "x", "notes": "not a card", "createdAt": 1, "updatedAt": 1 },
+        { "itemId": "card1", "value": "dupe", "notes": "", "createdAt": 1, "updatedAt": 1 },
+        { "itemId": "ghost", "value": "x", "notes": "", "createdAt": 1, "updatedAt": 1 },
+    ])
+    .to_string();
+    let members = json!([
+        member("set1", "card1"),   // fine
+        member("set1", "deck1"),   // a set can't hold a deck
+        member("deck1", "set1"),   // fine
+        member("deck1", "deck1"),  // itself
+        member("set1", "ghost"),   // missing
+        member("set1", "card1"),   // duplicate
+        member("card1", "card2"),  // a card holds nothing
+    ])
+    .to_string();
+    let images = json!([
+        image("card1", "image/png", "assets/cards/card1.png", "assets/cards/card1.thumb.png"), // fine
+        image("card2", "image/png", "assets/cards/card2.png", "assets/cards/card2.thumb.png"), // image file missing
+        image("card3", "image/png", "assets/cards/card3.png", "assets/cards/card3.thumb.png"), // really a JPEG
+        image("doc1", "image/png", "assets/cards/card1.png", "assets/cards/card1.thumb.png"),  // not a card
+        image("card1", "image/png", "assets/cards/card1.png", "assets/cards/card1.thumb.png"), // duplicate
+        image("card3", "image/gif", "assets/cards/card3.png", "assets/cards/card3.thumb.png"), // unknown type
+        image("card2", "image/png", "elsewhere/card1.png", "elsewhere/card1.thumb.png"),       // outside assets/cards/
+    ])
+    .to_string();
+    let bytes = make_zip(&[
+        (MANIFEST_FILE, manifest.as_bytes()),
+        (ITEMS_FILE, items_json.as_bytes()),
+        (CARD_DETAILS_FILE, details.as_bytes()),
+        (COLLECTION_MEMBERS_FILE, members.as_bytes()),
+        (CARD_IMAGES_FILE, images.as_bytes()),
+        ("assets/cards/card1.png", &png),
+        ("assets/cards/card1.thumb.png", &png[..12]),
+        ("assets/cards/card3.png", &jpeg),
+        ("assets/cards/card3.thumb.png", &jpeg),
+    ]);
+
+    let pack = read_pack(&bytes).unwrap();
+    assert_eq!(pack.card_details.len(), 1);
+    assert_eq!(pack.collection_members.len(), 2);
+    assert_eq!(pack.card_images.len(), 1);
+    assert_eq!(pack.warnings.len(), 3, "{:?}", pack.warnings);
+    assert!(pack.warnings.iter().any(|w| w.starts_with("3 card value/notes")), "{:?}", pack.warnings);
+    assert!(pack.warnings.iter().any(|w| w.starts_with("5 set/deck/pool")), "{:?}", pack.warnings);
+    assert!(pack.warnings.iter().any(|w| w.starts_with("6 card picture")), "{:?}", pack.warnings);
+
+    // What was kept imports; the cards whose pictures were dropped still exist.
+    let conn = open_in_memory();
+    let camp = import_parsed(&conn, &pack, 10).unwrap().campaign.id;
+    assert_eq!(items::list(&conn, &camp, "cards", None).unwrap().len(), 5);
+    assert_eq!(count(&conn, "card_images"), 1);
+    assert_eq!(count(&conn, "collection_members"), 2);
+}
+
+#[test]
+fn a_failed_import_also_rolls_back_cards() {
+    let source = open_in_memory();
+    let camp = populate(&source);
+    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    // Break only the LAST thing the importer writes.
+    let target = open_in_memory();
+    target.execute_batch("DROP TABLE collection_members").unwrap();
+    assert!(import_pack(&target, &bytes, 6000).is_err());
+    for table in ["campaigns", "items", "card_details", "card_images", "formulas"] {
+        assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
+    }
+}
+
+#[test]
+fn the_committed_version_1_pack_has_no_cards_and_still_imports() {
+    // The golden pack predates cards: the missing card files count as empty.
+    let bytes = include_bytes!("../../tests/fixtures/pack_v1.ttrpgpack");
+    let pack = read_pack(bytes).unwrap();
+    assert!(pack.card_details.is_empty() && pack.collection_members.is_empty() && pack.card_images.is_empty());
+    assert!(pack.warnings.is_empty());
 }

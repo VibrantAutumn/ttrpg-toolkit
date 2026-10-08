@@ -10,6 +10,8 @@
 //!   data/documents.json
 //!   data/saved_rolls.json    (added later; older packs simply lack it)
 //!   data/formulas.json       (likewise)
+//!   data/card_details.json, data/collection_members.json, data/card_images.json (likewise)
+//!   assets/cards/<id>.<ext>, assets/cards/<id>.thumb.<ext>   card pictures (one file each)
 //!   assets/                  reserved for future use (images, ...)
 //!
 //! These types are deliberately separate from the database structs so changing
@@ -33,6 +35,11 @@ pub const LINKS_FILE: &str = "data/links.json";
 pub const DOCUMENTS_FILE: &str = "data/documents.json";
 pub const SAVED_ROLLS_FILE: &str = "data/saved_rolls.json";
 pub const FORMULAS_FILE: &str = "data/formulas.json";
+pub const CARD_DETAILS_FILE: &str = "data/card_details.json";
+pub const COLLECTION_MEMBERS_FILE: &str = "data/collection_members.json";
+pub const CARD_IMAGES_FILE: &str = "data/card_images.json";
+/// Card picture files live under this folder inside the zip.
+pub const CARD_ASSET_DIR: &str = "assets/cards/";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -66,6 +73,9 @@ pub struct Counts {
     pub documents: u32,
     pub saved_rolls: u32,
     pub formulas: u32,
+    pub card_details: u32,
+    pub collection_members: u32,
+    pub card_images: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -155,6 +165,39 @@ pub struct SavedRollRecord {
 pub struct FormulaRecord {
     pub item_id: String,
     pub notation: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CardDetailRecord {
+    pub item_id: String,
+    pub value: String,
+    pub notes: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollectionMemberRecord {
+    pub collection_id: String,
+    pub member_id: String,
+    pub position: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deleted_at: Option<i64>,
+}
+
+/// Says which files in `assets/cards/` hold a card's picture and thumbnail.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CardImageRecord {
+    pub item_id: String,
+    pub mime: String,
+    pub image_file: String,
+    pub thumb_file: String,
     pub created_at: i64,
     pub updated_at: i64,
 }
