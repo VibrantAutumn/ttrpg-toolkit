@@ -6,12 +6,13 @@ import {
   removeFromCollection,
   resolveCollectionCards,
 } from "../../api/cards";
-import type { Item } from "../../api/library";
-import { bumpDataVersion } from "../../state/dataVersion";
+import { getItem, type Item } from "../../api/library";
+import { CardThumb } from "../../components/cards/CardThumb";
+import { useThumbs } from "../../components/cards/useThumbs";
+import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
-import { CardThumb } from "./CardThumb";
 import { cardTypeIcon } from "./icons";
-import { useThumbs } from "./useThumbs";
+import { DrawPanel } from "./DrawPanel";
 
 const WHAT: Record<string, { holds: string; empty: string }> = {
   set: { holds: "cards", empty: "This set is empty. Add some cards." },
@@ -28,6 +29,8 @@ const WHAT: Record<string, { holds: string; empty: string }> = {
  */
 export function CollectionEditor({ itemId, kind }: { itemId: string; kind: "set" | "deck" | "pool" }) {
   const { openItem } = useNavigation();
+  const dataVersion = useDataVersion();
+  const [name, setName] = useState("");
   const [members, setMembers] = useState<Item[]>([]);
   const [cards, setCards] = useState<Item[]>([]);
   const [candidates, setCandidates] = useState<Item[]>([]);
@@ -37,11 +40,13 @@ export function CollectionEditor({ itemId, kind }: { itemId: string; kind: "set"
 
   const reload = useCallback(async () => {
     try {
-      const [m, c, cand] = await Promise.all([
+      const [item, m, c, cand] = await Promise.all([
+        getItem(itemId),
         listCollectionMembers(itemId),
         resolveCollectionCards(itemId),
         listCollectionCandidates(itemId),
       ]);
+      setName(item.name);
       setMembers(m);
       setCards(c);
       setCandidates(cand);
@@ -49,7 +54,7 @@ export function CollectionEditor({ itemId, kind }: { itemId: string; kind: "set"
     } catch (e) {
       setError(String(e));
     }
-  }, [itemId]);
+  }, [itemId, dataVersion]);
 
   useEffect(() => {
     void reload();
@@ -173,6 +178,8 @@ export function CollectionEditor({ itemId, kind }: { itemId: string; kind: "set"
           A card that is in more than one place here is counted once.
         </p>
       )}
+
+      {name && <DrawPanel sourceId={itemId} sourceName={name} />}
     </div>
   );
 }

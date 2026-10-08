@@ -47,3 +47,35 @@ export const resolveCollectionCards = (collectionId: string) =>
 /** What could still be added to a set, deck or pool. */
 export const listCollectionCandidates = (collectionId: string) =>
   invoke<Item[]>("list_collection_candidates", { collectionId });
+
+/** Mirrors the Rust `SavedDraw`. */
+export interface SavedDraw {
+  itemId: string;
+  sourceName: string;
+  seed: number;
+  /** The readable one-line form, e.g. `Tarot → The Fool, Two of Cups (reversed)`. */
+  text: string;
+  /** The finished draw as JSON text: `{ sourceId, options, cards: [{ id, name, reversed }] }`. */
+  resultJson: string;
+  notes: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Saves a finished draw as a new item in the Cards library. A blank name uses "<source> draw". */
+export const saveDraw = (
+  campaignId: string,
+  name: string,
+  folderId: string | null,
+  sourceName: string,
+  seed: number,
+  text: string,
+  resultJson: string,
+) => invoke<Item>("save_draw", { campaignId, name, folderId, sourceName, seed, text, resultJson });
+export const getSavedDraw = (itemId: string) => invoke<SavedDraw>("get_saved_draw", { itemId });
+export const setSavedDrawNotes = (itemId: string, notes: string) =>
+  invoke<void>("set_saved_draw_notes", { itemId, notes });
+
+/** Every set, deck and pool in the campaign: what can be drawn from. */
+export const listCollections = (campaignId: string) =>
+  invoke<Item[]>("list_collections", { campaignId });

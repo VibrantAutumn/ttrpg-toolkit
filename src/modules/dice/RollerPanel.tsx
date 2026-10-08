@@ -1,58 +1,19 @@
 import { useState } from "react";
-import { saveRoll } from "../../api/dice";
-import { ConfirmButton } from "../../components/ConfirmButton";
+import { RollLogList } from "../../components/results/RollLogList";
 import { describeParseError, QUICK_ROLLS } from "../../lib/dice/formula";
-import { termTexts } from "../../lib/results/format";
-import type { RollLogEntry } from "../../lib/results/rollLog";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
-import { bumpDataVersion } from "../../state/dataVersion";
-import { useNavigation } from "../../state/Navigation";
-import { rollLog, useRollLog } from "../../state/rollLog";
-import { copyText } from "./copyText";
+import type { ResultKind } from "../../lib/results/rollLog";
+import { rollLog } from "../../state/rollLog";
 import { FormulaList } from "./FormulaList";
 
-/** The roller: a formula box, and the roll log below it. */
+/** The roller: a formula box, quick rolls, your formulas, and the roll log. */
 export function RollerPanel() {
-  const entries = useRollLog();
-  const { campaign } = useCurrentCampaign();
-  const { openItem } = useNavigation();
   const [formula, setFormula] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [show, setShow] = useState<ResultKind | "all">("all");
 
   function roll() {
-    setNote(null);
     const outcome = rollLog.roll(formula);
-    if (outcome.ok) {
-      setError(null);
-    } else {
-      setError(describeParseError(outcome.error));
-    }
-  }
-
-  async function copy(entry: RollLogEntry) {
-    setNote((await copyText(entry.text)) ? "Copied." : "Couldn't copy; select the text instead.");
-  }
-
-  async function save(entry: RollLogEntry) {
-    if (!campaign) return;
-    try {
-      const item = await saveRoll(
-        campaign.id,
-        entry.label ?? "",
-        null,
-        entry.notation,
-        entry.seed,
-        entry.text,
-        JSON.stringify(entry.result),
-      );
-      rollLog.markSaved(entry.id, item.id);
-      bumpDataVersion();
-      setError(null);
-      setNote("Saved to the Dice library.");
-    } catch (e) {
-      setError(String(e));
-    }
+    setError(outcome.ok ? null : describeParseError(outcome.error));
   }
 
   return (
@@ -82,7 +43,6 @@ export function RollerPanel() {
             type="button"
             onClick={() => {
               setError(null);
-              setNote(null);
               rollLog.roll(q.notation);
             }}
           >
@@ -91,59 +51,26 @@ export function RollerPanel() {
         ))}
       </div>
       {error && <p className="error" role="alert">{error}</p>}
-      {note && <p className="meta" role="status">{note}</p>}
 
       <FormulaList />
 
-      <h2>Roll log</h2>
-      {entries.length === 0 ? (
-        <p className="empty">No rolls yet. The log is cleared when the app restarts; save a roll to keep it.</p>
-      ) : (
-        <>
-          <ul className="list">
-            {entries.map((entry) => {
-              const diceTerms = entry.result.terms.filter((t) => t.kind === "dice").length;
-              const texts = termTexts(entry.result);
-              return (
-                <li key={entry.id} className="roll-entry">
-                  {entry.label && <strong>{entry.label}</strong>}
-                  <div className="roll-text">{entry.text}</div>
-                  {diceTerms > 1 && (
-                    <div className="row wrap">
-                      <small className="meta">Keep when rerolling:</small>
-                      {entry.result.terms.map((term, i) =>
-                        term.kind === "dice" ? (
-                          <button
-                            key={i}
-                            aria-pressed={entry.locked.includes(i)}
-                            className={entry.locked.includes(i) ? "active" : undefined}
-                            onClick={() => rollLog.toggleLock(entry.id, i)}
-                          >
-                            {entry.locked.includes(i) ? "🔒" : "🔓"} {texts[i]}
-                          </button>
-                        ) : null,
-                      )}
-                    </div>
-                  )}
-                  <div className="row wrap">
-                    <button onClick={() => rollLog.reroll(entry.id)}>Reroll</button>
-                    <button onClick={() => copy(entry)}>Copy</button>
-                    {entry.savedItemId ? (
-                      <button onClick={() => openItem(entry.savedItemId!)}>Saved ✓ Open</button>
-                    ) : (
-                      <button onClick={() => save(entry)} disabled={!campaign}>
-                        Save
-                      </button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          <ConfirmButton label="Clear log" confirmLabel="Tap again to clear" onConfirm={() => rollLog.clear()} />
-        </>
-      )}
-      {!campaign && <p className="meta">Choose a campaign to save rolls.</p>}
+      <div className="row wrap">
+        <h2 className="grow">Roll log</h2>
+        <select
+          value={show}
+          onChange={(e) => setShow(e.currentTarget.value as ResultKind | "all")}
+          aria-label="Show which results"
+        >
+          <option value="all">All results</option>
+          <option value="dice">Dice</option>
+          <option value="draw">Card draws</option>
+        </select>
+      </div>
+      <RollLogList
+        kind={show}
+        showClear
+        emptyText="Nothing here yet. The log is cleared when the app restarts; save a result to keep it."
+      />
     </div>
   );
 }

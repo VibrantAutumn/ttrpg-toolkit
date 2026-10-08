@@ -1,38 +1,65 @@
+import { drawCards, formatDrawResult, type DrawCard, type DrawnCard, type DrawOptions } from "../cards/draw";
 import { parseDice, type ParseError } from "../dice/parse";
 import { createRng, newSeed } from "../dice/rng";
 import { rerollDice, rollDice, type DiceResult } from "../dice/roll";
 import { formatDiceResult } from "./format";
 
-/** The kinds of result the log can hold. Draws, tables and generators join later. */
-export type ResultKind = "dice";
+/** The kinds of result the log can hold. Tables and generators join later. */
+export type ResultKind = "dice" | "draw";
 
-/** One line in the roll log. Entries are never edited in place; changes make a new object. */
-export interface RollLogEntry {
+/** What every kind of log entry has. */
+interface EntryBase {
   id: string;
-  kind: ResultKind;
   createdAt: number;
-  /** The seed of the random source that produced this roll. */
+  /** The seed of the random source that produced this result. */
   seed: number;
-  notation: string;
-  /** What the roll is called (a formula's name), or null for a plain roll. */
+  /** What the result is called (a formula's name), or null for a plain one. */
   label: string | null;
   /** The readable one-line form (also what "copy" and "save" use). */
   text: string;
-  result: DiceResult;
-  /** Positions of the terms that stay as they are when rerolling. */
-  locked: number[];
   /** The library item this was saved as, once saved. */
   savedItemId: string | null;
 }
 
-export type RollOutcome = { ok: true; entry: RollLogEntry } | { ok: false; error: ParseError };
+export interface DiceLogEntry extends EntryBase {
+  kind: "dice";
+  notation: string;
+  result: DiceResult;
+  /** Positions of the terms that stay as they are when rerolling. */
+  locked: number[];
+}
+
+export interface DrawLogEntry extends EntryBase {
+  kind: "draw";
+  /** The set, deck or pool that was drawn from (it may be deleted later). */
+  sourceId: string;
+  sourceName: string;
+  options: DrawOptions;
+  cards: DrawnCard[];
+}
+
+/** One line in the roll log. Entries are never edited in place; changes make a new object. */
+export type RollLogEntry = DiceLogEntry | DrawLogEntry;
+
+export type RollOutcome = { ok: true; entry: DiceLogEntry } | { ok: false; error: ParseError };
+export type DrawLogOutcome = { ok: true; entry: DrawLogEntry } | { ok: false; message: string };
 
 export interface RollLog {
   /** Newest first. The same array is returned until the log changes. */
+  entries(kind: "dice"): readonly DiceLogEntry[];
+  entries(kind: "draw"): readonly DrawLogEntry[];
   entries(kind?: ResultKind | "all"): readonly RollLogEntry[];
   roll(notation: string, seed?: number, label?: string): RollOutcome;
-  /** Rolls an entry again (keeping its locked terms) as a new entry; null if unknown. */
-  reroll(id: string, seed?: number): RollLogEntry | null;
+  /** Draws from `candidates` (a set, deck or pool's distinct cards) and logs the result. */
+  drawFrom(
+    source: { id: string; name: string },
+    candidates: readonly DrawCard[],
+    options: DrawOptions,
+    seed?: number,
+  ): DrawLogOutcome;
+  /** Rolls a dice entry again (keeping its locked terms) as a new entry; null if unknown or not dice. */
+  reroll(id: string, seed?: number): DiceLogEntry | null;
+  /** Dice only: keeps or releases one term of a result when rerolling. */
   toggleLock(id: string, termIndex: number): void;
   markSaved(id: string, itemId: string): void;
   clear(): void;
@@ -49,7 +76,7 @@ const DEFAULT_CAPACITY = 200;
 
 /**
  * The in-memory roll log. It is deliberately not saved anywhere: it is cleared
- * when the app restarts, and a roll worth keeping is saved as a library item.
+ * when the app restarts, and a result worth keeping is saved as a library item.
  */
 export function createRollLog(options: RollLogOptions = {}): RollLog {
   const capacity = options.capacity ?? DEFAULT_CAPACITY;
@@ -71,16 +98,19 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
   }
 
   function replace(id: string, change: (e: RollLogEntry) => RollLogEntry): void {
-    if (!list.some((e) => e.id === id)) return;
-    set(list.map((e) => (e.id === id ? change(e) : e)));
+    const found = list.find((e) => e.id === id);
+    if (!found) return;
+    const changed = change(found);
+    if (changed === found) return; // nothing to do: keep the same list and tell nobody
+    set(list.map((e) => (e.id === id ? changed : e)));
   }
 
-  function makeEntry(
+  function makeDiceEntry(
     result: DiceResult,
     seed: number,
     locked: number[],
     label: string | null,
-  ): RollLogEntry {
+  ): DiceLogEntry {
     return {
       id: newId(),
       kind: "dice",
@@ -95,36 +125,60 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
     };
   }
 
+  const entries = (kind: ResultKind | "all" = "all"): readonly RollLogEntry[] => {
+    if (kind === "all") return list;
+    if (!filtered || filtered.source !== list || filtered.kind !== kind) {
+      filtered = { source: list, kind, out: list.filter((e) => e.kind === kind) };
+    }
+    return filtered.out;
+  };
+
   return {
-    entries(kind = "all") {
-      if (kind === "all") return list;
-      if (!filtered || filtered.source !== list || filtered.kind !== kind) {
-        filtered = { source: list, kind, out: list.filter((e) => e.kind === kind) };
-      }
-      return filtered.out;
-    },
+    // The overloads promise narrower lists for "dice" and "draw"; the filter delivers them.
+    entries: entries as RollLog["entries"],
 
     roll(notation, seed = newSeed(), label) {
       const parsed = parseDice(notation);
       if (!parsed.ok) return parsed;
-      const entry = makeEntry(rollDice(parsed.expression, createRng(seed)), seed, [], label ?? null);
+      const entry = makeDiceEntry(rollDice(parsed.expression, createRng(seed)), seed, [], label ?? null);
+      push(entry);
+      return { ok: true, entry };
+    },
+
+    drawFrom(source, candidates, drawOptions, seed = newSeed()) {
+      const drawn = drawCards(candidates, drawOptions, createRng(seed));
+      if (!drawn.ok) return drawn;
+      const entry: DrawLogEntry = {
+        id: newId(),
+        kind: "draw",
+        createdAt: now(),
+        seed,
+        label: null,
+        text: formatDrawResult(source.name, drawn.cards),
+        savedItemId: null,
+        sourceId: source.id,
+        sourceName: source.name,
+        options: { ...drawOptions },
+        cards: drawn.cards,
+      };
       push(entry);
       return { ok: true, entry };
     },
 
     reroll(id, seed = newSeed()) {
       const old = list.find((e) => e.id === id);
-      if (!old) return null;
+      if (!old || old.kind !== "dice") return null;
       const parsed = parseDice(old.notation);
       if (!parsed.ok) return null; // can't happen: the notation parsed when it was rolled
       const result = rerollDice(parsed.expression, old.result, new Set(old.locked), createRng(seed));
-      const entry = makeEntry(result, seed, [...old.locked], old.label);
+      const entry = makeDiceEntry(result, seed, [...old.locked], old.label);
       push(entry);
       return entry;
     },
 
     toggleLock(id, termIndex) {
       replace(id, (e) => {
+        if (e.kind !== "dice") return e;
         if (!Number.isInteger(termIndex) || termIndex < 0 || termIndex >= e.result.terms.length) return e;
         const locked = e.locked.includes(termIndex)
           ? e.locked.filter((i) => i !== termIndex)

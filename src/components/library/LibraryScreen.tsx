@@ -78,7 +78,9 @@ export function LibraryScreen({
   const [searchResults, setSearchResults] = useState<Item[] | null>(null);
   const [newFolder, setNewFolder] = useState("");
   const [newItem, setNewItem] = useState("");
-  const [newItemType, setNewItemType] = useState(itemTypes[0]?.id ?? "");
+  // Types made elsewhere (saved draws...) are listed and shown but not offered in the "New item" form.
+  const creatableTypes = itemTypes.filter((t) => t.creatable !== false);
+  const [newItemType, setNewItemType] = useState(creatableTypes[0]?.id ?? "");
 
   const reload = useCallback(async () => {
     if (!campaignId) return;
@@ -326,7 +328,7 @@ export function LibraryScreen({
   }
 
   const searching = searchResults !== null;
-  const typeLabel = itemTypes.find((t) => t.id === newItemType)?.label ?? "item";
+  const typeLabel = creatableTypes.find((t) => t.id === newItemType)?.label ?? "item";
 
   return (
     <section>
@@ -418,13 +420,13 @@ export function LibraryScreen({
               placeholder={`New ${typeLabel.toLowerCase()}...`}
               aria-label="New item name"
             />
-            {itemTypes.length > 1 && (
+            {creatableTypes.length > 1 && (
               <select
                 aria-label="Item type"
                 value={newItemType}
                 onChange={(e) => setNewItemType(e.currentTarget.value)}
               >
-                {itemTypes.map((t) => (
+                {creatableTypes.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.label}
                   </option>

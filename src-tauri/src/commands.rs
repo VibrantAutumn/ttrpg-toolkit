@@ -13,6 +13,7 @@ use crate::db::folders::{self, Folder};
 use crate::db::items::{self, Item};
 use crate::db::formulas::{self, Formula, FormulaEntry};
 use crate::db::links;
+use crate::db::saved_draws::{self, NewSavedDraw, SavedDraw};
 use crate::db::saved_rolls::{self, NewSavedRoll, SavedRoll};
 use crate::db::tags::{self, Tag, TagLink};
 use crate::db::trash::{self, Trash};
@@ -237,6 +238,51 @@ pub fn resolve_collection_cards(db: Db, collection_id: String) -> Result<Vec<Ite
 #[tauri::command]
 pub fn list_collection_candidates(db: Db, collection_id: String) -> Result<Vec<Item>, String> {
     with_conn(&db, |c| collections::candidates(c, &collection_id))
+}
+
+// ---- Saved card draws ----
+
+/// Saves a finished draw as a new item in the Cards library.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn save_draw(
+    db: Db,
+    campaign_id: String,
+    name: String,
+    folder_id: Option<String>,
+    source_name: String,
+    seed: i64,
+    text: String,
+    result_json: String,
+) -> Result<Item, String> {
+    with_conn(&db, |c| {
+        let new = NewSavedDraw {
+            campaign_id: &campaign_id,
+            name: &name,
+            folder_id: folder_id.as_deref(),
+            source_name: &source_name,
+            seed,
+            text: &text,
+            result_json: &result_json,
+        };
+        saved_draws::create(c, new, db::now_ms()).map(|(item, _)| item)
+    })
+}
+
+#[tauri::command]
+pub fn get_saved_draw(db: Db, item_id: String) -> Result<SavedDraw, String> {
+    with_conn(&db, |c| saved_draws::get(c, &item_id))
+}
+
+#[tauri::command]
+pub fn set_saved_draw_notes(db: Db, item_id: String, notes: String) -> Result<(), String> {
+    with_conn(&db, |c| saved_draws::set_notes(c, &item_id, &notes, db::now_ms()))
+}
+
+/// Every set, deck and pool in the campaign (what can be drawn from).
+#[tauri::command]
+pub fn list_collections(db: Db, campaign_id: String) -> Result<Vec<Item>, String> {
+    with_conn(&db, |c| collections::list_all(c, &campaign_id))
 }
 
 // ---- Content packs ----

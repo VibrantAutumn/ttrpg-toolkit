@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../dice/rng";
 import { rollNotation } from "../dice/roll";
+import { DEFAULT_DRAW_OPTIONS, drawCards, type DrawCard } from "../cards/draw";
 import { createRollLog } from "./rollLog";
 
 function makeLog(capacity?: number) {
@@ -18,7 +19,7 @@ describe("createRollLog", () => {
     const log = makeLog();
     log.roll("1d6", 1);
     log.roll("1d8", 2);
-    const entries = log.entries();
+    const entries = log.entries("dice");
     expect(entries.map((e) => e.notation)).toEqual(["1d8", "1d6"]);
     expect(entries.map((e) => e.id)).toEqual(["id2", "id1"]);
     expect(entries[0].createdAt).toBeGreaterThan(entries[1].createdAt);
@@ -117,9 +118,9 @@ describe("createRollLog", () => {
       const r = log.roll("1d20+1d6", 3);
       if (!r.ok) throw new Error("should parse");
       log.toggleLock(r.entry.id, 0);
-      expect(log.entries()[0].locked).toEqual([0]);
+      expect(log.entries("dice")[0].locked).toEqual([0]);
       log.toggleLock(r.entry.id, 0);
-      expect(log.entries()[0].locked).toEqual([]);
+      expect(log.entries("dice")[0].locked).toEqual([]);
     });
 
     it("ignores locks on terms that do not exist, and unknown entries", () => {
@@ -128,7 +129,7 @@ describe("createRollLog", () => {
       if (!r.ok) throw new Error("should parse");
       log.toggleLock(r.entry.id, 5);
       log.toggleLock("nope", 0);
-      expect(log.entries()[0].locked).toEqual([]);
+      expect(log.entries("dice")[0].locked).toEqual([]);
     });
 
     it("rerolling adds a new entry on top, keeping locked terms and their locks", () => {
@@ -172,5 +173,83 @@ describe("createRollLog", () => {
       log.markSaved("nope", "x");
       expect(log.entries()).toEqual([]);
     });
+  });
+});
+
+describe("createRollLog: draws", () => {
+  const cards: DrawCard[] = ["A", "B", "C", "D", "E"].map((name) => ({ id: `id-${name}`, name }));
+  const source = { id: "deck-1", name: "Tarot" };
+  const options = { ...DEFAULT_DRAW_OPTIONS, count: 2 };
+
+  it("adds a draw entry with its source, options, cards, seed and readable text", () => {
+    const log = makeLog();
+    const r = log.drawFrom(source, cards, options, 42);
+    if (!r.ok) throw new Error(r.message);
+    expect(r.entry).toMatchObject({
+      kind: "draw",
+      seed: 42,
+      sourceId: "deck-1",
+      sourceName: "Tarot",
+      options,
+      label: null,
+      savedItemId: null,
+    });
+    expect(r.entry.cards).toHaveLength(2);
+    expect(r.entry.text).toMatch(/^Tarot → .+, .+$/);
+    expect(log.entries("draw")).toEqual([r.entry]);
+  });
+
+  it("is exactly the draw its seed describes", () => {
+    const r = makeLog().drawFrom(source, cards, options, 7);
+    const direct = drawCards(cards, options, createRng(7));
+    if (!r.ok || !direct.ok) throw new Error("should draw");
+    expect(r.entry.cards).toEqual(direct.cards);
+  });
+
+  it("reports a problem and adds nothing when the draw can't happen", () => {
+    const log = makeLog();
+    const r = log.drawFrom(source, [], options, 1);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toMatch(/no cards/i);
+    expect(log.drawFrom(source, cards, { ...options, count: 6 }, 1).ok).toBe(false);
+    expect(log.entries()).toEqual([]);
+  });
+
+  it("shares the log with dice: one newest-first list, filterable by kind", () => {
+    const log = makeLog();
+    log.roll("1d6", 1);
+    log.drawFrom(source, cards, options, 2);
+    log.roll("1d8", 3);
+    expect(log.entries().map((e) => e.kind)).toEqual(["dice", "draw", "dice"]);
+    expect(log.entries("dice").map((e) => e.kind)).toEqual(["dice", "dice"]);
+    expect(log.entries("draw").map((e) => e.kind)).toEqual(["draw"]);
+    expect(log.entries("draw")).toBe(log.entries("draw")); // stable for React
+  });
+
+  it("counts draws toward the capacity", () => {
+    const log = makeLog(3);
+    log.roll("1d6", 1);
+    for (let i = 0; i < 3; i++) log.drawFrom(source, cards, options, i);
+    expect(log.entries().map((e) => e.kind)).toEqual(["draw", "draw", "draw"]);
+  });
+
+  it("can be marked saved, but cannot be locked or rerolled like dice", () => {
+    const log = makeLog();
+    const r = log.drawFrom(source, cards, options, 5);
+    if (!r.ok) throw new Error(r.message);
+    log.markSaved(r.entry.id, "item-9");
+    expect(log.entries("draw")[0].savedItemId).toBe("item-9");
+    const before = log.entries();
+    log.toggleLock(r.entry.id, 0);
+    expect(log.entries()).toBe(before); // nothing changed, nobody notified
+    expect(log.reroll(r.entry.id, 1)).toBeNull();
+  });
+
+  it("tells subscribers about a new draw", () => {
+    const log = makeLog();
+    let calls = 0;
+    log.subscribe(() => calls++);
+    log.drawFrom(source, cards, options, 1);
+    expect(calls).toBe(1);
   });
 });

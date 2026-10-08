@@ -22,6 +22,8 @@ export interface ItemTypeDefinition {
   label: string;
   icon: string;
   toolId: string;
+  /** False for types made elsewhere (e.g. saved draws): the library's "New item" form leaves them out. */
+  creatable?: boolean;
   /** The editor shown on the item's page, if this type has content to edit. */
   editor?: ComponentType<{ itemId: string }>;
 }

@@ -187,6 +187,23 @@ fn collect_cards(
     Ok(())
 }
 
+/// Every live set, deck and pool in a campaign's cards library, for choosing
+/// something to draw from. Pools first, then decks, then sets; by name within each.
+pub fn list_all(conn: &Connection, campaign_id: &str) -> Result<Vec<Item>, DbError> {
+    query_items(
+        conn,
+        &format!(
+            "SELECT {} FROM items i
+             WHERE i.campaign_id = ?1 AND i.library = ?2 AND i.deleted_at IS NULL
+               AND i.item_type IN ('set', 'deck', 'pool')
+             ORDER BY CASE i.item_type WHEN 'pool' THEN 0 WHEN 'deck' THEN 1 ELSE 2 END,
+                      i.name COLLATE NOCASE, i.created_at",
+            items::qualified_columns("i")
+        ),
+        params![campaign_id, LIBRARY],
+    )
+}
+
 /// What could still be added to a collection: live items of an allowed kind,
 /// from the same campaign, not already inside. Types in ladder order, then name.
 pub fn candidates(conn: &Connection, collection_id: &str) -> Result<Vec<Item>, DbError> {
@@ -450,6 +467,25 @@ mod tests {
         // Removing a member makes it a candidate again.
         remove_member(&conn, &pool.id, &inside.id, 5).unwrap();
         assert!(names(&candidates(&conn, &pool.id).unwrap()).contains(&"Inside"));
+    }
+
+    #[test]
+    fn list_all_gives_every_live_set_deck_and_pool_of_the_campaign() {
+        let (conn, camp) = setup();
+        let other = campaigns::create(&conn, "Other", 2).unwrap();
+        make(&conn, &camp, SET_TYPE, "b set");
+        make(&conn, &camp, DECK_TYPE, "Zed deck");
+        make(&conn, &camp, POOL_TYPE, "A pool");
+        make(&conn, &camp, DECK_TYPE, "alpha deck");
+        make(&conn, &camp, CARD_TYPE, "A card"); // not a collection
+        items::create(&conn, &camp, "worldbuilding", SET_TYPE, "Impostor", None, 1).unwrap();
+        make(&conn, &other.id, DECK_TYPE, "Foreign deck");
+        let gone = make(&conn, &camp, POOL_TYPE, "Trashed pool");
+        items::soft_delete(&conn, &gone.id, 3).unwrap();
+        assert_eq!(
+            names(&list_all(&conn, &camp).unwrap()),
+            ["A pool", "alpha deck", "Zed deck", "b set"]
+        );
     }
 
     #[test]

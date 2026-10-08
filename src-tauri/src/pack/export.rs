@@ -27,6 +27,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     let card_details = read_card_details(conn, campaign_id)?;
     let collection_members = read_collection_members(conn, campaign_id)?;
     let card_images = read_card_images(conn, campaign_id)?;
+    let saved_draws = read_saved_draws(conn, campaign_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -48,6 +49,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
             card_details: card_details.len() as u32,
             collection_members: collection_members.len() as u32,
             card_images: card_images.len() as u32,
+            saved_draws: saved_draws.len() as u32,
         },
     };
 
@@ -63,6 +65,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     put(&mut zip, options, SAVED_ROLLS_FILE, &saved_rolls, false)?;
     put(&mut zip, options, FORMULAS_FILE, &formulas, false)?;
     put(&mut zip, options, CARD_DETAILS_FILE, &card_details, false)?;
+    put(&mut zip, options, SAVED_DRAWS_FILE, &saved_draws, false)?;
     put(&mut zip, options, COLLECTION_MEMBERS_FILE, &collection_members, false)?;
     let image_records: Vec<CardImageRecord> = card_images.iter().map(|(r, _, _)| r.clone()).collect();
     put(&mut zip, options, CARD_IMAGES_FILE, &image_records, false)?;
@@ -330,6 +333,27 @@ fn read_card_images(
             updated_at: r.get(5)?,
         };
         Ok((record, r.get::<_, Vec<u8>>(2)?, r.get::<_, Vec<u8>>(3)?))
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_saved_draws(conn: &Connection, campaign_id: &str) -> Result<Vec<SavedDrawRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT s.item_id, s.source_name, s.seed, s.text, s.result_json, s.notes, s.created_at, s.updated_at
+         FROM saved_draws s JOIN items i ON i.id = s.item_id
+         WHERE i.campaign_id = ?1 ORDER BY s.created_at, s.item_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(SavedDrawRecord {
+            item_id: r.get(0)?,
+            source_name: r.get(1)?,
+            seed: r.get(2)?,
+            text: r.get(3)?,
+            result_json: r.get(4)?,
+            notes: r.get(5)?,
+            created_at: r.get(6)?,
+            updated_at: r.get(7)?,
+        })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
 }

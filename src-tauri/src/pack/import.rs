@@ -9,7 +9,7 @@
 use super::format::*;
 use super::PackError;
 use crate::db::campaigns::{self, Campaign};
-use crate::db::{cards, collections, documents, formulas, saved_rolls, settings};
+use crate::db::{cards, collections, documents, formulas, saved_draws, saved_rolls, settings};
 use rusqlite::{params, Connection, ErrorCode};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -51,6 +51,7 @@ pub struct ParsedPack {
     pub card_details: Vec<CardDetailRecord>,
     pub collection_members: Vec<CollectionMemberRecord>,
     pub card_images: Vec<ParsedCardImage>,
+    pub saved_draws: Vec<SavedDrawRecord>,
     /// Plain-language notes about anything that had to be fixed or skipped.
     pub warnings: Vec<String>,
 }
@@ -70,6 +71,7 @@ impl ParsedPack {
             card_details: self.card_details.len() as u32,
             collection_members: self.collection_members.len() as u32,
             card_images: self.card_images.len() as u32,
+            saved_draws: self.saved_draws.len() as u32,
         }
     }
 }
@@ -158,6 +160,7 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         card_details: read_list(&mut archive, CARD_DETAILS_FILE, limits, &mut total)?,
         collection_members: read_list(&mut archive, COLLECTION_MEMBERS_FILE, limits, &mut total)?,
         card_images,
+        saved_draws: read_list(&mut archive, SAVED_DRAWS_FILE, limits, &mut total)?,
         warnings: Vec::new(),
     };
     sanitize(&mut pack);
@@ -519,6 +522,15 @@ fn sanitize(pack: &mut ParsedPack) {
     });
     note(before - pack.collection_members.len(), "set/deck/pool entries referred to something missing or not allowed there and were skipped.");
 
+    let before = pack.saved_draws.len();
+    let mut seen = HashSet::new();
+    pack.saved_draws.retain(|d| {
+        item_type.get(d.item_id.as_str()) == Some(&saved_draws::DRAW_TYPE)
+            && saved_draws::validate(&d.source_name, &d.text, &d.result_json, &d.notes).is_ok()
+            && seen.insert(d.item_id.clone())
+    });
+    note(before - pack.saved_draws.len(), "saved draw(s) belonged to something missing or were unreadable and were skipped.");
+
     pack.warnings = warnings;
 }
 
@@ -661,6 +673,18 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
             params![
                 item_ids[&m.collection_id], item_ids[&m.member_id], m.position,
                 m.created_at, m.updated_at, m.deleted_at
+            ],
+        )
+        .map_err(db_error)?;
+    }
+
+    for d in &pack.saved_draws {
+        tx.execute(
+            "INSERT INTO saved_draws (item_id, source_name, seed, text, result_json, notes, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                item_ids[&d.item_id], d.source_name, d.seed, d.text, d.result_json, d.notes,
+                d.created_at, d.updated_at
             ],
         )
         .map_err(db_error)?;

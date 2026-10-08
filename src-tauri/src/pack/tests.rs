@@ -5,6 +5,7 @@ use super::PackError;
 use crate::db::cards::{self, test_images};
 use crate::db::collections;
 use crate::db::formulas;
+use crate::db::saved_draws::{self, NewSavedDraw};
 use crate::db::saved_rolls::{self, NewSavedRoll};
 use crate::db::{campaigns, documents, folders, items, links, open_in_memory, search, settings, tags};
 use rusqlite::types::Value;
@@ -99,6 +100,18 @@ fn populate(conn: &Connection) -> String {
     collections::add_member(conn, &omens.id, &fool.id, 3670).unwrap();
     items::soft_delete(conn, &lost.id, 3700).unwrap();
 
+    let reading = NewSavedDraw {
+        campaign_id: c,
+        name: "Evening reading",
+        folder_id: None,
+        source_name: "Omens",
+        seed: 4_000_000_000,
+        text: "Omens → The Fool, Two of Cups (reversed)",
+        result_json: r#"{"sourceId":"x","cards":[{"id":"y","name":"The Fool","reversed":false}]}"#,
+    };
+    let (reading, _) = saved_draws::create(conn, reading, 3800).unwrap();
+    saved_draws::set_notes(conn, &reading.id, "A fresh start", 3810).unwrap();
+
     camp.id
 }
 
@@ -135,6 +148,7 @@ struct Snapshot {
     card_details: Vec<String>,
     card_images: Vec<String>,
     collection_members: Vec<String>,
+    saved_draws: Vec<String>,
 }
 
 fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
@@ -175,6 +189,9 @@ fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
             "SELECT h.name, m.name, k.position, k.created_at, k.updated_at, k.deleted_at
              FROM collection_members k JOIN items h ON h.id = k.collection_id JOIN items m ON m.id = k.member_id
              WHERE h.campaign_id = ?1", campaign_id),
+        saved_draws: lines(conn,
+            "SELECT i.name, i.library, s.source_name, s.seed, s.text, s.result_json, s.notes, s.created_at, s.updated_at, i.deleted_at
+             FROM saved_draws s JOIN items i ON i.id = s.item_id WHERE i.campaign_id = ?1", campaign_id),
     }
 }
 
@@ -225,11 +242,11 @@ fn the_manifest_describes_the_pack() {
     assert_eq!(
         m.counts,
         // 4 documents have text: Strahd, Ireena, Barovia and Old Note ("Scrap" and the map have none).
-        // The saved rolls, formulas and cards are items too (16 items: 5 documents, a map, 2 rolls,
-        // 2 formulas, 3 cards, a set, a deck and a pool). 2 cards have details, 1 a picture, 7 membership rows.
+        // The saved rolls, formulas and cards are items too (17 items: 5 documents, a map, 2 rolls,
+        // 2 formulas, 3 cards, a set, a deck, a pool and a saved draw). 2 cards have details, 1 a picture, 7 membership rows.
         Counts {
-            folders: 3, items: 16, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 2, formulas: 2,
-            card_details: 2, collection_members: 7, card_images: 1,
+            folders: 3, items: 17, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 2, formulas: 2,
+            card_details: 2, collection_members: 7, card_images: 1, saved_draws: 1,
         }
     );
     assert_eq!(pack.counts(), m.counts);
@@ -259,7 +276,7 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
         )
         .unwrap();
     assert_eq!(shared, 0);
-    assert_eq!(count(&conn, "items"), 32);
+    assert_eq!(count(&conn, "items"), 34);
 }
 
 #[test]
@@ -307,7 +324,7 @@ fn imported_items_remember_where_they_came_from() {
             .map(|r| r.unwrap())
             .collect()
     };
-    assert_eq!(rows.len(), 16);
+    assert_eq!(rows.len(), 17);
     for (name, origin_pack, origin_item) in rows {
         assert_eq!(origin_pack.as_deref(), Some(pack_id.as_str()), "{name}");
         // The origin id is the item's id in the ORIGINAL campaign.
@@ -579,7 +596,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
     assert!(pack.warnings.iter().all(|w| w.chars().next().unwrap().is_ascii_digit()));
     assert_eq!(
         pack.counts(),
-        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0 }
+        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0 }
     );
 
     let conn = open_in_memory();
@@ -700,7 +717,7 @@ fn the_committed_version_1_pack_still_imports() {
     assert_eq!(result.campaign.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0 }
+        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0 }
     );
     let camp = result.campaign.id;
 
@@ -1045,4 +1062,68 @@ fn the_committed_version_1_pack_has_no_cards_and_still_imports() {
     let pack = read_pack(bytes).unwrap();
     assert!(pack.card_details.is_empty() && pack.collection_members.is_empty() && pack.card_images.is_empty());
     assert!(pack.warnings.is_empty());
+}
+
+#[test]
+fn saved_draws_keep_their_notes_and_trash_state_through_a_round_trip() {
+    let conn = open_in_memory();
+    let original = populate(&conn);
+    let bytes = export_campaign(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+
+    let reading = items::list(&conn, &imported, "cards", None)
+        .unwrap()
+        .into_iter()
+        .find(|i| i.item_type == "draw")
+        .unwrap();
+    assert_eq!(reading.name, "Evening reading");
+    let draw = saved_draws::get(&conn, &reading.id).unwrap();
+    assert_eq!((draw.source_name.as_str(), draw.notes.as_str()), ("Omens", "A fresh start"));
+    assert_eq!(draw.seed, 4_000_000_000);
+    // Searchable by its notes and by the card names after import.
+    assert_eq!(search::search(&conn, &imported, "fresh", Some("cards"), 10).unwrap().len(), 1);
+    assert_eq!(search::search(&conn, &imported, "reversed", Some("cards"), 10).unwrap().len(), 1);
+}
+
+#[test]
+fn unreadable_or_orphaned_saved_draws_are_skipped_with_a_warning() {
+    let item = |id: &str, kind: &str| json!({
+        "id": id, "library": "cards", "itemType": kind, "name": id, "icon": null,
+        "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null
+    });
+    let record = |id: &str, result: &str| json!({
+        "itemId": id, "sourceName": "Tarot", "seed": 1, "text": "Tarot → The Fool", "resultJson": result,
+        "notes": "", "createdAt": 1, "updatedAt": 1
+    });
+    let good = r#"{"cards":[]}"#;
+    let bytes = pack_with(&[
+        (ITEMS_FILE, json!([item("d1", "draw"), item("d2", "draw"), item("c1", "card")])),
+        (SAVED_DRAWS_FILE, json!([
+            record("d1", good),
+            record("d2", "not json"),
+            record("c1", good),
+            record("ghost", good),
+            record("d1", good),
+        ])),
+    ]);
+    let pack = read_pack(&bytes).unwrap();
+    assert_eq!(pack.saved_draws.len(), 1);
+    assert_eq!(pack.warnings.len(), 1);
+    assert!(pack.warnings[0].starts_with("4 saved draw(s)"), "{:?}", pack.warnings);
+    let conn = open_in_memory();
+    import_parsed(&conn, &pack, 10).unwrap();
+    assert_eq!(count(&conn, "saved_draws"), 1);
+}
+
+#[test]
+fn a_failed_import_also_rolls_back_saved_draws() {
+    let source = open_in_memory();
+    let camp = populate(&source);
+    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let target = open_in_memory();
+    target.execute_batch("DROP TABLE saved_draws").unwrap();
+    assert!(import_pack(&target, &bytes, 6000).is_err());
+    for table in ["campaigns", "items", "card_details", "collection_members", "formulas"] {
+        assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
+    }
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getSavedRoll, type SavedRoll } from "../../api/dice";
 import { rollLog } from "../../state/rollLog";
-import { copyText } from "./copyText";
+import { copyText } from "../../lib/copyText";
 
 /** What a saved roll's page shows (its type's editor): the roll as it was, and a way to roll it again. */
 export function SavedRollView({ itemId }: { itemId: string }) {

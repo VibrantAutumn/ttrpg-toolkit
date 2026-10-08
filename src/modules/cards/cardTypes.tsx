@@ -2,6 +2,7 @@ import type { ItemTypeDefinition } from "../../registry/types";
 import { CardEditor } from "./CardEditor";
 import { CollectionEditor } from "./CollectionEditor";
 import { cardTypeIcon } from "./icons";
+import { SavedDrawView } from "./SavedDrawView";
 
 export const cardType: ItemTypeDefinition = {
   id: "card",
@@ -35,4 +36,14 @@ export const poolType: ItemTypeDefinition = {
   editor: ({ itemId }) => <CollectionEditor itemId={itemId} kind="pool" />,
 };
 
-export const cardItemTypes = [cardType, setType, deckType, poolType];
+/** A saved draw is made from the Draw panel or the roll log, never from the "New item" form. */
+export const drawType: ItemTypeDefinition = {
+  id: "draw",
+  label: "Saved draw",
+  icon: cardTypeIcon("draw"),
+  toolId: "cards",
+  creatable: false,
+  editor: SavedDrawView,
+};
+
+export const cardItemTypes = [cardType, setType, deckType, poolType, drawType];

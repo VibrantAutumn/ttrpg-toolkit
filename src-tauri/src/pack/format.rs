@@ -11,6 +11,7 @@
 //!   data/saved_rolls.json    (added later; older packs simply lack it)
 //!   data/formulas.json       (likewise)
 //!   data/card_details.json, data/collection_members.json, data/card_images.json (likewise)
+//!   data/saved_draws.json    (likewise)
 //!   assets/cards/<id>.<ext>, assets/cards/<id>.thumb.<ext>   card pictures (one file each)
 //!   assets/                  reserved for future use (images, ...)
 //!
@@ -38,6 +39,7 @@ pub const FORMULAS_FILE: &str = "data/formulas.json";
 pub const CARD_DETAILS_FILE: &str = "data/card_details.json";
 pub const COLLECTION_MEMBERS_FILE: &str = "data/collection_members.json";
 pub const CARD_IMAGES_FILE: &str = "data/card_images.json";
+pub const SAVED_DRAWS_FILE: &str = "data/saved_draws.json";
 /// Card picture files live under this folder inside the zip.
 pub const CARD_ASSET_DIR: &str = "assets/cards/";
 
@@ -76,6 +78,7 @@ pub struct Counts {
     pub card_details: u32,
     pub collection_members: u32,
     pub card_images: u32,
+    pub saved_draws: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,6 +201,19 @@ pub struct CardImageRecord {
     pub mime: String,
     pub image_file: String,
     pub thumb_file: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedDrawRecord {
+    pub item_id: String,
+    pub source_name: String,
+    pub seed: i64,
+    pub text: String,
+    pub result_json: String,
+    pub notes: String,
     pub created_at: i64,
     pub updated_at: i64,
 }

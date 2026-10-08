@@ -8,6 +8,7 @@ pub mod formulas;
 pub mod items;
 pub mod links;
 pub mod migrations;
+pub mod saved_draws;
 pub mod saved_rolls;
 pub mod search;
 pub mod settings;
