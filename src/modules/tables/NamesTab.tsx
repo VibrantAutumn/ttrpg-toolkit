@@ -1,43 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { listTags, type Tag } from "../../api/library";
+import { listNamePresets, type PresetEntry } from "../../api/namePresets";
 import { listTables, type TableSummary } from "../../api/tables";
 import { LogEntryView } from "../../components/results/LogEntryView";
 import { RollLogList } from "../../components/results/RollLogList";
 import { partsOf } from "../../lib/tables/nameGen";
 import type { Capitalisation, NameMode, PartKey, Separator } from "../../lib/tables/nameGen";
-import { loadLastSetup, saveLastSetup, SOURCE_LABELS, type NameSetup, type TagMatch } from "../../lib/tables/nameSetup";
+import {
+  loadLastSetup,
+  parseSetup,
+  saveLastSetup,
+  setupsEqual,
+  SOURCE_LABELS,
+  type NameSetup,
+  type TagMatch,
+} from "../../lib/tables/nameSetup";
 import { useCurrentCampaign } from "../../state/CurrentCampaign";
 import { useDataVersion } from "../../state/dataVersion";
 import { generateNameFromSetup } from "../../state/nameActions";
+import { deviceStorage } from "../../state/deviceStorage";
 import { useRollLog } from "../../state/rollLog";
-
-const MODE_LABELS: Record<NameMode, string> = {
-  full: "One part (a whole name)",
-  two: "Two parts",
-  three: "Three parts",
-};
-
-const SEPARATOR_LABELS: Record<Separator, string> = {
-  none: "Nothing (Aelwen)",
-  space: "A space (Anna Marie)",
-  hyphen: "A hyphen (Anna-Marie)",
-  apostrophe: "An apostrophe (Kel'drin)",
-};
-
-const CAPITALISATION_LABELS: Record<Capitalisation, string> = {
-  asTyped: "As typed in the tables",
-  firstLetter: "First letter of the name",
-  everyPart: "First letter of every part",
-};
-
-/** Works whether or not the browser lets us use its storage (a private window may not). */
-function storage(): Storage | undefined {
-  try {
-    return window.localStorage;
-  } catch {
-    return undefined;
-  }
-}
+import { CAPITALISATION_LABELS, MODE_LABELS, SEPARATOR_LABELS } from "./nameLabels";
+import { PresetBar } from "./PresetBar";
 
 const capitalise = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
@@ -53,23 +37,27 @@ export function NamesTab() {
   const log = useRollLog();
   const campaignId = campaign?.id ?? null;
 
-  const [setup, setSetup] = useState<NameSetup>(() => loadLastSetup(storage()));
+  const [setup, setSetup] = useState<NameSetup>(() => loadLastSetup(deviceStorage()));
   const [tables, setTables] = useState<TableSummary[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [presets, setPresets] = useState<PresetEntry[]>([]);
+  const [presetId, setPresetId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!campaignId) {
       setTables([]);
       setTags([]);
+      setPresets([]);
       return;
     }
     let active = true;
-    Promise.all([listTables(campaignId), listTags(campaignId)])
-      .then(([t, g]) => {
+    Promise.all([listTables(campaignId), listTags(campaignId), listNamePresets(campaignId)])
+      .then(([t, g, p]) => {
         if (!active) return;
         setTables(t);
         setTags(g);
+        setPresets(p);
       })
       .catch((e) => active && setError(String(e)));
     return () => {
@@ -82,12 +70,25 @@ export function NamesTab() {
   function change(patch: Partial<NameSetup>) {
     const next = { ...setup, ...patch };
     setSetup(next);
-    saveLastSetup(storage(), next);
+    saveLastSetup(deviceStorage(), next);
   }
+
+  /** A preset was chosen or just saved: its setup becomes the current one. */
+  function loadPreset(id: string, loaded: NameSetup) {
+    setPresetId(id);
+    setSetup(loaded);
+    saveLastSetup(deviceStorage(), loaded);
+  }
+
+  // The preset the setup came from, and whether the setup still matches it. Results are named after
+  // the preset only while they do, so a changed setup never gets a name it no longer fits.
+  const loadedPreset = presets.find((p) => p.itemId === presetId) ?? null;
+  const savedSetup = loadedPreset ? parseSetup(loadedPreset.setupJson) : null;
+  const matchesPreset = loadedPreset !== null && savedSetup !== null && setupsEqual(setup, savedSetup);
 
   async function generate() {
     if (!campaignId) return;
-    const outcome = await generateNameFromSetup(campaignId, setup);
+    const outcome = await generateNameFromSetup(campaignId, setup, matchesPreset ? loadedPreset.name : null);
     setError(outcome.ok ? null : outcome.message);
   }
 
@@ -113,6 +114,15 @@ export function NamesTab() {
       <p className="meta">
         Each part of a name comes from a table you choose. Pick the tables, say how to join them, and generate.
       </p>
+
+      <PresetBar
+        campaignId={campaignId}
+        setup={setup}
+        presets={presets}
+        loadedId={presetId}
+        onLoad={loadPreset}
+        onForget={() => setPresetId(null)}
+      />
 
       <label className="field">
         <span>A name has</span>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { LibraryScreen } from "../../components/library/LibraryScreen";
 import { NamesTab } from "./NamesTab";
 import { TableList } from "./TableList";
+import { namePresetType } from "./namePresetType";
 import { tableType } from "./tableType";
 
 /** The Tables tool: roll any table (with the log of table rolls), and the library of tables. */
@@ -29,7 +30,7 @@ export function TablesScreen() {
         <NamesTab />
       </div>
       <div hidden={tab !== "library"}>
-        <LibraryScreen library="tables" title="Tables library" itemTypes={[tableType]} />
+        <LibraryScreen library="tables" title="Tables library" itemTypes={[tableType, namePresetType]} />
       </div>
     </section>
   );

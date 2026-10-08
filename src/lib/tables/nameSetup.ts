@@ -88,6 +88,31 @@ export const DEFAULT_SETUP: NameSetup = {
   mergeDoubles: false,
 };
 
+/** The setup with everything that has no effect on the names left out, so two setups can be compared. */
+function normalise(setup: NameSetup) {
+  const sources: Partial<Record<PartKey, string>> = {};
+  for (const key of partsOf(setup.mode)) {
+    const id = setup.sources[key];
+    if (id) sources[key] = id;
+  }
+  const tagIds = [...new Set(setup.tagIds)].sort();
+  return {
+    mode: setup.mode,
+    sources,
+    tagIds,
+    tagMatch: tagIds.length > 1 ? setup.tagMatch : "all",
+    join1: setup.mode === "full" ? "none" : setup.join1,
+    join2: setup.mode === "three" ? setup.join2 : "none",
+    capitalisation: setup.capitalisation,
+    mergeDoubles: setup.mode === "full" ? false : setup.mergeDoubles,
+  };
+}
+
+/** Whether two setups would make the same names (used to tell if a loaded preset has been changed). */
+export function setupsEqual(a: NameSetup, b: NameSetup): boolean {
+  return JSON.stringify(normalise(a)) === JSON.stringify(normalise(b));
+}
+
 /** What each part is called when asking for its table. */
 export const SOURCE_LABELS: Record<PartKey, string> = {
   full: "whole name",

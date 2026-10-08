@@ -11,6 +11,7 @@ import {
   parseSetup,
   saveLastSetup,
   serializeSetup,
+  setupsEqual,
 } from "./nameSetup";
 import type { NameSetup, SourceTable, TagInfo } from "./nameSetup";
 
@@ -288,5 +289,56 @@ describe("remembering the last setup on this device", () => {
     expect(loadLastSetup(broken)).toEqual(DEFAULT_SETUP);
     expect(saveLastSetup(broken, setup)).toBe(false);
     expect(saveLastSetup(undefined, setup)).toBe(false);
+  });
+});
+
+describe("setupsEqual", () => {
+  const base: NameSetup = {
+    ...DEFAULT_SETUP,
+    mode: "three",
+    sources: { first: "a", middle: "b", last: "c" },
+    tagIds: ["elf", "noble"],
+    tagMatch: "any",
+    join1: "apostrophe",
+    join2: "hyphen",
+    mergeDoubles: true,
+  };
+
+  it("sees identical setups as equal", () => {
+    expect(setupsEqual(base, { ...base })).toBe(true);
+    expect(setupsEqual(DEFAULT_SETUP, DEFAULT_SETUP)).toBe(true);
+  });
+
+  it("notices a change to anything that affects the names", () => {
+    const changes: Partial<NameSetup>[] = [
+      { mode: "two" },
+      { sources: { first: "a", middle: "b", last: "other" } },
+      { sources: { first: "a", middle: "b" } },
+      { tagIds: ["elf"] },
+      { tagIds: [] },
+      { tagMatch: "all" },
+      { join1: "space" },
+      { join2: "none" },
+      { capitalisation: "everyPart" },
+      { mergeDoubles: false },
+    ];
+    for (const change of changes) expect(setupsEqual(base, { ...base, ...change }), JSON.stringify(change)).toBe(false);
+  });
+
+  it("ignores the order of the tags and repeats", () => {
+    expect(setupsEqual(base, { ...base, tagIds: ["noble", "elf", "elf"] })).toBe(true);
+  });
+
+  it("ignores settings the chosen mode doesn't use", () => {
+    // A table left over from a part the mode doesn't have, a second join in a two-part name, and so on.
+    const two: NameSetup = { ...base, mode: "two", sources: { first: "a", last: "c" } };
+    expect(setupsEqual(two, { ...two, sources: { first: "a", middle: "b", last: "c" }, join2: "space" })).toBe(true);
+    const full: NameSetup = { ...base, mode: "full", sources: { full: "x" } };
+    expect(setupsEqual(full, { ...full, join1: "space", join2: "hyphen", mergeDoubles: false, sources: { full: "x", first: "a" } })).toBe(true);
+    // "Any or all" only matters with two or more tags.
+    const one: NameSetup = { ...base, tagIds: ["elf"], tagMatch: "any" };
+    expect(setupsEqual(one, { ...one, tagMatch: "all" })).toBe(true);
+    // An empty choice is the same as none.
+    expect(setupsEqual({ ...two, sources: { first: "a", last: "c", middle: "" } }, two)).toBe(true);
   });
 });
