@@ -71,6 +71,7 @@ pub fn run() {
             commands::set_play_deck_state,
             commands::list_play_decks,
             commands::install_card_bundle,
+            commands::install_table_bundle,
             commands::list_installed_starters,
             commands::get_spread,
             commands::set_spread_positions,

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { BundleJson } from "../lib/cards/starters";
+import type { TableBundleJson } from "../lib/tables/starterTables";
 
 /** Mirrors the Rust `InstallResult`. */
 export interface InstallResult {
@@ -19,3 +20,19 @@ export const installCardBundle = (campaignId: string, bundle: BundleJson) =>
 /** The ids (like `starter:tarokka`) of the starter decks this campaign already has. */
 export const listInstalledStarters = (campaignId: string) =>
   invoke<string[]>("list_installed_starters", { campaignId });
+
+/** Mirrors the Rust `TableInstallResult`. */
+export interface TableInstallResult {
+  folderId: string;
+  tables: number;
+  entries: number;
+  presets: number;
+}
+
+/**
+ * Adds a set of starter tables (and the name setups that use them) to a campaign
+ * in one all-or-nothing step. Refuses if it was added before or a table with the
+ * same name as one of its tables already exists.
+ */
+export const installTableBundle = (campaignId: string, bundle: TableBundleJson) =>
+  invoke<TableInstallResult>("install_table_bundle", { campaignId, bundleJson: JSON.stringify(bundle) });

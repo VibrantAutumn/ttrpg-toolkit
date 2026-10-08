@@ -16,6 +16,7 @@ use crate::db::links;
 use crate::db::name_presets::{self, NamePreset, PresetEntry};
 use crate::db::spreads::{self, PositionInput, Spread, SpreadEntry};
 use crate::db::starters::{self, InstallResult};
+use crate::db::table_starters::{self, TableInstallResult};
 use crate::db::tables::{self, Entry, EntryInput, EntryRef, EntryTextUpdate, Pick, RollableTable, TableDetail, TableSummary};
 use crate::db::play_decks::{self, NewPlayDeck, PlayDeck, PlayDeckEntry};
 use crate::db::saved_draws::{self, NewSavedDraw, SavedDraw};
@@ -346,6 +347,19 @@ pub async fn install_card_bundle(
     let bundle: starters::Bundle = serde_json::from_str(&bundle_json)
         .map_err(|_| "The starter deck's data couldn't be read.".to_string())?;
     with_conn(&db, |c| starters::install(c, &campaign_id, &bundle, db::now_ms()))
+}
+
+/// Adds a starter set of tables (and name setups using them) to a campaign in one
+/// all-or-nothing step, sent as JSON text.
+#[tauri::command]
+pub async fn install_table_bundle(
+    db: Db<'_>,
+    campaign_id: String,
+    bundle_json: String,
+) -> Result<TableInstallResult, String> {
+    let bundle: table_starters::TableBundle = serde_json::from_str(&bundle_json)
+        .map_err(|_| "The starter's data couldn't be read.".to_string())?;
+    with_conn(&db, |c| table_starters::install(c, &campaign_id, &bundle, db::now_ms()))
 }
 
 /// Which starter decks this campaign already has (their ids, like `starter:tarokka`).
