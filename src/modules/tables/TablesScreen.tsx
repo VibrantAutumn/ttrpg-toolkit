@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { LibraryScreen } from "../../components/library/LibraryScreen";
 import { NamesTab } from "./NamesTab";
+import { StarterTables } from "./StarterTables";
 import { TableList } from "./TableList";
 import { namePresetType } from "./namePresetType";
 import { tableType } from "./tableType";
@@ -30,6 +31,7 @@ export function TablesScreen() {
         <NamesTab />
       </div>
       <div hidden={tab !== "library"}>
+        <StarterTables />
         <LibraryScreen library="tables" title="Tables library" itemTypes={[tableType, namePresetType]} />
       </div>
     </section>
