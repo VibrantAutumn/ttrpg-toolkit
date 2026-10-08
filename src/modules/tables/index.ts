@@ -1,4 +1,5 @@
 import type { ModuleDefinition } from "../../registry/types";
+import { QuickTableWidget } from "./QuickTableWidget";
 import { tableType } from "./tableType";
 import { TablesScreen } from "./TablesScreen";
 
@@ -15,6 +16,9 @@ export const tablesModule: ModuleDefinition = {
     },
   ],
   itemTypes: [tableType],
+  widgets: [
+    { id: "tables.quick-roll", label: "Quick table roll", icon: "📋", order: 25, component: QuickTableWidget },
+  ],
   commands: [
     {
       id: "tables.open",
