@@ -512,3 +512,19 @@ input.narrow {
 .play-deck .drawn-card {
   width: 104px;
 }
+
+/* Starter decks */
+.starter-decks {
+  margin: 0.75rem 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.starter-decks summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}

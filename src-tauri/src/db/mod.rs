@@ -13,6 +13,7 @@ pub mod saved_draws;
 pub mod saved_rolls;
 pub mod search;
 pub mod settings;
+pub mod starters;
 pub mod tags;
 pub mod trash;
 

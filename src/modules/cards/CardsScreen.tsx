@@ -2,6 +2,7 @@ import { useState } from "react";
 import { LibraryScreen } from "../../components/library/LibraryScreen";
 import { cardItemTypes } from "./cardTypes";
 import { DrawTab } from "./DrawTab";
+import { StarterDecks } from "./StarterDecks";
 
 /** The Cards tool: the library of cards, sets, decks, pools and saved draws, and a place to draw. */
 export function CardsScreen() {
@@ -19,6 +20,7 @@ export function CardsScreen() {
       </div>
       {/* Both stay mounted (just hidden) so the library keeps its folder and search. */}
       <div hidden={tab !== "library"}>
+        <StarterDecks />
         <LibraryScreen library="cards" title="Card library" itemTypes={cardItemTypes} />
       </div>
       <div hidden={tab !== "draw"}>

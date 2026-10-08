@@ -13,6 +13,7 @@ use crate::db::folders::{self, Folder};
 use crate::db::items::{self, Item};
 use crate::db::formulas::{self, Formula, FormulaEntry};
 use crate::db::links;
+use crate::db::starters::{self, InstallResult};
 use crate::db::play_decks::{self, NewPlayDeck, PlayDeck, PlayDeckEntry};
 use crate::db::saved_draws::{self, NewSavedDraw, SavedDraw};
 use crate::db::saved_rolls::{self, NewSavedRoll, SavedRoll};
@@ -327,6 +328,27 @@ pub fn set_play_deck_state(db: Db, item_id: String, state_json: String) -> Resul
 #[tauri::command]
 pub fn list_play_decks(db: Db, campaign_id: String) -> Result<Vec<PlayDeckEntry>, String> {
     with_conn(&db, |c| play_decks::list(c, &campaign_id))
+}
+
+// ---- Starter decks ----
+
+/// Adds a starter deck (sent as JSON text, pictures as base64) to a campaign in
+/// one all-or-nothing step. `async` so a big deck is written off the main thread.
+#[tauri::command]
+pub async fn install_card_bundle(
+    db: Db<'_>,
+    campaign_id: String,
+    bundle_json: String,
+) -> Result<InstallResult, String> {
+    let bundle: starters::Bundle = serde_json::from_str(&bundle_json)
+        .map_err(|_| "The starter deck's data couldn't be read.".to_string())?;
+    with_conn(&db, |c| starters::install(c, &campaign_id, &bundle, db::now_ms()))
+}
+
+/// Which starter decks this campaign already has (their ids, like `starter:tarokka`).
+#[tauri::command]
+pub fn list_installed_starters(db: Db, campaign_id: String) -> Result<Vec<String>, String> {
+    with_conn(&db, |c| starters::installed(c, &campaign_id))
 }
 
 // ---- Content packs ----

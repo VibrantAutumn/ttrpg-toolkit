@@ -70,6 +70,8 @@ pub fn run() {
             commands::get_play_deck,
             commands::set_play_deck_state,
             commands::list_play_decks,
+            commands::install_card_bundle,
+            commands::list_installed_starters,
             commands::list_links,
             commands::list_backlinks,
             commands::add_link,

@@ -1,0 +1,389 @@
+{
+  "suits": [
+    "High Deck",
+    "Swords",
+    "Stars",
+    "Coins",
+    "Glyphs"
+  ],
+  "cards": [
+    {
+      "key": "high-deck-artifact",
+      "name": "The Artifact",
+      "suit": "High Deck",
+      "value": "",
+      "notes": "The importance of some physical object that must be obtained, protected, or destroyed at all costs."
+    },
+    {
+      "key": "high-deck-beast",
+      "name": "The Beast",
+      "suit": "High Deck",
+      "value": "",
+      "notes": "Great rage or passion; something bestial or malevolent hiding in plain sight or lurking below the surface."
+    },
+    {
+      "key": "high-deck-broken-one",
+      "name": "The Broken One",
+      "suit": "High Deck",
+      "value": "",
+      "notes": "Defeat, failure, and despair; the loss of something or someone important."
+    },
+    {
+      "key": "high-deck-darklord",
+      "name": "The Darklord",
+      "suit": "High Deck",
+      "value": "",
+      "notes": "A powerful evil individual; one whose goals have enormous and far-reaching consequences."
+    },
+    {
+      "key": "high-deck-donjon",
+      "name": "The Donjon",
+      "suit": "High Deck",
+      "value": "",
+      "notes": "Isolation and imprisonment; a prisoner of their own beliefs."
+    },
+    {
+      "key": "high-deck-ghost",
+      "name": "The Ghost",
+      "suit": "High Deck",
+      "value": "",
+      "notes": "The looming past; the return of an old enemy or the discovery of a secret buried long ago."
+    },
+    {
+      "key": "high-deck-executioner",
+      "name": "The Executioner",
+      "suit": "High Deck",
+      "value": "",
+      "notes": "The imminent death of one rightly or wrongly convicted of a crime; false accusations and unjust prosecution."
+    },
+    {
+      "key": "high-deck-horseman",
+      "name": "The Horseman",
+      "suit": "High Deck",
+      "value": "",
+      "notes": "Death; disastrous loss of wealth or property, a horrible defeat, or the end of a bloodline."
+    },
+    {
+      "key": "high-deck-innocent",
+      "name": "The Innocent",
+      "suit": "High Deck",
+      "value": "",
+      "notes": "A being of great importance whose life is in danger, helpless, or unaware of the peril."
+    },
+    {
+      "key": "high-deck-marionette",
+      "name": "The Marionette",
+      "suit": "High Deck",
+      "value": "",
+      "notes": "The presence of a spy or a minion of some greater power; a puppet or an underling."
+    },
+    {
+      "key": "high-deck-mists",
+      "name": "The Mists",
+      "suit": "High Deck",
+      "value": "",
+      "notes": "Something unexpected or mysterious that cannot be avoided; a great quest or journey that will try one's spirit."
+    },
+    {
+      "key": "high-deck-raven",
+      "name": "The Raven",
+      "suit": "High Deck",
+      "value": "",
+      "notes": "A hidden source of information; a fortunate turn of events; a secret potential for good."
+    },
+    {
+      "key": "high-deck-seer",
+      "name": "The Seer",
+      "suit": "High Deck",
+      "value": "",
+      "notes": "Inspiration and keen intellect; a future event whose outcome hinges on a clever mind."
+    },
+    {
+      "key": "high-deck-tempter",
+      "name": "The Tempter",
+      "suit": "High Deck",
+      "value": "",
+      "notes": "One who has been compromised or led astray by temptation or foolishness; one who tempts others for evil ends."
+    },
+    {
+      "key": "swords-warrior",
+      "name": "The Warrior",
+      "suit": "Swords",
+      "value": "Master",
+      "notes": "Strength and force personified; violence; those who use force to accomplish their goals."
+    },
+    {
+      "key": "swords-avenger",
+      "name": "The Avenger",
+      "suit": "Swords",
+      "value": "1",
+      "notes": "Justice and revenge for great wrongs; those on a quest to rid the world of great evil."
+    },
+    {
+      "key": "swords-paladin",
+      "name": "The Paladin",
+      "suit": "Swords",
+      "value": "2",
+      "notes": "Just and noble warriors; those who live by a code of honor and integrity."
+    },
+    {
+      "key": "swords-soldier",
+      "name": "The Soldier",
+      "suit": "Swords",
+      "value": "3",
+      "notes": "War and sacrifice; the stamina to endure great hardship."
+    },
+    {
+      "key": "swords-mercenary",
+      "name": "The Mercenary",
+      "suit": "Swords",
+      "value": "4",
+      "notes": "Inner strength and fortitude; those who fight for power or wealth."
+    },
+    {
+      "key": "swords-myrmidon",
+      "name": "The Myrmidon",
+      "suit": "Swords",
+      "value": "5",
+      "notes": "Great heroes; a sudden reversal of fate; the triumph of the underdog over a mighty enemy."
+    },
+    {
+      "key": "swords-berserker",
+      "name": "The Berserker",
+      "suit": "Swords",
+      "value": "6",
+      "notes": "The brutal and barbaric side of warfare; bloodlust; those with a bestial nature."
+    },
+    {
+      "key": "swords-hooded-one",
+      "name": "The Hooded One",
+      "suit": "Swords",
+      "value": "7",
+      "notes": "Bigotry, intolerance, and xenophobia; a mysterious presence or newcomer."
+    },
+    {
+      "key": "swords-dictator",
+      "name": "The Dictator",
+      "suit": "Swords",
+      "value": "8",
+      "notes": "All that is wrong with leadership; those who rule through fear and violence."
+    },
+    {
+      "key": "swords-torturer",
+      "name": "The Torturer",
+      "suit": "Swords",
+      "value": "9",
+      "notes": "The coming of suffering or merciless cruelty; one who is irredeemably evil or sadistic."
+    },
+    {
+      "key": "stars-wizard",
+      "name": "The Wizard",
+      "suit": "Stars",
+      "value": "Master",
+      "notes": "Mystery and riddles; the unknown; those who crave magical power and great knowledge."
+    },
+    {
+      "key": "stars-transmuter",
+      "name": "The Transmuter",
+      "suit": "Stars",
+      "value": "1",
+      "notes": "A new discovery; the coming of unexpected things; unforeseen consequences and chaos."
+    },
+    {
+      "key": "stars-diviner",
+      "name": "The Diviner",
+      "suit": "Stars",
+      "value": "2",
+      "notes": "The pursuit of knowledge tempered by wisdom; truth and honesty; sages and prophecy."
+    },
+    {
+      "key": "stars-enchanter",
+      "name": "The Enchanter",
+      "suit": "Stars",
+      "value": "3",
+      "notes": "Inner turmoil that comes from confusion, fear of failure, or false information."
+    },
+    {
+      "key": "stars-abjurer",
+      "name": "The Abjurer",
+      "suit": "Stars",
+      "value": "4",
+      "notes": "Those guided by logic and reasoning; warnings of an overlooked clue or piece of information."
+    },
+    {
+      "key": "stars-elementalist",
+      "name": "The Elementalist",
+      "suit": "Stars",
+      "value": "5",
+      "notes": "The triumph of nature over civilization; natural disasters and bountiful harvests."
+    },
+    {
+      "key": "stars-evoker",
+      "name": "The Evoker",
+      "suit": "Stars",
+      "value": "6",
+      "notes": "Magical or supernatural power that cannot be controlled; magic for destructive ends."
+    },
+    {
+      "key": "stars-illusionist",
+      "name": "The Illusionist",
+      "suit": "Stars",
+      "value": "7",
+      "notes": "Lies and deceit; grand conspiracies; secret societies; the presence of a dupe or saboteur."
+    },
+    {
+      "key": "stars-necromancer",
+      "name": "The Necromancer",
+      "suit": "Stars",
+      "value": "8",
+      "notes": "Unnatural events and unhealthy obsessions; those who follow a destructive path."
+    },
+    {
+      "key": "stars-conjurer",
+      "name": "The Conjurer",
+      "suit": "Stars",
+      "value": "9",
+      "notes": "The coming of an unexpected supernatural threat; those who think of themselves as gods."
+    },
+    {
+      "key": "coins-rogue",
+      "name": "The Rogue",
+      "suit": "Coins",
+      "value": "Master",
+      "notes": "Anyone for whom money is important; those who believe money is the key to their success."
+    },
+    {
+      "key": "coins-swashbuckler",
+      "name": "The Swashbuckler",
+      "suit": "Coins",
+      "value": "1",
+      "notes": "Those who like money yet give it up freely; likable rogues and rapscallions."
+    },
+    {
+      "key": "coins-philanthropist",
+      "name": "The Philanthropist",
+      "suit": "Coins",
+      "value": "2",
+      "notes": "Charity and giving on a grand scale; those who use wealth to fight evil and sickness."
+    },
+    {
+      "key": "coins-trader",
+      "name": "The Trader",
+      "suit": "Coins",
+      "value": "3",
+      "notes": "Commerce; smuggling and black markets; fair and equitable trades."
+    },
+    {
+      "key": "coins-merchant",
+      "name": "The Merchant",
+      "suit": "Coins",
+      "value": "4",
+      "notes": "A rare commodity or business opportunity; deceitful or dangerous business transactions."
+    },
+    {
+      "key": "coins-guild-member",
+      "name": "The Guild Member",
+      "suit": "Coins",
+      "value": "5",
+      "notes": "Like-minded individuals joined together in a common goal; pride in one's work."
+    },
+    {
+      "key": "coins-beggar",
+      "name": "The Beggar",
+      "suit": "Coins",
+      "value": "6",
+      "notes": "Sudden change in economic status or fortune."
+    },
+    {
+      "key": "coins-thief",
+      "name": "The Thief",
+      "suit": "Coins",
+      "value": "7",
+      "notes": "Those who steal or burgle; loss of property, beauty, innocence, friendship, or reputation."
+    },
+    {
+      "key": "coins-tax-collector",
+      "name": "The Tax Collector",
+      "suit": "Coins",
+      "value": "8",
+      "notes": "Corruption; honesty in an otherwise corrupt government or organization."
+    },
+    {
+      "key": "coins-miser",
+      "name": "The Miser",
+      "suit": "Coins",
+      "value": "9",
+      "notes": "Hoarded wealth; those who are irreversibly unhappy or think money is meaningless."
+    },
+    {
+      "key": "glyphs-priest",
+      "name": "The Priest",
+      "suit": "Glyphs",
+      "value": "Master",
+      "notes": "Enlightenment; those who follow a deity, a system of values, or a higher purpose."
+    },
+    {
+      "key": "glyphs-monk",
+      "name": "The Monk",
+      "suit": "Glyphs",
+      "value": "1",
+      "notes": "Serenity; inner strength and self-reliance; supreme confidence bereft of arrogance."
+    },
+    {
+      "key": "glyphs-missionary",
+      "name": "The Missionary",
+      "suit": "Glyphs",
+      "value": "2",
+      "notes": "Those who spread wisdom to others; warnings of the spread of fear and ignorance."
+    },
+    {
+      "key": "glyphs-healer",
+      "name": "The Healer",
+      "suit": "Glyphs",
+      "value": "3",
+      "notes": "Healing; a contagious illness, disease, or curse; those who practice the healing arts."
+    },
+    {
+      "key": "glyphs-shepherd",
+      "name": "The Shepherd",
+      "suit": "Glyphs",
+      "value": "4",
+      "notes": "Those who protect others; one who bears a burden far too great to be shouldered alone."
+    },
+    {
+      "key": "glyphs-druid",
+      "name": "The Druid",
+      "suit": "Glyphs",
+      "value": "5",
+      "notes": "The ambivalence and cruelty of nature and those who feel drawn to it; inner turmoil."
+    },
+    {
+      "key": "glyphs-anarchist",
+      "name": "The Anarchist",
+      "suit": "Glyphs",
+      "value": "6",
+      "notes": "A fundamental change brought on by one whose beliefs are being put to the test."
+    },
+    {
+      "key": "glyphs-charlatan",
+      "name": "The Charlatan",
+      "suit": "Glyphs",
+      "value": "7",
+      "notes": "Liars; those who profess to believe one thing but actually believe another."
+    },
+    {
+      "key": "glyphs-bishop",
+      "name": "The Bishop",
+      "suit": "Glyphs",
+      "value": "8",
+      "notes": "Strict adherence to a code or a belief; those who plot, plan, and scheme."
+    },
+    {
+      "key": "glyphs-traitor",
+      "name": "The Traitor",
+      "suit": "Glyphs",
+      "value": "9",
+      "notes": "Betrayal by someone close and trusted; a weakening or loss of faith."
+    }
+  ]
+}

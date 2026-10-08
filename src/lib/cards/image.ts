@@ -60,6 +60,37 @@ export async function prepareCardImage(file: Uint8Array): Promise<PreparedImage>
   }
 }
 
+/**
+ * For pictures that are already the right size and type (the ones bundled with
+ * the app): keeps the file exactly as it is for the full picture and only makes
+ * the small thumbnail, so nothing is compressed twice.
+ */
+export async function prepareBundledImage(file: Uint8Array, mime: string): Promise<PreparedImage> {
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(new Blob([file.slice().buffer], { type: mime }));
+  } catch {
+    throw new Error("A bundled picture couldn't be read.");
+  }
+  try {
+    const thumb = await encode(bitmap, THUMB_MAX, 0.8, mime);
+    return {
+      mime,
+      image: bytesToBase64(file),
+      thumb: bytesToBase64(new Uint8Array(await thumb.arrayBuffer())),
+    };
+  } finally {
+    bitmap.close();
+  }
+}
+
+/** A picture drawn on a canvas, shrunk and encoded like any other card picture. */
+export async function prepareCanvasImage(canvas: HTMLCanvasElement): Promise<PreparedImage> {
+  const png = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!png) throw new Error("The picture couldn't be drawn.");
+  return prepareCardImage(new Uint8Array(await png.arrayBuffer()));
+}
+
 /** Draws the picture at most `max` pixels on its longest side and encodes it. */
 async function encode(bitmap: ImageBitmap, max: number, quality: number, mime?: string): Promise<Blob> {
   const { width, height } = fitWithin(bitmap.width, bitmap.height, max);

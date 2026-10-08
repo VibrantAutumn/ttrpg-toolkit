@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Original Tarokka card pictures (about 40 MB). Only the shrunk copies in src/starter/ are committed.
+/Tarokka/
