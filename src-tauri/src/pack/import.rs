@@ -9,7 +9,7 @@
 use super::format::*;
 use super::PackError;
 use crate::db::campaigns::{self, Campaign};
-use crate::db::{cards, collections, documents, formulas, play_decks, saved_draws, saved_rolls, settings, spreads};
+use crate::db::{cards, collections, documents, formulas, play_decks, saved_draws, saved_rolls, settings, spreads, tables};
 use rusqlite::{params, Connection, ErrorCode};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -55,6 +55,9 @@ pub struct ParsedPack {
     pub play_decks: Vec<PlayDeckRecord>,
     pub spreads: Vec<SpreadRecord>,
     pub spread_positions: Vec<SpreadPositionRecord>,
+    pub random_tables: Vec<RandomTableRecord>,
+    pub table_entries: Vec<TableEntryRecord>,
+    pub table_entry_tags: Vec<TableEntryTagRecord>,
     /// Plain-language notes about anything that had to be fixed or skipped.
     pub warnings: Vec<String>,
 }
@@ -78,6 +81,9 @@ impl ParsedPack {
             play_decks: self.play_decks.len() as u32,
             spreads: self.spreads.len() as u32,
             spread_positions: self.spread_positions.len() as u32,
+            random_tables: self.random_tables.len() as u32,
+            table_entries: self.table_entries.len() as u32,
+            table_entry_tags: self.table_entry_tags.len() as u32,
         }
     }
 }
@@ -170,6 +176,9 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         play_decks: read_list(&mut archive, PLAY_DECKS_FILE, limits, &mut total)?,
         spreads: read_list(&mut archive, SPREADS_FILE, limits, &mut total)?,
         spread_positions: read_list(&mut archive, SPREAD_POSITIONS_FILE, limits, &mut total)?,
+        random_tables: read_list(&mut archive, RANDOM_TABLES_FILE, limits, &mut total)?,
+        table_entries: read_list(&mut archive, TABLE_ENTRIES_FILE, limits, &mut total)?,
+        table_entry_tags: read_list(&mut archive, TABLE_ENTRY_TAGS_FILE, limits, &mut total)?,
         warnings: Vec::new(),
     };
     sanitize(&mut pack);
@@ -395,6 +404,32 @@ fn sanitize(pack: &mut ParsedPack) {
     note(bad_visibility, "item(s) had an unknown visibility and were set to the default.");
     note(bad_folder, "item(s) pointed at a missing folder and were moved to the top level.");
 
+    // Slots find tables by name, so live tables must have different names: the older keeps
+    // its name and later ones get a number.
+    let mut live_tables: Vec<usize> = (0..pack.items.len())
+        .filter(|&i| {
+            let item = &pack.items[i];
+            item.library == tables::LIBRARY && item.item_type == tables::TABLE_TYPE && item.deleted_at.is_none()
+        })
+        .collect();
+    live_tables.sort_by_key(|&i| (pack.items[i].created_at, pack.items[i].id.clone()));
+    let mut taken_names = HashSet::new();
+    let mut renamed_tables = 0;
+    for i in live_tables {
+        let name = pack.items[i].name.clone();
+        let mut candidate = name.clone();
+        let mut n = 2;
+        while !taken_names.insert(candidate.to_lowercase()) {
+            candidate = format!("{name} ({n})");
+            n += 1;
+        }
+        if candidate != name {
+            pack.items[i].name = candidate;
+            renamed_tables += 1;
+        }
+    }
+    note(renamed_tables, "table(s) had the same name as another table and were renamed with a number.");
+
     // Tags
     let before = pack.tags.len();
     let mut seen = HashSet::new();
@@ -588,6 +623,47 @@ fn sanitize(pack: &mut ParsedPack) {
         }
     }
     note(cleared, "spread position(s) pointed at a missing source and were left without one.");
+
+    // Random tables: settings for tables only, readable, once each.
+    let before = pack.random_tables.len();
+    let mut seen = HashSet::new();
+    pack.random_tables.retain(|t| {
+        item_type.get(t.item_id.as_str()) == Some(&tables::TABLE_TYPE)
+            && t.notes.len() <= cards::MAX_NOTES_BYTES
+            && tables::validate_options(t.die_size, t.avoid_recent).is_ok()
+            && seen.insert(t.item_id.clone())
+    });
+    note(before - pack.random_tables.len(), "table setting(s) belonged to something missing or were unreadable and were skipped.");
+
+    // Entries: for tables, readable, a unique id, and no more than 5,000 live ones per table.
+    let before = pack.table_entries.len();
+    let mut seen = HashSet::new();
+    let mut live_per_table: HashMap<String, usize> = HashMap::new();
+    pack.table_entries.sort_by_key(|e| e.position);
+    pack.table_entries.retain(|e| {
+        let keep = !e.id.is_empty()
+            && item_type.get(e.table_id.as_str()) == Some(&tables::TABLE_TYPE)
+            && tables::validate_entry(&e.text, e.weight).is_ok()
+            && seen.insert(e.id.clone());
+        if !keep {
+            return false;
+        }
+        if e.deleted_at.is_some() {
+            return true;
+        }
+        let n = live_per_table.entry(e.table_id.clone()).or_insert(0);
+        *n += 1;
+        *n <= tables::MAX_ENTRIES
+    });
+    note(before - pack.table_entries.len(), "table entry(ies) belonged to something missing, were unreadable or were beyond the 5,000 allowed, and were skipped.");
+
+    let entry_ids: HashSet<String> = pack.table_entries.iter().map(|e| e.id.clone()).collect();
+    let before = pack.table_entry_tags.len();
+    let mut seen = HashSet::new();
+    pack.table_entry_tags.retain(|l| {
+        entry_ids.contains(&l.entry_id) && tag_ids.contains(&l.tag_id) && seen.insert((l.entry_id.clone(), l.tag_id.clone()))
+    });
+    note(before - pack.table_entry_tags.len(), "tag(s) on table entries referred to something missing and were skipped.");
 
     pack.warnings = warnings;
 }
@@ -795,6 +871,34 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
             "INSERT INTO spread_positions (spread_id, position, name, source_id, meaning)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![item_ids[&p.spread_id], p.position, p.name.trim(), source, p.meaning],
+        )
+        .map_err(db_error)?;
+    }
+    for t in &pack.random_tables {
+        tx.execute(
+            "INSERT INTO random_tables (item_id, notes, die_size, avoid_recent, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![item_ids[&t.item_id], t.notes, t.die_size, t.avoid_recent, t.created_at, t.updated_at],
+        )
+        .map_err(db_error)?;
+    }
+    let entry_ids = new_ids(pack.table_entries.iter().map(|e| e.id.as_str()).collect());
+    for e in &pack.table_entries {
+        tx.execute(
+            "INSERT INTO table_entries (id, table_id, position, text, weight, created_at, updated_at, deleted_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                entry_ids[&e.id], item_ids[&e.table_id], e.position, e.text, e.weight,
+                e.created_at, e.updated_at, e.deleted_at
+            ],
+        )
+        .map_err(db_error)?;
+    }
+    for l in &pack.table_entry_tags {
+        tx.execute(
+            "INSERT INTO table_entry_tags (entry_id, tag_id, created_at, updated_at, deleted_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![entry_ids[&l.entry_id], tag_ids[&l.tag_id], l.created_at, l.updated_at, l.deleted_at],
         )
         .map_err(db_error)?;
     }

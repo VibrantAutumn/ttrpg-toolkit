@@ -31,6 +31,9 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     let play_decks = read_play_decks(conn, campaign_id)?;
     let spreads = read_spreads(conn, campaign_id)?;
     let spread_positions = read_spread_positions(conn, campaign_id)?;
+    let random_tables = read_random_tables(conn, campaign_id)?;
+    let table_entries = read_table_entries(conn, campaign_id)?;
+    let table_entry_tags = read_table_entry_tags(conn, campaign_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -56,6 +59,9 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
             play_decks: play_decks.len() as u32,
             spreads: spreads.len() as u32,
             spread_positions: spread_positions.len() as u32,
+            random_tables: random_tables.len() as u32,
+            table_entries: table_entries.len() as u32,
+            table_entry_tags: table_entry_tags.len() as u32,
         },
     };
 
@@ -75,6 +81,9 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     put(&mut zip, options, PLAY_DECKS_FILE, &play_decks, false)?;
     put(&mut zip, options, SPREADS_FILE, &spreads, false)?;
     put(&mut zip, options, SPREAD_POSITIONS_FILE, &spread_positions, false)?;
+    put(&mut zip, options, RANDOM_TABLES_FILE, &random_tables, false)?;
+    put(&mut zip, options, TABLE_ENTRIES_FILE, &table_entries, false)?;
+    put(&mut zip, options, TABLE_ENTRY_TAGS_FILE, &table_entry_tags, false)?;
     put(&mut zip, options, COLLECTION_MEMBERS_FILE, &collection_members, false)?;
     let image_records: Vec<CardImageRecord> = card_images.iter().map(|(r, _, _)| r.clone()).collect();
     put(&mut zip, options, CARD_IMAGES_FILE, &image_records, false)?;
@@ -418,6 +427,67 @@ fn read_spread_positions(conn: &Connection, campaign_id: &str) -> Result<Vec<Spr
             name: r.get(2)?,
             source_id: r.get(3)?,
             meaning: r.get(4)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_random_tables(conn: &Connection, campaign_id: &str) -> Result<Vec<RandomTableRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT t.item_id, t.notes, t.die_size, t.avoid_recent, t.created_at, t.updated_at
+         FROM random_tables t JOIN items i ON i.id = t.item_id
+         WHERE i.campaign_id = ?1 ORDER BY t.created_at, t.item_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(RandomTableRecord {
+            item_id: r.get(0)?,
+            notes: r.get(1)?,
+            die_size: r.get(2)?,
+            avoid_recent: r.get(3)?,
+            created_at: r.get(4)?,
+            updated_at: r.get(5)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// Every entry, including deleted ones. (What was recently rolled is per-device memory and is not exported.)
+fn read_table_entries(conn: &Connection, campaign_id: &str) -> Result<Vec<TableEntryRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT e.id, e.table_id, e.position, e.text, e.weight, e.created_at, e.updated_at, e.deleted_at
+         FROM table_entries e JOIN items i ON i.id = e.table_id
+         WHERE i.campaign_id = ?1 ORDER BY e.table_id, e.position, e.created_at, e.id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(TableEntryRecord {
+            id: r.get(0)?,
+            table_id: r.get(1)?,
+            position: r.get(2)?,
+            text: r.get(3)?,
+            weight: r.get(4)?,
+            created_at: r.get(5)?,
+            updated_at: r.get(6)?,
+            deleted_at: r.get(7)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_table_entry_tags(conn: &Connection, campaign_id: &str) -> Result<Vec<TableEntryTagRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT l.entry_id, l.tag_id, l.created_at, l.updated_at, l.deleted_at
+         FROM table_entry_tags l
+         JOIN table_entries e ON e.id = l.entry_id
+         JOIN items i ON i.id = e.table_id
+         WHERE i.campaign_id = ?1 ORDER BY l.entry_id, l.tag_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(TableEntryTagRecord {
+            entry_id: r.get(0)?,
+            tag_id: r.get(1)?,
+            created_at: r.get(2)?,
+            updated_at: r.get(3)?,
+            deleted_at: r.get(4)?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)

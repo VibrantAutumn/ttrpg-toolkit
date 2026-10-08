@@ -12,6 +12,7 @@
 //!   data/formulas.json       (likewise)
 //!   data/card_details.json, data/collection_members.json, data/card_images.json (likewise)
 //!   data/saved_draws.json, data/play_decks.json, data/spreads.json, data/spread_positions.json    (likewise)
+//!   data/random_tables.json, data/table_entries.json, data/table_entry_tags.json    (likewise; recent picks are never exported)
 //!   assets/cards/<id>.<ext>, assets/cards/<id>.thumb.<ext>   card pictures (one file each)
 //!   assets/                  reserved for future use (images, ...)
 //!
@@ -43,6 +44,9 @@ pub const SAVED_DRAWS_FILE: &str = "data/saved_draws.json";
 pub const PLAY_DECKS_FILE: &str = "data/play_decks.json";
 pub const SPREADS_FILE: &str = "data/spreads.json";
 pub const SPREAD_POSITIONS_FILE: &str = "data/spread_positions.json";
+pub const RANDOM_TABLES_FILE: &str = "data/random_tables.json";
+pub const TABLE_ENTRIES_FILE: &str = "data/table_entries.json";
+pub const TABLE_ENTRY_TAGS_FILE: &str = "data/table_entry_tags.json";
 /// Card picture files live under this folder inside the zip.
 pub const CARD_ASSET_DIR: &str = "assets/cards/";
 
@@ -85,6 +89,9 @@ pub struct Counts {
     pub play_decks: u32,
     pub spreads: u32,
     pub spread_positions: u32,
+    pub random_tables: u32,
+    pub table_entries: u32,
+    pub table_entry_tags: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -254,4 +261,40 @@ pub struct SpreadPositionRecord {
     pub name: String,
     pub source_id: Option<String>,
     pub meaning: String,
+}
+
+/// A random table's settings (the table itself is an item).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RandomTableRecord {
+    pub item_id: String,
+    pub notes: String,
+    pub die_size: Option<i64>,
+    pub avoid_recent: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// One entry of a table. Deleted entries are kept (with `deleted_at`) so a backup is complete.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TableEntryRecord {
+    pub id: String,
+    pub table_id: String,
+    pub position: i64,
+    pub text: String,
+    pub weight: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deleted_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TableEntryTagRecord {
+    pub entry_id: String,
+    pub tag_id: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deleted_at: Option<i64>,
 }
