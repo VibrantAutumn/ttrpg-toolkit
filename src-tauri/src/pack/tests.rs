@@ -307,6 +307,36 @@ fn only_live_campaigns_can_be_exported() {
     assert!(export_campaign(&conn, "nope", 9001).is_err());
 }
 
+// --------------------------------------------------------------- transport
+
+#[test]
+fn a_pack_survives_the_text_transport_used_between_javascript_and_rust() {
+    use super::{decode_from_transport, encode_for_transport};
+    let conn = open_in_memory();
+    let camp = populate(&conn);
+    let bytes = export_campaign(&conn, &camp, 5000).unwrap();
+    let text = encode_for_transport(&bytes);
+    assert!(text.is_ascii(), "it has to be safe to send as text");
+    assert_eq!(decode_from_transport(&text).unwrap(), bytes);
+    // Whitespace around the text (e.g. a trailing newline) is tolerated.
+    assert_eq!(decode_from_transport(&format!("  {text}\n")).unwrap(), bytes);
+    // And every byte value (not just text) round-trips.
+    let all: Vec<u8> = (0..=255).collect();
+    assert_eq!(decode_from_transport(&encode_for_transport(&all)).unwrap(), all);
+    assert!(decode_from_transport(&encode_for_transport(&[])).unwrap().is_empty());
+}
+
+#[test]
+fn text_that_is_not_valid_transport_data_is_refused() {
+    use super::decode_from_transport;
+    for bad in ["not base64 !!!", "ab=cd", "\u{201C}quoted\u{201D}"] {
+        assert!(
+            matches!(decode_from_transport(bad), Err(PackError::NotAPack(_))),
+            "{bad:?}"
+        );
+    }
+}
+
 // -------------------------------------------------------------- rejection
 
 #[test]

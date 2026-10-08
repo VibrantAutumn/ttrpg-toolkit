@@ -48,6 +48,22 @@ impl fmt::Display for PackError {
 
 impl std::error::Error for PackError {}
 
+/// Pack files cross between JavaScript and Rust as base64 text, not raw bytes:
+/// Android never delivers a raw request body to commands (Tauri sends JSON
+/// there), so one text-based path keeps Windows and Android behaving the same.
+pub fn encode_for_transport(bytes: &[u8]) -> String {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    STANDARD.encode(bytes)
+}
+
+/// The reverse of `encode_for_transport`.
+pub fn decode_from_transport(text: &str) -> Result<Vec<u8>, PackError> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    STANDARD
+        .decode(text.trim())
+        .map_err(|_| PackError::NotAPack("the file couldn't be read"))
+}
+
 impl From<DbError> for PackError {
     fn from(e: DbError) -> Self {
         PackError::Db(e)
