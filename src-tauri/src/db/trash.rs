@@ -46,9 +46,12 @@ pub fn list(conn: &Connection, campaign_id: &str, library: &str) -> Result<Trash
     Ok(Trash { folders, items })
 }
 
-/// The message for a restore that would make two tables share a name.
-fn name_clash_on_restore(e: DbError) -> DbError {
+/// The message for a restore that would make two tables (or two name generators) share a name.
+fn name_clash_on_restore(e: DbError, item_type: &str) -> DbError {
     match e {
+        DbError::Invalid(_) if item_type == "name_generator" => DbError::Invalid(
+            "A name generator with the same name exists now, so this can't be restored yet. Rename the other name generator first.",
+        ),
         DbError::Invalid(_) => DbError::Invalid(
             "A table with the same name exists now, so this can't be restored yet. Rename the other table first.",
         ),
@@ -62,7 +65,7 @@ pub fn restore_item(conn: &Connection, id: &str, now: i64) -> Result<Item, DbErr
     if item.deleted_at.is_some() {
         // Kinds that need unique names (tables) can't come back beside a live item with the same name.
         items::check_name_free(conn, &item.campaign_id, &item.library, &item.item_type, &item.name, Some(id))
-            .map_err(name_clash_on_restore)?;
+            .map_err(|e| name_clash_on_restore(e, &item.item_type))?;
     }
     let changed = conn.execute(
         "UPDATE items
@@ -99,7 +102,7 @@ pub fn restore_folder(conn: &Connection, id: &str, now: i64) -> Result<Folder, D
     };
     for (item_id, campaign_id, library, item_type, name) in &coming_back {
         items::check_name_free(conn, campaign_id, library, item_type, name, Some(item_id))
-            .map_err(name_clash_on_restore)?;
+            .map_err(|e| name_clash_on_restore(e, item_type))?;
     }
     let tx = conn.unchecked_transaction()?;
     tx.execute(

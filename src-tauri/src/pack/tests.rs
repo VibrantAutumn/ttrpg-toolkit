@@ -6,6 +6,7 @@ use crate::db::cards::{self, test_images};
 use crate::db::collections;
 use crate::db::formulas;
 use crate::db::spreads::{self, PositionInput};
+use crate::db::name_generators::{self, GeneratorSettings};
 use crate::db::tables::{self, EntryInput, Pick};
 use crate::db::play_decks::{self, NewPlayDeck};
 use crate::db::saved_draws::{self, NewSavedDraw};
@@ -170,6 +171,23 @@ mind the [Rumors]".into(), weight: 1 },
     let hooks = items::create(conn, c, "tables", "table", "Hooks", None, 4200).unwrap();
     tables::add_entry(conn, &hooks.id, "[3 unique Rumors] and [table:Rumors as R] [R]", 1, 4210).unwrap();
 
+    // A name generator: rules, notes, entries in two lists (one deleted) and a tagged entry.
+    let elves = items::create(conn, c, "tables", "name_generator", "Elf names", None, 4300).unwrap();
+    let rules = GeneratorSettings {
+        mode: "two".into(),
+        join1: "apostrophe".into(),
+        join2: "none".into(),
+        capitalisation: "everyPart".into(),
+        merge_doubles: true,
+    };
+    name_generators::set_settings(conn, &elves.id, &rules, 4310).unwrap();
+    name_generators::set_notes(conn, &elves.id, "Sindarin flavoured", 4320).unwrap();
+    let word = |text: &str, weight: i64| EntryInput { text: text.into(), weight };
+    let firsts = name_generators::add_entries(conn, &elves.id, "first", &[word("ael", 2), word("cal", 1), word("fen", 1)], 4330).unwrap();
+    name_generators::add_entries(conn, &elves.id, "last", &[word("wen", 1), word("dor", 1)], 4340).unwrap();
+    tables::delete_entry(conn, &firsts[2].id, 4350).unwrap();
+    tables::add_entry_tag(conn, &firsts[0].id, &faction.id, 4360).unwrap();
+
     camp.id
 }
 
@@ -213,6 +231,7 @@ struct Snapshot {
     random_tables: Vec<String>,
     table_entries: Vec<String>,
     table_entry_tags: Vec<String>,
+    name_generators: Vec<String>,
 }
 
 fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
@@ -270,12 +289,16 @@ fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
             "SELECT i.name, i.library, t.notes, t.die_size, t.avoid_recent, t.created_at, t.updated_at, i.deleted_at
              FROM random_tables t JOIN items i ON i.id = t.item_id WHERE i.campaign_id = ?1", campaign_id),
         table_entries: lines(conn,
-            "SELECT i.name, e.position, e.text, e.weight, e.created_at, e.updated_at, e.deleted_at
+            "SELECT i.name, e.part, e.position, e.text, e.weight, e.created_at, e.updated_at, e.deleted_at
              FROM table_entries e JOIN items i ON i.id = e.table_id WHERE i.campaign_id = ?1", campaign_id),
         table_entry_tags: lines(conn,
             "SELECT i.name, e.text, t.name, l.created_at, l.updated_at, l.deleted_at
              FROM table_entry_tags l JOIN table_entries e ON e.id = l.entry_id
              JOIN items i ON i.id = e.table_id JOIN tags t ON t.id = l.tag_id WHERE i.campaign_id = ?1", campaign_id),
+        name_generators: lines(conn,
+            "SELECT i.name, i.library, g.notes, g.mode, g.join1, g.join2, g.capitalisation, g.merge_doubles,
+                    g.created_at, g.updated_at, i.deleted_at
+             FROM name_generators g JOIN items i ON i.id = g.item_id WHERE i.campaign_id = ?1", campaign_id),
     }
 }
 
@@ -326,13 +349,14 @@ fn the_manifest_describes_the_pack() {
     assert_eq!(
         m.counts,
         // 4 documents have text: Strahd, Ireena, Barovia and Old Note ("Scrap" and the map have none).
-        // The saved rolls, formulas and cards are items too (21 items: 5 documents, a map, 2 rolls,
-        // 2 formulas, 3 cards, a set, a deck, a pool, a saved draw, a deck in play, a spread and 2 tables). 2 cards have details, 1 a picture, 7 membership rows.
-        // 1 table has settings; the 2 tables have 4 entries in all (one deleted) and 2 entry tags (one removed).
+        // The saved rolls, formulas and cards are items too (22 items: 5 documents, a map, 2 rolls,
+        // 2 formulas, 3 cards, a set, a deck, a pool, a saved draw, a deck in play, a spread, 2 tables and a name generator). 2 cards have details, 1 a picture, 7 membership rows.
+        // 1 table has settings; the 2 tables have 4 entries in all (one deleted) and 2 entry tags (one removed);
+        // the generator has 5 entries (one deleted) and 1 tag.
         Counts {
-            folders: 3, items: 21, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 2, formulas: 2,
+            folders: 3, items: 22, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 2, formulas: 2,
             card_details: 2, collection_members: 7, card_images: 1, saved_draws: 1, play_decks: 1, spreads: 1, spread_positions: 3,
-            random_tables: 1, table_entries: 4, table_entry_tags: 2,
+            random_tables: 1, table_entries: 9, table_entry_tags: 3, name_generators: 1,
         }
     );
     assert_eq!(pack.counts(), m.counts);
@@ -362,7 +386,7 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
         )
         .unwrap();
     assert_eq!(shared, 0);
-    assert_eq!(count(&conn, "items"), 42);
+    assert_eq!(count(&conn, "items"), 44);
 }
 
 #[test]
@@ -410,7 +434,7 @@ fn imported_items_remember_where_they_came_from() {
             .map(|r| r.unwrap())
             .collect()
     };
-    assert_eq!(rows.len(), 21);
+    assert_eq!(rows.len(), 22);
     for (name, origin_pack, origin_item) in rows {
         assert_eq!(origin_pack.as_deref(), Some(pack_id.as_str()), "{name}");
         // The origin id is the item's id in the ORIGINAL campaign.
@@ -682,7 +706,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
     assert!(pack.warnings.iter().all(|w| w.chars().next().unwrap().is_ascii_digit()));
     assert_eq!(
         pack.counts(),
-        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0 }
+        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_generators: 0 }
     );
 
     let conn = open_in_memory();
@@ -803,7 +827,7 @@ fn the_committed_version_1_pack_still_imports() {
     assert_eq!(result.campaign.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0 }
+        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_generators: 0 }
     );
     let camp = result.campaign.id;
 
@@ -1618,6 +1642,163 @@ fn a_failed_import_also_rolls_back_tables() {
     target.execute_batch("DROP TABLE table_entry_tags").unwrap();
     assert!(import_pack(&target, &bytes, 6000).is_err());
     for table in ["campaigns", "items", "random_tables", "table_entries", "table_recent"] {
+        assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
+    }
+}
+
+// -------------------------------------------------------- name generators
+
+fn find_generator(conn: &Connection, campaign: &str, name: &str) -> items::Item {
+    items::list(conn, campaign, "tables", None).unwrap().into_iter().find(|i| i.name == name).unwrap()
+}
+
+#[test]
+fn name_generators_keep_rules_notes_lists_and_tags_through_a_round_trip() {
+    let source = open_in_memory();
+    let original = populate(&source);
+    let bytes = export_campaign(&source, &original, 5000).unwrap();
+    let conn = open_in_memory();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+
+    let item = find_generator(&conn, &imported, "Elf names");
+    assert_eq!(item.item_type, "name_generator");
+    let got = name_generators::get(&conn, &item.id).unwrap();
+    assert_eq!(got.notes, "Sindarin flavoured");
+    assert_eq!(
+        (got.settings.mode.as_str(), got.settings.join1.as_str(), got.settings.capitalisation.as_str(), got.settings.merge_doubles),
+        ("two", "apostrophe", "everyPart", true)
+    );
+    let list = |entries: &[tables::Entry]| entries.iter().map(|e| (e.text.clone(), e.weight)).collect::<Vec<_>>();
+    assert_eq!(list(&got.parts.first), [("ael".to_string(), 2), ("cal".to_string(), 1)], "the deleted entry stays deleted");
+    assert_eq!(list(&got.parts.last), [("wen".to_string(), 1), ("dor".to_string(), 1)]);
+    assert!(got.parts.middle.is_empty() && got.parts.full.is_empty());
+    // The tag on an entry is the imported campaign's own tag.
+    let tag = tags::get(&conn, &got.parts.first[0].tag_ids[0]).unwrap();
+    assert_eq!((tag.name.as_str(), tag.campaign_id == imported), ("Faction", true));
+
+    // The deleted entry is in the trash of its list and can be restored.
+    let deleted: String = conn
+        .query_row(
+            "SELECT id FROM table_entries WHERE table_id = ?1 AND deleted_at IS NOT NULL",
+            [&item.id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    tables::restore_entry(&conn, &deleted, 7000).unwrap();
+    assert_eq!(name_generators::get(&conn, &item.id).unwrap().parts.first.len(), 3);
+
+    // Searchable, listed as ready, and kept apart from the tables.
+    assert_eq!(search::search(&conn, &imported, "sindarin", Some("tables"), 10).unwrap().len(), 1);
+    let rows = name_generators::list(&conn, &imported).unwrap();
+    assert_eq!(rows.iter().map(|r| (r.name.as_str(), r.ready)).collect::<Vec<_>>(), [("Elf names", true)]);
+    assert_eq!(tables::list(&conn, &imported).unwrap().len(), 2);
+}
+
+#[test]
+fn name_generators_with_the_same_name_are_renamed_on_import_but_a_table_may_share_it() {
+    let generator = |id: &str, name: &str, created: i64| json!({
+        "id": id, "library": "tables", "itemType": "name_generator", "name": name, "icon": null,
+        "folderId": null, "visibility": "default", "createdAt": created, "updatedAt": created, "deletedAt": null
+    });
+    let bytes = pack_with(&[(
+        ITEMS_FILE,
+        json!([
+            generator("late", "Elves", 30),
+            generator("early", "elves", 10),
+            table_item("table", "Elves", 5, None), // a table: its own names
+        ]),
+    )]);
+    let pack = read_pack(&bytes).unwrap();
+    assert!(pack.warnings.iter().any(|w| w.starts_with("1 name generator(s) had the same name")), "{:?}", pack.warnings);
+    assert!(!pack.warnings.iter().any(|w| w.contains("table(s) had the same name")), "{:?}", pack.warnings);
+
+    let conn = open_in_memory();
+    let camp = import_parsed(&conn, &pack, 10).unwrap().campaign.id;
+    assert_eq!(
+        lines(&conn, "SELECT name, origin_item_id FROM items WHERE campaign_id = ?1", &camp),
+        [
+            r#"[Text("Elves (2)"), Text("late")]"#,
+            r#"[Text("Elves"), Text("table")]"#,
+            r#"[Text("elves"), Text("early")]"#,
+        ]
+    );
+}
+
+#[test]
+fn bad_name_generator_data_in_a_pack_is_skipped_with_warnings() {
+    let item = |id: &str, kind: &str| json!({
+        "id": id, "library": "tables", "itemType": kind, "name": id, "icon": null,
+        "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null
+    });
+    let settings = |id: &str, mode: &str, join: &str, caps: &str| json!({
+        "itemId": id, "notes": "n", "mode": mode, "join1": join, "join2": "none", "capitalisation": caps,
+        "mergeDoubles": false, "createdAt": 1, "updatedAt": 1
+    });
+    let entry = |id: &str, owner: &str, part: &str, text: &str| json!({
+        "id": id, "tableId": owner, "part": part, "position": 1, "text": text, "weight": 1,
+        "createdAt": 1, "updatedAt": 1, "deletedAt": null
+    });
+    let bytes = pack_with(&[
+        (ITEMS_FILE, json!([item("g", "name_generator"), item("t", "table"), item("doc", "document")])),
+        (NAME_GENERATORS_FILE, json!([
+            settings("g", "three", "hyphen", "everyPart"),
+            settings("g", "two", "none", "asTyped"),       // twice
+            settings("t", "two", "none", "asTyped"),       // not a generator
+            settings("doc", "two", "none", "asTyped"),     // not a generator
+            settings("ghost", "two", "none", "asTyped"),   // nothing there
+            settings("g2", "four", "none", "asTyped"),     // an unknown mode (and no such item)
+        ])),
+        (TABLE_ENTRIES_FILE, json!([
+            entry("ok1", "g", "first", "Ael"),
+            entry("ok2", "g", "full", "Aelwen Silverleaf"),
+            entry("nopart", "g", "", "belongs to no list"),
+            entry("badpart", "g", "prefix", "not a list"),
+            entry("tablepart", "t", "first", "a table has no parts"),
+            entry("tableok", "t", "", "fine"),
+            entry("docpart", "doc", "first", "not a generator"),
+        ])),
+    ]);
+    let pack = read_pack(&bytes).unwrap();
+    assert_eq!(pack.name_generators.len(), 1);
+    assert_eq!(pack.table_entries.len(), 3, "only entries in a list that fits their owner");
+    let said = |start: &str| pack.warnings.iter().any(|w| w.starts_with(start));
+    assert!(said("5 name generator setting"), "{:?}", pack.warnings);
+    assert!(said("4 table entry(ies)"), "{:?}", pack.warnings);
+
+    let conn = open_in_memory();
+    let camp = import_parsed(&conn, &pack, 10).unwrap().campaign.id;
+    let g = name_generators::get(&conn, &find_generator(&conn, &camp, "g").id).unwrap();
+    assert_eq!((g.settings.mode.as_str(), g.settings.join1.as_str()), ("three", "hyphen"));
+    assert_eq!((g.parts.first.len(), g.parts.full.len()), (1, 1));
+    assert_eq!(tables::get(&conn, &find_generator(&conn, &camp, "t").id).unwrap().entries.len(), 1);
+}
+
+#[test]
+fn entries_from_before_name_generators_have_no_part_and_import_as_table_entries() {
+    let bytes = pack_with(&[
+        (ITEMS_FILE, json!([table_item("t", "Rumors", 1, None)])),
+        (TABLE_ENTRIES_FILE, json!([{
+            "id": "e", "tableId": "t", "position": 1, "text": "An old pack's entry", "weight": 1,
+            "createdAt": 1, "updatedAt": 1, "deletedAt": null
+        }])),
+    ]);
+    let pack = read_pack(&bytes).unwrap();
+    assert!(pack.warnings.is_empty(), "{:?}", pack.warnings);
+    let conn = open_in_memory();
+    let camp = import_parsed(&conn, &pack, 10).unwrap().campaign.id;
+    let t = tables::get(&conn, &find_table(&conn, &camp, "Rumors").id).unwrap();
+    assert_eq!(t.entries.len(), 1);
+}
+
+#[test]
+fn a_failed_import_also_rolls_back_name_generators() {
+    let source = open_in_memory();
+    let camp = populate(&source);
+    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let target = open_in_memory();
+    target.execute_batch("DROP TABLE table_entry_tags").unwrap();
+    assert!(import_pack(&target, &bytes, 6000).is_err());
+    for table in ["campaigns", "items", "name_generators", "table_entries"] {
         assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
     }
 }

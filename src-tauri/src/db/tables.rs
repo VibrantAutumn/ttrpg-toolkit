@@ -11,6 +11,7 @@
 use super::cards::MAX_NOTES_BYTES;
 use super::error::DbError;
 use super::items::{self, Item};
+use super::name_generators::{GENERATOR_TYPE, PARTS};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -139,7 +140,19 @@ fn require_live_table(conn: &Connection, item_id: &str) -> Result<Item, DbError>
     Ok(item)
 }
 
-/// The live entry's table (which must be live too).
+/// Checks the item exists, is live, and owns entries (a table or a name generator).
+fn require_live_owner(conn: &Connection, item_id: &str) -> Result<Item, DbError> {
+    let item = items::get(conn, item_id)?;
+    if item.deleted_at.is_some() {
+        return Err(DbError::NotFound);
+    }
+    if item.library != LIBRARY || (item.item_type != TABLE_TYPE && item.item_type != GENERATOR_TYPE) {
+        return Err(DbError::Invalid("This item doesn't have entries."));
+    }
+    Ok(item)
+}
+
+/// The live entry's owner: a table or a name generator (which must be live too).
 fn require_live_entry(conn: &Connection, entry_id: &str) -> Result<Item, DbError> {
     let table_id: Option<String> = conn
         .query_row(
@@ -148,7 +161,7 @@ fn require_live_entry(conn: &Connection, entry_id: &str) -> Result<Item, DbError
             |r| r.get(0),
         )
         .optional()?;
-    require_live_table(conn, &table_id.ok_or(DbError::NotFound)?)
+    require_live_owner(conn, &table_id.ok_or(DbError::NotFound)?)
 }
 
 /// Checks an entry's text and weight (also used when importing packs).
@@ -178,16 +191,17 @@ pub fn validate_options(die_size: Option<i64>, avoid_recent: i64) -> Result<(), 
     Ok(())
 }
 
-fn live_entry_count(conn: &Connection, table_id: &str) -> Result<usize, DbError> {
+/// Live entries in one list: a table's entries (`part` is empty) or one of a generator's lists.
+fn live_entry_count(conn: &Connection, owner_id: &str, part: &str) -> Result<usize, DbError> {
     let n: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM table_entries WHERE table_id = ?1 AND deleted_at IS NULL",
-        [table_id],
+        "SELECT COUNT(*) FROM table_entries WHERE table_id = ?1 AND part = ?2 AND deleted_at IS NULL",
+        params![owner_id, part],
         |r| r.get(0),
     )?;
     Ok(n as usize)
 }
 
-const TOO_MANY: DbError = DbError::Invalid("A table can hold at most 5,000 entries.");
+const TOO_MANY: DbError = DbError::Invalid("A list can hold at most 5,000 entries.");
 
 /// Is there another live table with this table's name, and does it come first?
 /// Returns (duplicate, found_by_slots): slots find the oldest table of that name.
@@ -204,7 +218,8 @@ fn name_status(conn: &Connection, item: &Item) -> Result<(bool, bool), DbError> 
     Ok((count > 0, older == 0))
 }
 
-fn entries_of(conn: &Connection, table_id: &str) -> Result<Vec<Entry>, DbError> {
+/// The live entries of one list, in order (see `live_entry_count` for what `part` means).
+pub(super) fn entries_of(conn: &Connection, table_id: &str, part: &str) -> Result<Vec<Entry>, DbError> {
     let mut tags: HashMap<String, Vec<String>> = HashMap::new();
     let mut stmt = conn.prepare(
         "SELECT l.entry_id, l.tag_id
@@ -221,9 +236,9 @@ fn entries_of(conn: &Connection, table_id: &str) -> Result<Vec<Entry>, DbError> 
 
     let mut stmt = conn.prepare(
         "SELECT id, text, weight FROM table_entries
-         WHERE table_id = ?1 AND deleted_at IS NULL ORDER BY position, created_at, id",
+         WHERE table_id = ?1 AND part = ?2 AND deleted_at IS NULL ORDER BY position, created_at, id",
     )?;
-    let rows = stmt.query_map([table_id], |r| {
+    let rows = stmt.query_map(params![table_id, part], |r| {
         Ok(Entry { id: r.get(0)?, text: r.get(1)?, weight: r.get(2)?, tag_ids: vec![] })
     })?;
     let mut entries = rows.collect::<Result<Vec<_>, _>>()?;
@@ -250,7 +265,7 @@ pub fn get(conn: &Connection, item_id: &str) -> Result<TableDetail, DbError> {
         notes,
         die_size,
         avoid_recent,
-        entries: entries_of(conn, item_id)?,
+        entries: entries_of(conn, item_id, "")?,
         duplicate_name,
         found_by_slots,
     })
@@ -300,16 +315,31 @@ pub fn set_options(
 /// Adds entries to the end of a table, all or nothing. Returns them as stored.
 pub fn add_entries(conn: &Connection, table_id: &str, inputs: &[EntryInput], now: i64) -> Result<Vec<Entry>, DbError> {
     require_live_table(conn, table_id)?;
+    add_part_entries(conn, table_id, "", inputs, now)
+}
+
+/// Adds entries to the end of one list of a table (`part` empty) or name generator
+/// (`full`, `first`, `middle` or `last`), all or nothing. The caller has checked the owner.
+pub(super) fn add_part_entries(
+    conn: &Connection,
+    table_id: &str,
+    part: &str,
+    inputs: &[EntryInput],
+    now: i64,
+) -> Result<Vec<Entry>, DbError> {
+    if part != "" && !PARTS.contains(&part) {
+        return Err(DbError::Invalid("That isn't one of a name generator's lists."));
+    }
     for input in inputs {
         validate_entry(&input.text, input.weight)?;
     }
-    if live_entry_count(conn, table_id)? + inputs.len() > MAX_ENTRIES {
+    if live_entry_count(conn, table_id, part)? + inputs.len() > MAX_ENTRIES {
         return Err(TOO_MANY);
     }
     let tx = conn.unchecked_transaction()?;
     let mut position: i64 = tx.query_row(
-        "SELECT COALESCE(MAX(position), 0) FROM table_entries WHERE table_id = ?1",
-        [table_id],
+        "SELECT COALESCE(MAX(position), 0) FROM table_entries WHERE table_id = ?1 AND part = ?2",
+        params![table_id, part],
         |r| r.get(0),
     )?;
     let mut added = Vec::with_capacity(inputs.len());
@@ -317,9 +347,9 @@ pub fn add_entries(conn: &Connection, table_id: &str, inputs: &[EntryInput], now
         position += 1;
         let id = Uuid::now_v7().to_string();
         tx.execute(
-            "INSERT INTO table_entries (id, table_id, position, text, weight, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
-            params![id, table_id, position, input.text, input.weight, now],
+            "INSERT INTO table_entries (id, table_id, part, position, text, weight, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+            params![id, table_id, part, position, input.text, input.weight, now],
         )?;
         added.push(Entry { id, text: input.text.clone(), weight: input.weight, tag_ids: vec![] });
     }
@@ -394,17 +424,17 @@ pub fn delete_entry(conn: &Connection, entry_id: &str, now: i64) -> Result<(), D
 
 /// Brings a deleted entry back where it was.
 pub fn restore_entry(conn: &Connection, entry_id: &str, now: i64) -> Result<(), DbError> {
-    let row: Option<(String, Option<i64>)> = conn
-        .query_row("SELECT table_id, deleted_at FROM table_entries WHERE id = ?1", [entry_id], |r| {
-            Ok((r.get(0)?, r.get(1)?))
+    let row: Option<(String, String, Option<i64>)> = conn
+        .query_row("SELECT table_id, part, deleted_at FROM table_entries WHERE id = ?1", [entry_id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
         })
         .optional()?;
-    let (table_id, deleted_at) = row.ok_or(DbError::NotFound)?;
-    require_live_table(conn, &table_id)?;
+    let (table_id, part, deleted_at) = row.ok_or(DbError::NotFound)?;
+    require_live_owner(conn, &table_id)?;
     if deleted_at.is_none() {
         return Ok(());
     }
-    if live_entry_count(conn, &table_id)? >= MAX_ENTRIES {
+    if live_entry_count(conn, &table_id, &part)? >= MAX_ENTRIES {
         return Err(TOO_MANY);
     }
     let tx = conn.unchecked_transaction()?;
@@ -420,12 +450,13 @@ pub fn restore_entry(conn: &Connection, entry_id: &str, now: i64) -> Result<(), 
 /// Moves a live entry to a place in the order (0 = first; past the end = last).
 pub fn move_entry(conn: &Connection, entry_id: &str, to_index: usize, now: i64) -> Result<(), DbError> {
     let table = require_live_entry(conn, entry_id)?;
+    let part: String = conn.query_row("SELECT part FROM table_entries WHERE id = ?1", [entry_id], |r| r.get(0))?;
     let mut ids: Vec<String> = {
         let mut stmt = conn.prepare(
-            "SELECT id FROM table_entries WHERE table_id = ?1 AND deleted_at IS NULL
+            "SELECT id FROM table_entries WHERE table_id = ?1 AND part = ?2 AND deleted_at IS NULL
              ORDER BY position, created_at, id",
         )?;
-        let rows = stmt.query_map([&table.id], |r| r.get(0))?;
+        let rows = stmt.query_map(params![&table.id, &part], |r| r.get(0))?;
         rows.collect::<Result<Vec<_>, _>>()?
     };
     let from = ids.iter().position(|id| id == entry_id).ok_or(DbError::NotFound)?;

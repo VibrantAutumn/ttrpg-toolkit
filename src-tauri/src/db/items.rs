@@ -66,10 +66,10 @@ pub fn get(conn: &Connection, id: &str) -> Result<Item, DbError> {
 }
 
 /// Random tables are found by name (in `[Table name]` slots), so two live tables
-/// in a campaign can't share a name, in any folder, ignoring case. Other kinds of
-/// item may share names freely.
+/// in a campaign can't share a name, in any folder, ignoring case. Name generators
+/// are held to the same rule among themselves. Other kinds of item may share names freely.
 fn needs_unique_name(library: &str, item_type: &str) -> bool {
-    library == "tables" && item_type == "table"
+    library == "tables" && (item_type == "table" || item_type == "name_generator")
 }
 
 /// Refuses a name that another live item of the same kind already has, for the
@@ -93,7 +93,11 @@ pub(super) fn check_name_free(
         |r| r.get(0),
     )?;
     if taken > 0 {
-        return Err(DbError::Invalid("A table with that name already exists. Table names have to be different."));
+        return Err(DbError::Invalid(if item_type == "name_generator" {
+            "A name generator with that name already exists. Names of name generators have to be different."
+        } else {
+            "A table with that name already exists. Table names have to be different."
+        }));
     }
     Ok(())
 }

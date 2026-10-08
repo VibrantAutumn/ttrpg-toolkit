@@ -16,6 +16,7 @@ use crate::db::links;
 use crate::db::spreads::{self, PositionInput, Spread, SpreadEntry};
 use crate::db::starters::{self, InstallResult};
 use crate::db::tables::{self, Entry, EntryInput, EntryRef, EntryTextUpdate, Pick, RollableTable, TableDetail, TableSummary};
+use crate::db::name_generators::{self, GeneratorDetail, GeneratorSettings, GeneratorSummary, RollableGenerator};
 use crate::db::play_decks::{self, NewPlayDeck, PlayDeck, PlayDeckEntry};
 use crate::db::saved_draws::{self, NewSavedDraw, SavedDraw};
 use crate::db::saved_rolls::{self, NewSavedRoll, SavedRoll};
@@ -469,6 +470,48 @@ pub fn record_table_recent(db: Db, picks: Vec<Pick>) -> Result<(), String> {
 #[tauri::command]
 pub fn clear_table_recent(db: Db, table_id: String) -> Result<(), String> {
     with_conn(&db, |c| tables::clear_recent(c, &table_id))
+}
+
+// ---- Name generators ----
+// Editing, deleting, moving and tagging a generator's entries use the table entry
+// commands above (they work on any entry); these are the generator-only ones.
+
+#[tauri::command]
+pub fn get_name_generator(db: Db, item_id: String) -> Result<GeneratorDetail, String> {
+    with_conn(&db, |c| name_generators::get(c, &item_id))
+}
+
+#[tauri::command]
+pub fn set_name_generator_notes(db: Db, item_id: String, notes: String) -> Result<(), String> {
+    with_conn(&db, |c| name_generators::set_notes(c, &item_id, &notes, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn set_name_generator_settings(db: Db, item_id: String, settings: GeneratorSettings) -> Result<(), String> {
+    with_conn(&db, |c| name_generators::set_settings(c, &item_id, &settings, db::now_ms()))
+}
+
+/// Adds entries to the end of one of a generator's lists (full, first, middle or last).
+#[tauri::command]
+pub fn add_name_generator_entries(
+    db: Db,
+    item_id: String,
+    part: String,
+    entries: Vec<EntryInput>,
+) -> Result<Vec<Entry>, String> {
+    with_conn(&db, |c| name_generators::add_entries(c, &item_id, &part, &entries, db::now_ms()))
+}
+
+/// Every name generator in the campaign, and whether it can make names.
+#[tauri::command]
+pub fn list_name_generators(db: Db, campaign_id: String) -> Result<Vec<GeneratorSummary>, String> {
+    with_conn(&db, |c| name_generators::list(c, &campaign_id))
+}
+
+/// Every name generator with its settings and lists, ready to make names without more lookups.
+#[tauri::command]
+pub fn load_name_generators(db: Db, campaign_id: String) -> Result<Vec<RollableGenerator>, String> {
+    with_conn(&db, |c| name_generators::load_all(c, &campaign_id))
 }
 
 // ---- Content packs ----

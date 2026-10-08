@@ -13,6 +13,7 @@
 //!   data/card_details.json, data/collection_members.json, data/card_images.json (likewise)
 //!   data/saved_draws.json, data/play_decks.json, data/spreads.json, data/spread_positions.json    (likewise)
 //!   data/random_tables.json, data/table_entries.json, data/table_entry_tags.json    (likewise; recent picks are never exported)
+//!   data/name_generators.json    (likewise; a generator's lists are table entries with a "part")
 //!   assets/cards/<id>.<ext>, assets/cards/<id>.thumb.<ext>   card pictures (one file each)
 //!   assets/                  reserved for future use (images, ...)
 //!
@@ -47,6 +48,7 @@ pub const SPREAD_POSITIONS_FILE: &str = "data/spread_positions.json";
 pub const RANDOM_TABLES_FILE: &str = "data/random_tables.json";
 pub const TABLE_ENTRIES_FILE: &str = "data/table_entries.json";
 pub const TABLE_ENTRY_TAGS_FILE: &str = "data/table_entry_tags.json";
+pub const NAME_GENERATORS_FILE: &str = "data/name_generators.json";
 /// Card picture files live under this folder inside the zip.
 pub const CARD_ASSET_DIR: &str = "assets/cards/";
 
@@ -92,6 +94,7 @@ pub struct Counts {
     pub random_tables: u32,
     pub table_entries: u32,
     pub table_entry_tags: u32,
+    pub name_generators: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -281,6 +284,10 @@ pub struct RandomTableRecord {
 pub struct TableEntryRecord {
     pub id: String,
     pub table_id: String,
+    /// Which list of a name generator this belongs to ("full", "first", "middle" or "last");
+    /// empty for a table's entries. Older packs have no such field.
+    #[serde(default)]
+    pub part: String,
     pub position: i64,
     pub text: String,
     pub weight: i64,
@@ -297,4 +304,19 @@ pub struct TableEntryTagRecord {
     pub created_at: i64,
     pub updated_at: i64,
     pub deleted_at: Option<i64>,
+}
+
+/// A name generator's settings (the generator itself is an item; its lists are table entries).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NameGeneratorRecord {
+    pub item_id: String,
+    pub notes: String,
+    pub mode: String,
+    pub join1: String,
+    pub join2: String,
+    pub capitalisation: String,
+    pub merge_doubles: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
