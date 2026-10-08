@@ -49,6 +49,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "create_documents",
         sql: include_str!("../../migrations/0007_create_documents.sql"),
     },
+    Migration {
+        version: 8,
+        name: "pack_origin",
+        sql: include_str!("../../migrations/0008_pack_origin.sql"),
+    },
 ];
 
 #[derive(Debug)]

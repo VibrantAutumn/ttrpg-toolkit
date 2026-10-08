@@ -143,6 +143,24 @@ button.link.name {
   font-size: 0.85rem;
 }
 
+.import-pack {
+  margin-top: 0.5rem;
+}
+
+.pack-preview {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.pack-preview ul {
+  margin: 0.25rem 0 0.75rem;
+  padding-left: 1.25rem;
+}
+
 .link-picker {
   margin: 0.5rem 0;
   padding: 0.5rem;

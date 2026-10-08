@@ -13,7 +13,10 @@ use crate::db::links;
 use crate::db::tags::{self, Tag, TagLink};
 use crate::db::trash::{self, Trash};
 use crate::db::{self, search, settings};
+use crate::pack::import::{ImportResult, PackPreview};
+use crate::pack::{self, PackError};
 use rusqlite::Connection;
+use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::State;
 
 type Db<'a> = State<'a, db::Db>;
@@ -22,6 +25,23 @@ type Db<'a> = State<'a, db::Db>;
 fn with_conn<T>(db: &db::Db, f: impl FnOnce(&Connection) -> Result<T, DbError>) -> Result<T, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     f(&conn).map_err(|e| e.to_string())
+}
+
+/// Like `with_conn`, for pack operations (their errors have their own friendly text).
+fn with_conn_pack<T>(
+    db: &db::Db,
+    f: impl FnOnce(&Connection) -> Result<T, PackError>,
+) -> Result<T, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    f(&conn).map_err(|e| e.to_string())
+}
+
+/// The raw bytes a file was sent as (see `src/api/packs.ts`).
+fn raw_body<'a>(request: &'a Request<'_>) -> Result<&'a [u8], String> {
+    match request.body() {
+        InvokeBody::Raw(bytes) => Ok(bytes),
+        _ => Err("Expected the contents of a file.".to_string()),
+    }
 }
 
 // ---- Diagnostics ----
@@ -74,6 +94,34 @@ pub fn get_current_campaign(db: Db) -> Result<Option<Campaign>, String> {
 #[tauri::command]
 pub fn set_current_campaign(db: Db, id: String) -> Result<Campaign, String> {
     with_conn(&db, |c| settings::set_current_campaign(c, &id, db::now_ms()))
+}
+
+// ---- Content packs ----
+// These are `async` so a big pack is read or written off the main thread and
+// the window doesn't freeze meanwhile.
+
+/// The pack file's bytes for one campaign (JavaScript saves them where the user chooses).
+#[tauri::command]
+pub async fn export_campaign_pack(db: Db<'_>, campaign_id: String) -> Result<Response, String> {
+    let bytes = with_conn_pack(&db, |c| {
+        pack::export::export_campaign(c, &campaign_id, db::now_ms())
+    })?;
+    Ok(Response::new(bytes))
+}
+
+/// Reads a pack and describes it, without importing anything.
+#[tauri::command]
+pub async fn preview_pack(request: Request<'_>) -> Result<PackPreview, String> {
+    let bytes = raw_body(&request)?;
+    let parsed = pack::import::read_pack(bytes).map_err(|e| e.to_string())?;
+    Ok(pack::import::preview(&parsed))
+}
+
+/// Imports a pack as a new campaign.
+#[tauri::command]
+pub async fn import_pack(db: Db<'_>, request: Request<'_>) -> Result<ImportResult, String> {
+    let bytes = raw_body(&request)?;
+    with_conn_pack(&db, |c| pack::import::import_pack(c, bytes, db::now_ms()))
 }
 
 // ---- Library: folders ----

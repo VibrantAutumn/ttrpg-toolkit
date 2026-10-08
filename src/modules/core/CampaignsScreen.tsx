@@ -8,7 +8,12 @@ import {
   renameCampaign,
   restoreCampaign,
 } from "../../api/campaigns";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeFile } from "@tauri-apps/plugin-fs";
+import { exportCampaignPack } from "../../api/packs";
+import { packFileName } from "../../lib/packs";
 import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { ImportPack } from "./ImportPack";
 
 export function CampaignsScreen() {
   const current = useCurrentCampaign();
@@ -18,6 +23,7 @@ export function CampaignsScreen() {
   const [editName, setEditName] = useState("");
   const [justDeleted, setJustDeleted] = useState<Campaign | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const [schemaVersion, setSchemaVersion] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
@@ -46,6 +52,21 @@ export function CampaignsScreen() {
     setEditName(c.name);
   }
 
+  /** Builds the campaign's pack, asks where to save it, and writes the file. */
+  async function exportCampaign(c: Campaign) {
+    setStatus(null);
+    try {
+      const bytes = await exportCampaignPack(c.id);
+      const target = await save({ defaultPath: packFileName(c.name) });
+      if (!target) return; // the user cancelled
+      await writeFile(target, bytes);
+      setStatus(`Exported “${c.name}”.`);
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   return (
     <section>
       <h1>Campaigns</h1>
@@ -69,7 +90,10 @@ export function CampaignsScreen() {
         <button type="submit">Create</button>
       </form>
 
+      <ImportPack onImported={() => run(async () => {})} />
+
       {error && <p className="error">{error}</p>}
+      {status && <p className="notice">{status}</p>}
 
       {justDeleted && (
         <p className="notice">
@@ -117,7 +141,7 @@ export function CampaignsScreen() {
                   </button>
                 </form>
               ) : (
-                <div className="row">
+                <div className="row wrap">
                   <span className="name">{c.name}</span>
                   {current.campaign?.id === c.id ? (
                     <span className="badge">✓ Open</span>
@@ -125,6 +149,7 @@ export function CampaignsScreen() {
                     <button onClick={() => run(() => current.open(c.id))}>Open</button>
                   )}
                   <button onClick={() => startEditing(c)}>Rename</button>
+                  <button onClick={() => exportCampaign(c)}>Export</button>
                   <button
                     onClick={() =>
                       run(async () => {
