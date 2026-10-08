@@ -1,4 +1,5 @@
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
+import type { Item } from "../api/library";
 
 /** What a command can do to the app when it runs. Grows as the app does. */
 export interface AppContext {
@@ -32,6 +33,27 @@ export interface WidgetDefinition {
   component: ComponentType;
 }
 
+/**
+ * What a type found that refers to an item by name, offered before the item is
+ * renamed (e.g. table slots that use a table's name). The person sees `preview`
+ * and chooses to rename with or without the update.
+ */
+export interface RenameReview {
+  /** What would change, shown before renaming. */
+  preview: ReactNode;
+  /** One line for the notice after the update, e.g. "Updated 4 slots in 3 entries." */
+  summary: string;
+  /** False when nothing can be updated automatically (the review is then only a heads-up). */
+  canUpdate: boolean;
+  /** Makes the update (all or nothing). */
+  update(): Promise<void>;
+  /** Puts things back as they were before `update`. */
+  undo(): Promise<void>;
+}
+
+/** Looks for things that refer to `item` by name; null when nothing needs attention. */
+export type RenameReviewer = (item: Item, newName: string) => Promise<RenameReview | null>;
+
 /** A kind of library item (e.g. a document), owned by one tool. */
 export interface ItemTypeDefinition {
   id: string;
@@ -42,6 +64,8 @@ export interface ItemTypeDefinition {
   creatable?: boolean;
   /** The editor shown on the item's page, if this type has content to edit. */
   editor?: ComponentType<{ itemId: string }>;
+  /** Offered before an item of this type is renamed, when other things refer to it by name. */
+  renameReview?: RenameReviewer;
 }
 
 /** An action the command palette can list and run. */

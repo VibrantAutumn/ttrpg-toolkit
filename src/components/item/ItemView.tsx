@@ -8,7 +8,6 @@ import {
   listLinks,
   listTags,
   removeLink,
-  renameItem,
   restoreItem,
   type Item,
   type Tag,
@@ -16,6 +15,7 @@ import {
 import { registry } from "../../registry";
 import { useNavigation } from "../../state/Navigation";
 import { bumpDataVersion } from "../../state/dataVersion";
+import { useRenameItem } from "../../state/renameReview";
 import { ConfirmButton } from "../ConfirmButton";
 import { TagChips } from "../library/TagChips";
 import { TagEditor } from "../library/TagEditor";
@@ -25,6 +25,7 @@ import { LinkPicker } from "./LinkPicker";
 /** One item's page: what it is, what it links to, and what links to it. */
 export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => void }) {
   const { openItem } = useNavigation();
+  const renameReviewed = useRenameItem();
   const [item, setItem] = useState<Item | null>(null);
   const [tags, setTags] = useState<Tag[]>([]);
   const [outgoing, setOutgoing] = useState<Item[]>([]);
@@ -141,7 +142,7 @@ export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => voi
               onSubmit={(e) => {
                 e.preventDefault();
                 run(async () => {
-                  await renameItem(item.id, newName);
+                  await renameReviewed(item, newName);
                   setRenaming(false);
                 });
               }}

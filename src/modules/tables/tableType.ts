@@ -1,4 +1,5 @@
 import type { ItemTypeDefinition } from "../../registry/types";
+import { reviewTableRename } from "./renameReview";
 import { TableEditor } from "./TableEditor";
 
 export const tableType: ItemTypeDefinition = {
@@ -7,4 +8,5 @@ export const tableType: ItemTypeDefinition = {
   icon: "📋",
   toolId: "tables",
   editor: TableEditor,
+  renameReview: reviewTableRename,
 };

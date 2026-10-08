@@ -6,6 +6,7 @@ import { StatusBar } from "./components/StatusBar";
 import { registry } from "./registry";
 import { CurrentCampaignProvider, useCurrentCampaign } from "./state/CurrentCampaign";
 import { NavigationProvider } from "./state/Navigation";
+import { RenameReviewProvider } from "./state/renameReview";
 import { rollLog } from "./state/rollLog";
 import "./App.css";
 
@@ -108,7 +109,9 @@ function Shell() {
 function App() {
   return (
     <CurrentCampaignProvider>
-      <Shell />
+      <RenameReviewProvider>
+        <Shell />
+      </RenameReviewProvider>
     </CurrentCampaignProvider>
   );
 }

@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addTableEntries,
+  clearTableRecent,
   deleteTableEntry,
   getTable,
   moveTableEntry,
   restoreTableEntry,
+  setTableNotes,
   setTableOptions,
   type TableDetail,
 } from "../../api/tables";
 import { LogEntryView } from "../../components/results/LogEntryView";
+import { createAutosaver, type Autosaver, type SaveStatus } from "../../lib/autosave";
 import { entryRanges, formatRange, rangeNote } from "../../lib/tables/ranges";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useRollLog } from "../../state/rollLog";
@@ -16,8 +19,16 @@ import { rollTableById } from "../../state/tableActions";
 import { EntryRow } from "./EntryRow";
 import { SlotChoicesProvider } from "./SlotChoices";
 
-/** The most sides the die of a table can have (matches the Rust limit). */
+/** The most sides the die of a table can have, and the most entries "avoid recent" can skip (match the Rust limits). */
 const MAX_DIE = 1000;
+const MAX_AVOID = 50;
+
+const STATUS_LABEL: Record<SaveStatus, string> = {
+  saved: "Saved",
+  dirty: "Unsaved changes",
+  saving: "Saving...",
+  error: "Couldn't save",
+};
 
 /**
  * A table's page: roll it, set its die, and edit its entries (text, weight or
@@ -39,6 +50,11 @@ function TableEditorBody({ itemId }: { itemId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [dieText, setDieText] = useState("");
+  const [avoidText, setAvoidText] = useState("0");
+  const [notes, setNotes] = useState("");
+  const [notesStatus, setNotesStatus] = useState<SaveStatus>("saved");
+  const notesSaver = useRef<Autosaver | null>(null);
+  const firstLoad = useRef(true);
   const [newText, setNewText] = useState("");
   const [manyText, setManyText] = useState("");
   const [undo, setUndo] = useState<{ entryId: string; text: string } | null>(null);
@@ -48,6 +64,11 @@ function TableEditorBody({ itemId }: { itemId: string }) {
       const detail = await getTable(itemId);
       setTable(detail);
       setDieText(detail.dieSize === null ? "" : String(detail.dieSize));
+      setAvoidText(String(detail.avoidRecent));
+      if (firstLoad.current) {
+        firstLoad.current = false;
+        setNotes(detail.notes); // later reloads never overwrite notes being typed
+      }
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -58,6 +79,24 @@ function TableEditorBody({ itemId }: { itemId: string }) {
   useEffect(() => {
     void load();
   }, [load, dataVersion]);
+
+  useEffect(() => {
+    const autosaver = createAutosaver({
+      save: (text) => setTableNotes(itemId, text),
+      delayMs: 800,
+      onStatus: (status) => setNotesStatus(status),
+    });
+    notesSaver.current = autosaver;
+    const saveWhenHidden = () => {
+      if (document.visibilityState === "hidden") void autosaver.flush();
+    };
+    document.addEventListener("visibilitychange", saveWhenHidden);
+    return () => {
+      document.removeEventListener("visibilitychange", saveWhenHidden);
+      void autosaver.flush(); // don't lose the last edits when leaving the page
+      notesSaver.current = null;
+    };
+  }, [itemId]);
 
   const latest = useMemo(() => log.find((e) => e.kind === "table" && e.tableId === itemId), [log, itemId]);
 
@@ -163,6 +202,26 @@ function TableEditorBody({ itemId }: { itemId: string }) {
     });
   }
 
+  async function saveAvoid() {
+    const trimmed = avoidText.trim();
+    const avoid = trimmed === "" ? 0 : Number(trimmed);
+    if (!Number.isInteger(avoid) || avoid < 0 || avoid > MAX_AVOID) {
+      setError(`Avoid recent can skip between 0 and ${MAX_AVOID} entries.`);
+      return;
+    }
+    await run(async () => {
+      await setTableOptions(itemId, table!.dieSize, avoid);
+      await load();
+    });
+  }
+
+  async function forgetRecent() {
+    await run(async () => {
+      await clearTableRecent(itemId);
+      setMessage("Forgot the recent rolls of this table.");
+    });
+  }
+
   return (
     <div className="table-editor">
       {table.duplicateName && (
@@ -191,31 +250,64 @@ function TableEditorBody({ itemId }: { itemId: string }) {
         weight is how many places it takes: type a number (3) or a range (11–30, which means 20 wide). Its place in the
         table's numbers follows from the order and the weights; 0 means never picked.
       </p>
-      <form
-        className="row wrap"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void saveDie();
-        }}
-      >
-        <label>
-          Printed die{" "}
-          <input
-            type="number"
-            inputMode="numeric"
-            min={2}
-            max={MAX_DIE}
-            value={dieText}
-            onChange={(e) => setDieText(e.currentTarget.value)}
-            placeholder="none"
-            className="narrow"
-          />
-        </label>
-        <button type="submit" disabled={dieText.trim() === (table.dieSize === null ? "" : String(table.dieSize))}>
-          Set
-        </button>
-        <small className="meta">Optional: the die a book's version of this table uses (d20, d100...).</small>
-      </form>
+      <details className="table-options">
+        <summary>Table options: avoid recent, printed die, forget recent rolls</summary>
+        <form
+          className="row wrap"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void saveDie();
+          }}
+        >
+          <label>
+            Printed die{" "}
+            <input
+              type="number"
+              inputMode="numeric"
+              min={2}
+              max={MAX_DIE}
+              value={dieText}
+              onChange={(e) => setDieText(e.currentTarget.value)}
+              placeholder="none"
+              className="narrow"
+            />
+          </label>
+          <button type="submit" disabled={dieText.trim() === (table.dieSize === null ? "" : String(table.dieSize))}>
+            Set
+          </button>
+          <small className="meta">Optional: the die a book's version of this table uses (d20, d100...).</small>
+        </form>
+        <form
+          className="row wrap"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void saveAvoid();
+          }}
+        >
+          <label>
+            Avoid recent{" "}
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={MAX_AVOID}
+              value={avoidText}
+              onChange={(e) => setAvoidText(e.currentTarget.value)}
+              className="narrow"
+            />
+          </label>
+          <button type="submit" disabled={avoidText.trim() === String(table.avoidRecent)}>
+            Set
+          </button>
+          <button type="button" onClick={() => void forgetRecent()}>
+            Forget recent rolls
+          </button>
+          <small className="meta">
+            Skip the last N entries rolled from this table, so they don't repeat right away (0 = off). If every entry
+            would be skipped, the rule is dropped for that roll.
+          </small>
+        </form>
+      </details>
       {note && <p className="meta" role="status">{note}</p>}
 
       {table.entries.length === 0 ? (
@@ -280,6 +372,23 @@ function TableEditorBody({ itemId }: { itemId: string }) {
           Add these entries
         </button>
       </details>
+
+      <label className="field">
+        <span>Notes</span>
+        <textarea
+          value={notes}
+          onChange={(e) => {
+            setNotes(e.currentTarget.value);
+            notesSaver.current?.change(e.currentTarget.value);
+          }}
+          onBlur={() => void notesSaver.current?.flush()}
+          placeholder="What this table is for, where it came from..."
+          rows={4}
+        />
+      </label>
+      <p className={notesStatus === "error" ? "error" : "meta"} role="status">
+        {STATUS_LABEL[notesStatus]}
+      </p>
 
       {error && <p className="error" role="alert">{error}</p>}
       {message && <p className="meta" role="status">{message}</p>}

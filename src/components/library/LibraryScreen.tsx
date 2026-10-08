@@ -13,7 +13,6 @@ import {
   moveFolder,
   moveItem,
   renameFolder,
-  renameItem,
   restoreFolder,
   restoreItem,
   searchItems,
@@ -27,6 +26,7 @@ import type { ItemTypeDefinition } from "../../registry/types";
 import { useCurrentCampaign } from "../../state/CurrentCampaign";
 import { useNavigation } from "../../state/Navigation";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
+import { useRenameItem } from "../../state/renameReview";
 import { ConfirmButton } from "../ConfirmButton";
 import { childFolders, folderOptions, folderPath, tagsByItem } from "./helpers";
 import { TagChips } from "./TagChips";
@@ -57,6 +57,7 @@ export function LibraryScreen({
 }) {
   const { campaign, loading } = useCurrentCampaign();
   const { openItem } = useNavigation();
+  const renameReviewed = useRenameItem();
   const campaignId = campaign?.id ?? null;
   // Changes made elsewhere (an item's page, saving a roll) make this list reload.
   const dataVersion = useDataVersion();
@@ -283,7 +284,7 @@ export function LibraryScreen({
     return (
       <li key={item.id}>
         {mode === "rename" ? (
-          renameForm((name) => renameItem(item.id, name))
+          renameForm((name) => renameReviewed(item, name))
         ) : mode === "move" ? (
           moveForm(item.folderId, null, (target) => moveItem(item.id, target))
         ) : (
