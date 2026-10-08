@@ -15,6 +15,7 @@ pub mod search;
 pub mod settings;
 pub mod spreads;
 pub mod starters;
+pub mod tables;
 pub mod tags;
 pub mod trash;
 

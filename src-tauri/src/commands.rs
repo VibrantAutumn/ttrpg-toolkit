@@ -15,6 +15,7 @@ use crate::db::formulas::{self, Formula, FormulaEntry};
 use crate::db::links;
 use crate::db::spreads::{self, PositionInput, Spread, SpreadEntry};
 use crate::db::starters::{self, InstallResult};
+use crate::db::tables::{self, Entry, EntryInput, EntryRef, EntryTextUpdate, Pick, RollableTable, TableDetail, TableSummary};
 use crate::db::play_decks::{self, NewPlayDeck, PlayDeck, PlayDeckEntry};
 use crate::db::saved_draws::{self, NewSavedDraw, SavedDraw};
 use crate::db::saved_rolls::{self, NewSavedRoll, SavedRoll};
@@ -379,6 +380,95 @@ pub fn set_spread_reversals(db: Db, item_id: String, reversals: bool, percent: i
 #[tauri::command]
 pub fn list_spreads(db: Db, campaign_id: String) -> Result<Vec<SpreadEntry>, String> {
     with_conn(&db, |c| spreads::list(c, &campaign_id))
+}
+
+// ---- Random tables ----
+
+#[tauri::command]
+pub fn get_table(db: Db, item_id: String) -> Result<TableDetail, String> {
+    with_conn(&db, |c| tables::get(c, &item_id))
+}
+
+#[tauri::command]
+pub fn set_table_notes(db: Db, item_id: String, notes: String) -> Result<(), String> {
+    with_conn(&db, |c| tables::set_notes(c, &item_id, &notes, db::now_ms()))
+}
+
+/// Sets the optional die size and how many recent entries to skip.
+#[tauri::command]
+pub fn set_table_options(db: Db, item_id: String, die_size: Option<i64>, avoid_recent: i64) -> Result<(), String> {
+    with_conn(&db, |c| tables::set_options(c, &item_id, die_size, avoid_recent, db::now_ms()))
+}
+
+/// Adds entries at the end of a table (all or nothing).
+#[tauri::command]
+pub fn add_table_entries(db: Db, table_id: String, entries: Vec<EntryInput>) -> Result<Vec<Entry>, String> {
+    with_conn(&db, |c| tables::add_entries(c, &table_id, &entries, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn update_table_entry(db: Db, entry_id: String, text: String, weight: i64) -> Result<(), String> {
+    with_conn(&db, |c| tables::update_entry(c, &entry_id, &text, weight, db::now_ms()))
+}
+
+/// Rewrites the text of several entries together (all or nothing).
+#[tauri::command]
+pub fn set_table_entry_texts(db: Db, updates: Vec<EntryTextUpdate>) -> Result<(), String> {
+    with_conn(&db, |c| tables::set_entry_texts(c, &updates, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn delete_table_entry(db: Db, entry_id: String) -> Result<(), String> {
+    with_conn(&db, |c| tables::delete_entry(c, &entry_id, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn restore_table_entry(db: Db, entry_id: String) -> Result<(), String> {
+    with_conn(&db, |c| tables::restore_entry(c, &entry_id, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn move_table_entry(db: Db, entry_id: String, to_index: usize) -> Result<(), String> {
+    with_conn(&db, |c| tables::move_entry(c, &entry_id, to_index, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn add_table_entry_tag(db: Db, entry_id: String, tag_id: String) -> Result<(), String> {
+    with_conn(&db, |c| tables::add_entry_tag(c, &entry_id, &tag_id, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn remove_table_entry_tag(db: Db, entry_id: String, tag_id: String) -> Result<(), String> {
+    with_conn(&db, |c| tables::remove_entry_tag(c, &entry_id, &tag_id, db::now_ms()))
+}
+
+/// Every table in the campaign, with its entry count and whether its name is shared.
+#[tauri::command]
+pub fn list_tables(db: Db, campaign_id: String) -> Result<Vec<TableSummary>, String> {
+    with_conn(&db, |c| tables::list(c, &campaign_id))
+}
+
+/// Every table with its entries and recent picks, ready to roll without more lookups.
+#[tauri::command]
+pub fn load_rollable_tables(db: Db, campaign_id: String) -> Result<Vec<RollableTable>, String> {
+    with_conn(&db, |c| tables::load_rollable(c, &campaign_id))
+}
+
+/// Entries whose text contains a name (candidates for rewriting slots after a rename).
+#[tauri::command]
+pub fn find_entries_mentioning(db: Db, campaign_id: String, needle: String) -> Result<Vec<EntryRef>, String> {
+    with_conn(&db, |c| tables::entries_mentioning(c, &campaign_id, &needle))
+}
+
+/// Remembers the entries a roll picked, for "avoid recent".
+#[tauri::command]
+pub fn record_table_recent(db: Db, picks: Vec<Pick>) -> Result<(), String> {
+    with_conn(&db, |c| tables::record_recent(c, &picks, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn clear_table_recent(db: Db, table_id: String) -> Result<(), String> {
+    with_conn(&db, |c| tables::clear_recent(c, &table_id))
 }
 
 // ---- Content packs ----
