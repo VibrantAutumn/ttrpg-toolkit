@@ -14,6 +14,7 @@ import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useRollLog } from "../../state/rollLog";
 import { rollTableById } from "../../state/tableActions";
 import { EntryRow } from "./EntryRow";
+import { SlotChoicesProvider } from "./SlotChoices";
 
 /** The most sides the die of a table can have (matches the Rust limit). */
 const MAX_DIE = 1000;
@@ -24,6 +25,14 @@ const MAX_DIE = 1000;
  * library lists, and a deleted entry can be brought back with Undo.
  */
 export function TableEditor({ itemId }: { itemId: string }) {
+  return (
+    <SlotChoicesProvider>
+      <TableEditorBody itemId={itemId} />
+    </SlotChoicesProvider>
+  );
+}
+
+function TableEditorBody({ itemId }: { itemId: string }) {
   const dataVersion = useDataVersion();
   const log = useRollLog();
   const [table, setTable] = useState<TableDetail | null>(null); // null while loading
@@ -80,6 +89,9 @@ export function TableEditor({ itemId }: { itemId: string }) {
 
   const patchEntry = (id: string, text: string, weight: number) =>
     setTable((t) => t && { ...t, entries: t.entries.map((e) => (e.id === id ? { ...e, text, weight } : e)) });
+
+  const patchTags = (id: string, tagIds: string[]) =>
+    setTable((t) => t && { ...t, entries: t.entries.map((e) => (e.id === id ? { ...e, tagIds } : e)) });
 
   async function addOne() {
     if (newText.trim() === "") return;
@@ -218,6 +230,7 @@ export function TableEditor({ itemId }: { itemId: string }) {
               canMoveUp={i > 0}
               canMoveDown={i < table.entries.length - 1}
               onSaved={patchEntry}
+              onTagsChanged={patchTags}
               onMove={(id, by) => void move(id, by)}
               onDelete={(id) => void remove(id)}
             />

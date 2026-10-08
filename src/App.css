@@ -672,3 +672,85 @@ input.narrow {
 .table-add {
   margin: 1rem 0;
 }
+
+/* Table entry text: slot chips inside the text */
+.entry-text {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.entry-editor,
+.entry-static {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+
+.entry-static {
+  cursor: text;
+}
+
+.entry-editor p {
+  margin: 0;
+}
+
+.entry-editor:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.slot-chip {
+  display: inline-block;
+  margin: 0 0.1rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  line-height: 1.5;
+  cursor: pointer;
+  user-select: none;
+  white-space: normal;
+}
+
+.slot-chip::after {
+  content: attr(data-icon) " " attr(data-display);
+}
+
+.slot-chip.slot-unknown {
+  border-style: dashed;
+}
+
+.slot-chip.slot-error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.ProseMirror-selectednode.slot-chip {
+  outline: 2px solid var(--accent);
+}
+
+.insert-slot {
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.entry-tags {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.entry-tags .tag-editor {
+  flex: 1 1 100%;
+}

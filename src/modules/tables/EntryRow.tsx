@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { updateTableEntry, type TableEntry } from "../../api/tables";
 import { createAutosaver, type Autosaver, type SaveStatus } from "../../lib/autosave";
 import { parseWeightInput } from "../../lib/tables/ranges";
+import { EntryTags } from "./EntryTags";
+import { EntryText } from "./EntryText";
 
 const STATUS_LABEL: Record<SaveStatus, string> = {
   saved: "Saved",
@@ -21,6 +23,7 @@ export function EntryRow({
   canMoveUp,
   canMoveDown,
   onSaved,
+  onTagsChanged,
   onMove,
   onDelete,
 }: {
@@ -30,6 +33,7 @@ export function EntryRow({
   canMoveUp: boolean;
   canMoveDown: boolean;
   onSaved: (id: string, text: string, weight: number) => void;
+  onTagsChanged: (id: string, tagIds: string[]) => void;
   onMove: (id: string, by: -1 | 1) => void;
   onDelete: (id: string) => void;
 }) {
@@ -93,12 +97,11 @@ export function EntryRow({
         <span className="entry-range" title="Where this entry sits among the table's numbers">
           {rangeText}
         </span>
-        <textarea
+        <EntryText
           value={text}
-          onChange={(e) => edit(e.currentTarget.value, weightText)}
-          onBlur={() => void saver.current?.flush()}
-          aria-label={`Text of the entry at ${rangeText}`}
-          rows={2}
+          onChange={(t) => edit(t, weightText)}
+          onFlush={() => void saver.current?.flush()}
+          ariaLabel={`Text of the entry at ${rangeText}`}
         />
       </div>
       <div className="row wrap mini-actions">
@@ -128,6 +131,7 @@ export function EntryRow({
         </small>
       </div>
       {problem && <p className="error" role="alert">{problem}</p>}
+      <EntryTags entryId={entry.id} tagIds={entry.tagIds} onChanged={onTagsChanged} />
     </li>
   );
 }
