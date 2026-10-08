@@ -8,6 +8,7 @@ pub mod formulas;
 pub mod items;
 pub mod links;
 pub mod migrations;
+pub mod name_presets;
 pub mod play_decks;
 pub mod saved_draws;
 pub mod saved_rolls;

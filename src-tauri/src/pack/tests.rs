@@ -6,6 +6,7 @@ use crate::db::cards::{self, test_images};
 use crate::db::collections;
 use crate::db::formulas;
 use crate::db::spreads::{self, PositionInput};
+use crate::db::name_presets;
 use crate::db::tables::{self, EntryInput, Pick};
 use crate::db::play_decks::{self, NewPlayDeck};
 use crate::db::saved_draws::{self, NewSavedDraw};
@@ -170,6 +171,11 @@ mind the [Rumors]".into(), weight: 1 },
     let hooks = items::create(conn, c, "tables", "table", "Hooks", None, 4200).unwrap();
     tables::add_entry(conn, &hooks.id, "[3 unique Rumors] and [table:Rumors as R] [R]", 1, 4210).unwrap();
 
+    // A saved name setup (its table and tag ids are made-up ones here, so the whole campaign can be
+    // compared by content; a test of its own checks that real ids follow the import).
+    let preset = r#"{"version":1,"mode":"two","sources":{"first":"some-table","last":"another-table"},"tagIds":["some-tag"],"tagMatch":"any","join1":"apostrophe","join2":"none","capitalisation":"everyPart","mergeDoubles":true}"#;
+    name_presets::create(conn, c, "Elven name", None, preset, 4400).unwrap();
+
     camp.id
 }
 
@@ -213,6 +219,7 @@ struct Snapshot {
     random_tables: Vec<String>,
     table_entries: Vec<String>,
     table_entry_tags: Vec<String>,
+    name_presets: Vec<String>,
 }
 
 fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
@@ -276,6 +283,9 @@ fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
             "SELECT i.name, e.text, t.name, l.created_at, l.updated_at, l.deleted_at
              FROM table_entry_tags l JOIN table_entries e ON e.id = l.entry_id
              JOIN items i ON i.id = e.table_id JOIN tags t ON t.id = l.tag_id WHERE i.campaign_id = ?1", campaign_id),
+        name_presets: lines(conn,
+            "SELECT i.name, i.library, p.setup_json, p.created_at, p.updated_at, i.deleted_at
+             FROM name_presets p JOIN items i ON i.id = p.item_id WHERE i.campaign_id = ?1", campaign_id),
     }
 }
 
@@ -326,13 +336,13 @@ fn the_manifest_describes_the_pack() {
     assert_eq!(
         m.counts,
         // 4 documents have text: Strahd, Ireena, Barovia and Old Note ("Scrap" and the map have none).
-        // The saved rolls, formulas and cards are items too (21 items: 5 documents, a map, 2 rolls,
-        // 2 formulas, 3 cards, a set, a deck, a pool, a saved draw, a deck in play, a spread and 2 tables). 2 cards have details, 1 a picture, 7 membership rows.
+        // The saved rolls, formulas and cards are items too (22 items: 5 documents, a map, 2 rolls,
+        // 2 formulas, 3 cards, a set, a deck, a pool, a saved draw, a deck in play, a spread, 2 tables and a name preset). 2 cards have details, 1 a picture, 7 membership rows.
         // 1 table has settings; the 2 tables have 4 entries in all (one deleted) and 2 entry tags (one removed).
         Counts {
-            folders: 3, items: 21, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 2, formulas: 2,
+            folders: 3, items: 22, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 2, formulas: 2,
             card_details: 2, collection_members: 7, card_images: 1, saved_draws: 1, play_decks: 1, spreads: 1, spread_positions: 3,
-            random_tables: 1, table_entries: 4, table_entry_tags: 2,
+            random_tables: 1, table_entries: 4, table_entry_tags: 2, name_presets: 1,
         }
     );
     assert_eq!(pack.counts(), m.counts);
@@ -362,7 +372,7 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
         )
         .unwrap();
     assert_eq!(shared, 0);
-    assert_eq!(count(&conn, "items"), 42);
+    assert_eq!(count(&conn, "items"), 44);
 }
 
 #[test]
@@ -410,7 +420,7 @@ fn imported_items_remember_where_they_came_from() {
             .map(|r| r.unwrap())
             .collect()
     };
-    assert_eq!(rows.len(), 21);
+    assert_eq!(rows.len(), 22);
     for (name, origin_pack, origin_item) in rows {
         assert_eq!(origin_pack.as_deref(), Some(pack_id.as_str()), "{name}");
         // The origin id is the item's id in the ORIGINAL campaign.
@@ -682,7 +692,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
     assert!(pack.warnings.iter().all(|w| w.chars().next().unwrap().is_ascii_digit()));
     assert_eq!(
         pack.counts(),
-        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0 }
+        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0 }
     );
 
     let conn = open_in_memory();
@@ -803,7 +813,7 @@ fn the_committed_version_1_pack_still_imports() {
     assert_eq!(result.campaign.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0 }
+        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0 }
     );
     let camp = result.campaign.id;
 
@@ -1618,6 +1628,122 @@ fn a_failed_import_also_rolls_back_tables() {
     target.execute_batch("DROP TABLE table_entry_tags").unwrap();
     assert!(import_pack(&target, &bytes, 6000).is_err());
     for table in ["campaigns", "items", "random_tables", "table_entries", "table_recent"] {
+        assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
+    }
+}
+
+// ------------------------------------------------------ name generator presets
+
+fn preset_setup(conn: &Connection, id: &str) -> serde_json::Value {
+    serde_json::from_str(&name_presets::get(conn, id).unwrap().setup_json).unwrap()
+}
+
+#[test]
+fn a_preset_follows_its_tables_and_tags_to_the_imported_copies() {
+    let conn = open_in_memory();
+    let camp = campaigns::create(&conn, "Names", 1).unwrap().id;
+    let prefixes = items::create(&conn, &camp, "tables", "table", "Elf prefixes", None, 2).unwrap();
+    let suffixes = items::create(&conn, &camp, "tables", "table", "Elf suffixes", None, 3).unwrap();
+    let elf = tags::create(&conn, &camp, None, "Elf", None, 4).unwrap();
+    let setup = json!({
+        "version": 1, "mode": "two",
+        "sources": { "first": prefixes.id, "last": suffixes.id },
+        "tagIds": [elf.id, "a-tag-that-is-not-in-the-pack"],
+        "tagMatch": "all", "join1": "apostrophe", "join2": "none",
+        "capitalisation": "everyPart", "mergeDoubles": true
+    });
+    let preset = name_presets::create(&conn, &camp, "Elven name", None, &setup.to_string(), 5).unwrap();
+
+    let bytes = export_campaign(&conn, &camp, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+
+    let find = |campaign: &str, name: &str| {
+        items::list(&conn, campaign, "tables", None).unwrap().into_iter().find(|i| i.name == name).unwrap()
+    };
+    let new_preset = find(&imported, "Elven name");
+    assert_ne!(new_preset.id, preset.id);
+    let got = preset_setup(&conn, &new_preset.id);
+
+    // Tables and tags are the imported campaign's own; ids not in the pack and the rules are left as they were.
+    assert_eq!(got["sources"]["first"], json!(find(&imported, "Elf prefixes").id));
+    assert_eq!(got["sources"]["last"], json!(find(&imported, "Elf suffixes").id));
+    let imported_elf = tags::list(&conn, &imported).unwrap().into_iter().find(|t| t.name == "Elf").unwrap();
+    assert_eq!(got["tagIds"], json!([imported_elf.id, "a-tag-that-is-not-in-the-pack"]));
+    for key in ["version", "mode", "tagMatch", "join1", "join2", "capitalisation", "mergeDoubles"] {
+        assert_eq!(got[key], setup[key], "{key}");
+    }
+    // The original preset still points at the original tables.
+    assert_eq!(preset_setup(&conn, &preset.id), setup);
+    assert_eq!(search::search(&conn, &imported, "elven", Some("tables"), 10).unwrap().len(), 1);
+}
+
+#[test]
+fn a_preset_keeps_its_trash_state_and_old_packs_have_no_presets() {
+    let conn = open_in_memory();
+    let camp = campaigns::create(&conn, "Names", 1).unwrap().id;
+    let keep = name_presets::create(&conn, &camp, "Keep", None, "{}", 2).unwrap();
+    let gone = name_presets::create(&conn, &camp, "Gone", None, "{}", 3).unwrap();
+    items::soft_delete(&conn, &gone.id, 4).unwrap();
+    let imported = import_pack(&conn, &export_campaign(&conn, &camp, 5000).unwrap(), 6000).unwrap().campaign.id;
+    let live = name_presets::list(&conn, &imported).unwrap();
+    assert_eq!(live.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Keep"]);
+    assert_ne!(live[0].item_id, keep.id);
+    // The trashed one came back as trashed, and restores.
+    let trashed = items::list(&conn, &imported, "tables", None).unwrap();
+    assert!(trashed.iter().all(|i| i.name != "Gone"));
+    let id: String = conn
+        .query_row(
+            "SELECT id FROM items WHERE campaign_id = ?1 AND name = 'Gone' AND deleted_at IS NOT NULL",
+            [&imported],
+            |r| r.get(0),
+        )
+        .unwrap();
+    crate::db::trash::restore_item(&conn, &id, 7000).unwrap();
+    assert_eq!(name_presets::list(&conn, &imported).unwrap().len(), 2);
+
+    let pack = read_pack(&pack_with(&[])).unwrap();
+    assert_eq!(pack.name_presets.len(), 0);
+    assert!(pack.warnings.is_empty());
+}
+
+#[test]
+fn bad_preset_data_in_a_pack_is_skipped_with_warnings() {
+    let item = |id: &str, kind: &str| json!({
+        "id": id, "library": "tables", "itemType": kind, "name": id, "icon": null,
+        "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null
+    });
+    let preset = |id: &str, setup: &str| json!({ "itemId": id, "setupJson": setup, "createdAt": 1, "updatedAt": 1 });
+    let big = format!(r#"{{"x":"{}"}}"#, "a".repeat(name_presets::MAX_SETUP_BYTES));
+    let bytes = pack_with(&[
+        (ITEMS_FILE, json!([item("p", "name_preset"), item("t", "table"), item("p2", "name_preset"), item("p3", "name_preset")])),
+        (NAME_PRESETS_FILE, json!([
+            preset("p", r#"{"mode":"two"}"#),
+            preset("p", r#"{"mode":"three"}"#), // twice
+            preset("t", "{}"),                   // not a preset
+            preset("ghost", "{}"),               // nothing there
+            preset("p2", "[1, 2]"),              // not an object
+            preset("p3", &big),                  // too big
+        ])),
+    ]);
+    let pack = read_pack(&bytes).unwrap();
+    assert_eq!(pack.name_presets.len(), 1);
+    assert!(pack.warnings.iter().any(|w| w.starts_with("5 name preset(s)")), "{:?}", pack.warnings);
+    let conn = open_in_memory();
+    let camp = import_parsed(&conn, &pack, 10).unwrap().campaign.id;
+    let rows = name_presets::list(&conn, &camp).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].setup_json, r#"{"mode":"two"}"#);
+}
+
+#[test]
+fn a_failed_import_also_rolls_back_presets() {
+    let source = open_in_memory();
+    let camp = populate(&source);
+    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let target = open_in_memory();
+    target.execute_batch("DROP TABLE name_presets").unwrap();
+    assert!(import_pack(&target, &bytes, 6000).is_err());
+    for table in ["campaigns", "items", "random_tables", "table_entries"] {
         assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
     }
 }

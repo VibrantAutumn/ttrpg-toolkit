@@ -13,6 +13,7 @@ use crate::db::folders::{self, Folder};
 use crate::db::items::{self, Item};
 use crate::db::formulas::{self, Formula, FormulaEntry};
 use crate::db::links;
+use crate::db::name_presets::{self, NamePreset, PresetEntry};
 use crate::db::spreads::{self, PositionInput, Spread, SpreadEntry};
 use crate::db::starters::{self, InstallResult};
 use crate::db::tables::{self, Entry, EntryInput, EntryRef, EntryTextUpdate, Pick, RollableTable, TableDetail, TableSummary};
@@ -469,6 +470,39 @@ pub fn record_table_recent(db: Db, picks: Vec<Pick>) -> Result<(), String> {
 #[tauri::command]
 pub fn clear_table_recent(db: Db, table_id: String) -> Result<(), String> {
     with_conn(&db, |c| tables::clear_recent(c, &table_id))
+}
+
+// ---- Name generator presets ----
+
+/// Saves a name setup as a new item in the Tables library. (The app has checked
+/// the setup's shape; the database only keeps it.)
+#[tauri::command]
+pub fn create_name_preset(
+    db: Db,
+    campaign_id: String,
+    name: String,
+    folder_id: Option<String>,
+    setup_json: String,
+) -> Result<Item, String> {
+    with_conn(&db, |c| {
+        name_presets::create(c, &campaign_id, &name, folder_id.as_deref(), &setup_json, db::now_ms())
+    })
+}
+
+#[tauri::command]
+pub fn get_name_preset(db: Db, item_id: String) -> Result<NamePreset, String> {
+    with_conn(&db, |c| name_presets::get(c, &item_id))
+}
+
+#[tauri::command]
+pub fn set_name_preset_setup(db: Db, item_id: String, setup_json: String) -> Result<(), String> {
+    with_conn(&db, |c| name_presets::set_setup(c, &item_id, &setup_json, db::now_ms()))
+}
+
+/// Every name preset in the campaign, for the Names tab's list.
+#[tauri::command]
+pub fn list_name_presets(db: Db, campaign_id: String) -> Result<Vec<PresetEntry>, String> {
+    with_conn(&db, |c| name_presets::list(c, &campaign_id))
 }
 
 // ---- Content packs ----

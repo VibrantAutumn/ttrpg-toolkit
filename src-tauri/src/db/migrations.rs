@@ -99,6 +99,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "remove_name_generators",
         sql: include_str!("../../migrations/0017_remove_name_generators.sql"),
     },
+    Migration {
+        version: 18,
+        name: "create_name_presets",
+        sql: include_str!("../../migrations/0018_create_name_presets.sql"),
+    },
 ];
 
 #[derive(Debug)]

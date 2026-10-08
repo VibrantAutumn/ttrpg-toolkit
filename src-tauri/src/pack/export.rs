@@ -34,6 +34,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     let random_tables = read_random_tables(conn, campaign_id)?;
     let table_entries = read_table_entries(conn, campaign_id)?;
     let table_entry_tags = read_table_entry_tags(conn, campaign_id)?;
+    let name_presets = read_name_presets(conn, campaign_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -62,6 +63,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
             random_tables: random_tables.len() as u32,
             table_entries: table_entries.len() as u32,
             table_entry_tags: table_entry_tags.len() as u32,
+            name_presets: name_presets.len() as u32,
         },
     };
 
@@ -84,6 +86,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     put(&mut zip, options, RANDOM_TABLES_FILE, &random_tables, false)?;
     put(&mut zip, options, TABLE_ENTRIES_FILE, &table_entries, false)?;
     put(&mut zip, options, TABLE_ENTRY_TAGS_FILE, &table_entry_tags, false)?;
+    put(&mut zip, options, NAME_PRESETS_FILE, &name_presets, false)?;
     put(&mut zip, options, COLLECTION_MEMBERS_FILE, &collection_members, false)?;
     let image_records: Vec<CardImageRecord> = card_images.iter().map(|(r, _, _)| r.clone()).collect();
     put(&mut zip, options, CARD_IMAGES_FILE, &image_records, false)?;
@@ -489,6 +492,18 @@ fn read_table_entry_tags(conn: &Connection, campaign_id: &str) -> Result<Vec<Tab
             updated_at: r.get(3)?,
             deleted_at: r.get(4)?,
         })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_name_presets(conn: &Connection, campaign_id: &str) -> Result<Vec<NamePresetRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT p.item_id, p.setup_json, p.created_at, p.updated_at
+         FROM name_presets p JOIN items i ON i.id = p.item_id
+         WHERE i.campaign_id = ?1 ORDER BY p.created_at, p.item_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(NamePresetRecord { item_id: r.get(0)?, setup_json: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)? })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
 }

@@ -9,7 +9,9 @@
 use super::format::*;
 use super::PackError;
 use crate::db::campaigns::{self, Campaign};
-use crate::db::{cards, collections, documents, formulas, play_decks, saved_draws, saved_rolls, settings, spreads, tables};
+use crate::db::{
+    cards, collections, documents, formulas, name_presets, play_decks, saved_draws, saved_rolls, settings, spreads, tables,
+};
 use rusqlite::{params, Connection, ErrorCode};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -58,6 +60,7 @@ pub struct ParsedPack {
     pub random_tables: Vec<RandomTableRecord>,
     pub table_entries: Vec<TableEntryRecord>,
     pub table_entry_tags: Vec<TableEntryTagRecord>,
+    pub name_presets: Vec<NamePresetRecord>,
     /// Plain-language notes about anything that had to be fixed or skipped.
     pub warnings: Vec<String>,
 }
@@ -84,6 +87,7 @@ impl ParsedPack {
             random_tables: self.random_tables.len() as u32,
             table_entries: self.table_entries.len() as u32,
             table_entry_tags: self.table_entry_tags.len() as u32,
+            name_presets: self.name_presets.len() as u32,
         }
     }
 }
@@ -179,6 +183,7 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         random_tables: read_list(&mut archive, RANDOM_TABLES_FILE, limits, &mut total)?,
         table_entries: read_list(&mut archive, TABLE_ENTRIES_FILE, limits, &mut total)?,
         table_entry_tags: read_list(&mut archive, TABLE_ENTRY_TAGS_FILE, limits, &mut total)?,
+        name_presets: read_list(&mut archive, NAME_PRESETS_FILE, limits, &mut total)?,
         warnings: Vec::new(),
     };
     sanitize(&mut pack);
@@ -665,6 +670,15 @@ fn sanitize(pack: &mut ParsedPack) {
     });
     note(before - pack.table_entry_tags.len(), "tag(s) on table entries referred to something missing and were skipped.");
 
+    let before = pack.name_presets.len();
+    let mut seen = HashSet::new();
+    pack.name_presets.retain(|p| {
+        item_type.get(p.item_id.as_str()) == Some(&name_presets::PRESET_TYPE)
+            && name_presets::validate(&p.setup_json).is_ok()
+            && seen.insert(p.item_id.clone())
+    });
+    note(before - pack.name_presets.len(), "name preset(s) belonged to something missing or were unreadable and were skipped.");
+
     pack.warnings = warnings;
 }
 
@@ -899,6 +913,18 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
             "INSERT INTO table_entry_tags (entry_id, tag_id, created_at, updated_at, deleted_at)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![entry_ids[&l.entry_id], tag_ids[&l.tag_id], l.created_at, l.updated_at, l.deleted_at],
+        )
+        .map_err(db_error)?;
+    }
+    // A preset remembers its tables and tags by id: point them at the imported copies
+    // (ids that aren't in the pack are left alone, and the preset then asks for another).
+    let mut preset_ids = item_ids.clone();
+    preset_ids.extend(tag_ids.iter().map(|(old, new)| (old.clone(), new.clone())));
+    for p in &pack.name_presets {
+        let setup_json = remapped_json(&p.setup_json, &preset_ids);
+        tx.execute(
+            "INSERT INTO name_presets (item_id, setup_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            params![item_ids[&p.item_id], setup_json, p.created_at, p.updated_at],
         )
         .map_err(db_error)?;
     }
