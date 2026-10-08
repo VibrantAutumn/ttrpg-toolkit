@@ -3,7 +3,7 @@ import { listCollections, listPlayDecks, type PlayDeckEntry } from "../../api/ca
 import type { Item } from "../../api/library";
 import { RollLogList } from "../../components/results/RollLogList";
 import { useCurrentCampaign } from "../../state/CurrentCampaign";
-import { useDataVersion } from "../../state/dataVersion";
+import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
 import { drawFromPlayDeck } from "../../state/playActions";
 import { cardTypeIcon } from "./icons";
@@ -49,6 +49,8 @@ export function DrawTab() {
   async function drawFromGame(playId: string) {
     const outcome = await drawFromPlayDeck(playId, playCount.trim() === "" ? NaN : Number(playCount));
     setError(outcome.ok ? null : outcome.message);
+    // If the game turned out to be gone, reload the list so it stops being offered.
+    if (!outcome.ok) bumpDataVersion();
   }
 
   return (

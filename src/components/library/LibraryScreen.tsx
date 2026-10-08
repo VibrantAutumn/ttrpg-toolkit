@@ -26,7 +26,7 @@ import {
 import type { ItemTypeDefinition } from "../../registry/types";
 import { useCurrentCampaign } from "../../state/CurrentCampaign";
 import { useNavigation } from "../../state/Navigation";
-import { useDataVersion } from "../../state/dataVersion";
+import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { ConfirmButton } from "../ConfirmButton";
 import { childFolders, folderOptions, folderPath, tagsByItem } from "./helpers";
 import { TagChips } from "./TagChips";
@@ -105,6 +105,9 @@ export function LibraryScreen({
       try {
         await action();
         await reload();
+        // Other screens built from library data (the Draw tab's games, formulas...)
+        // stay mounted too, so tell them: they would otherwise list things that are gone.
+        bumpDataVersion();
         setError(null);
       } catch (e) {
         setError(String(e));
