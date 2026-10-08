@@ -1,6 +1,6 @@
 # TTRPG Toolkit
 
-A personal, local-first, system-agnostic TTRPG toolkit for Windows and Android, shared with a small group of friends and built in nine phases. **Current phase: 1 (Foundation).**
+A personal, local-first, system-agnostic TTRPG toolkit for Windows and Android, shared with a small group of friends and built in nine phases. **Current phase: 1 (Foundation) is complete; Phase 2 (dice, results, cards) is next.**
 
 The full spec is [spec.md](spec.md). This file is a summary; when the two disagree, the spec wins (and tell Katie so the spec can be updated).
 
@@ -45,7 +45,7 @@ The full spec is [spec.md](spec.md). This file is a summary; when the two disagr
 - [x] Links and backlinks (links table, item page, link picker, back-stack; verified on Windows and phone)
 - [x] Plain document editor (Markdown text, autosave, text search; verified on Windows and phone)
 - [ ] Basic command palette
-- [ ] Content pack export/import (backups)
+- [x] Content pack export/import (backups) (verified PC to phone and phone to PC)
 - [x] Test build running on Android (template app confirmed running on a physical phone)
 
 Later phases: 2 Dice, results, cards · 3 Random tables · 4 Worldbuilding · 5 Rulesets and encounters · 6 Time · 7 Maps · 8 GM screen and polish · 9 Sync and sharing.
