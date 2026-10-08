@@ -6,5 +6,6 @@ export const savedRollType: ItemTypeDefinition = {
   label: "Saved roll",
   icon: "🎲",
   toolId: "dice",
+  creatable: false, // saved from the roll log
   editor: SavedRollView,
 };

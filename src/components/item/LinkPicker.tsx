@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { searchItems, type Item } from "../../api/library";
+import { createItem, searchItems, type Item } from "../../api/library";
+import { registry } from "../../registry";
 import { itemIcon, libraryLabel } from "./itemDisplay";
 
 /**
- * Search the open campaign (every tool at once) and pick an item to link to.
- * Items in `excludeIds` (the item itself, and ones already linked) are left out.
+ * Search the open campaign (every tool at once) and pick an item to link to, or
+ * make a new item right here and link to that. Items in `excludeIds` (the item
+ * itself, and ones already linked) are left out.
  */
 export function LinkPicker({
   campaignId,
@@ -20,6 +22,23 @@ export function LinkPicker({
   const [text, setText] = useState("");
   const [results, setResults] = useState<Item[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newType, setNewType] = useState("");
+  const [newName, setNewName] = useState("");
+
+  // The kinds of item that can be made from just a name (some, like saved rolls, are made elsewhere).
+  const creatable = registry.getItemTypes().filter((t) => t.creatable !== false);
+  const chosenType = creatable.find((t) => t.id === newType) ?? creatable[0];
+
+  async function createAndPick() {
+    if (!chosenType || newName.trim() === "") return;
+    try {
+      const made = await createItem(campaignId, chosenType.toolId, chosenType.id, newName, null);
+      onPick(made);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
 
   useEffect(() => {
     const query = text.trim();
@@ -70,6 +89,54 @@ export function LinkPicker({
           </li>
         ))}
       </ul>
+      {chosenType && (
+        <div className="link-create">
+          {creating ? (
+            <form
+              className="row wrap"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void createAndPick();
+              }}
+            >
+              <select
+                value={chosenType.id}
+                onChange={(e) => setNewType(e.currentTarget.value)}
+                aria-label="What kind of item to create"
+              >
+                {creatable.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.icon} {t.label} ({registry.getTool(t.toolId)?.label ?? t.toolId})
+                  </option>
+                ))}
+              </select>
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.currentTarget.value)}
+                placeholder="Name of the new item"
+                aria-label="Name of the new item"
+                autoFocus
+              />
+              <button type="submit" disabled={newName.trim() === ""}>
+                Create and link
+              </button>
+              <button type="button" onClick={() => setCreating(false)}>
+                Back
+              </button>
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setNewName(text.trim());
+                setCreating(true);
+              }}
+            >
+              Create a new item to link to…
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

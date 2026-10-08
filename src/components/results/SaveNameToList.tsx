@@ -1,17 +1,23 @@
 import { useEffect, useState } from "react";
+import { createItem } from "../../api/library";
 import { listTables, type TableSummary } from "../../api/tables";
 import { useCurrentCampaign } from "../../state/CurrentCampaign";
 import { saveNameToTable } from "../../state/nameActions";
 
+/** The drop-down's value for "make a new table". Table ids are UUIDs, so this can't clash. */
+const NEW_TABLE = "new-table";
+
 /**
  * "Save to list": adds a generated name to a table you choose, as a new entry
- * (so a name you like can be rolled again later or kept with its tags).
+ * (so a name you like can be rolled again later or kept with its tags), or to a
+ * new table made right here.
  */
 export function SaveNameToList({ name }: { name: string }) {
   const { campaign } = useCurrentCampaign();
   const [open, setOpen] = useState(false);
   const [tables, setTables] = useState<TableSummary[]>([]);
   const [chosen, setChosen] = useState("");
+  const [newName, setNewName] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,12 +32,24 @@ export function SaveNameToList({ name }: { name: string }) {
     };
   }, [open, campaign]);
 
+  const making = chosen === NEW_TABLE;
+  const ready = making ? newName.trim() !== "" : chosen !== "";
+
   async function save() {
-    const table = tables.find((t) => t.itemId === chosen);
-    if (!table) return;
+    if (!campaign || !ready) return;
     try {
-      await saveNameToTable(table.itemId, name);
-      setNote(`Added “${name}” to “${table.name}”.`);
+      if (making) {
+        const table = await createItem(campaign.id, "tables", "table", newName, null);
+        await saveNameToTable(table.id, name);
+        setNote(`Made the table “${table.name}” and added “${name}” to it.`);
+        setNewName("");
+        setChosen("");
+      } else {
+        const table = tables.find((t) => t.itemId === chosen);
+        if (!table) return;
+        await saveNameToTable(table.itemId, name);
+        setNote(`Added “${name}” to “${table.name}”.`);
+      }
       setError(null);
       setOpen(false);
     } catch (e) {
@@ -45,7 +63,13 @@ export function SaveNameToList({ name }: { name: string }) {
         Save to list
       </button>
       {open && (
-        <div className="row wrap">
+        <form
+          className="row wrap"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
           <select value={chosen} onChange={(e) => setChosen(e.currentTarget.value)} aria-label="Table to add the name to">
             <option value="">Choose a table...</option>
             {tables.map((t) => (
@@ -53,11 +77,21 @@ export function SaveNameToList({ name }: { name: string }) {
                 {t.name}
               </option>
             ))}
+            <option value={NEW_TABLE}>＋ New table…</option>
           </select>
-          <button onClick={() => void save()} disabled={chosen === ""}>
-            Add
+          {making && (
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.currentTarget.value)}
+              placeholder="Name of the new table"
+              aria-label="Name of the new table"
+              autoFocus
+            />
+          )}
+          <button type="submit" disabled={!ready}>
+            {making ? "Create and add" : "Add"}
           </button>
-        </div>
+        </form>
       )}
       {note && <p className="meta" role="status">{note}</p>}
       {error && <p className="error" role="alert">{error}</p>}

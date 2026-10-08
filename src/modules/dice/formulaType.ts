@@ -6,5 +6,6 @@ export const formulaType: ItemTypeDefinition = {
   label: "Formula",
   icon: "🧮",
   toolId: "dice",
+  creatable: false, // made from the Roll tab, which checks the notation
   editor: FormulaView,
 };
