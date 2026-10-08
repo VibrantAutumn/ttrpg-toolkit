@@ -14,10 +14,12 @@ export function DrawPanel({
   sourceId,
   sourceName,
   showResult = true,
+  showHeading = true,
 }: {
   sourceId: string;
   sourceName: string;
   showResult?: boolean;
+  showHeading?: boolean;
 }) {
   const dataVersion = useDataVersion();
   const log = useRollLog();
@@ -59,7 +61,7 @@ export function DrawPanel({
 
   return (
     <div className="draw-panel">
-      <h2>Draw</h2>
+      {showHeading && <h2>Draw</h2>}
       <p className="meta">
         {cards === null
           ? "Loading..."

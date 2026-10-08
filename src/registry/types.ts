@@ -3,6 +3,8 @@ import type { ComponentType } from "react";
 /** What a command can do to the app when it runs. Grows as the app does. */
 export interface AppContext {
   openTool: (toolId: string) => void;
+  /** Opens the quick tools panel (the small tools kept at hand over any screen). */
+  openQuickTools: () => void;
 }
 
 /** A section of the app with its own screen (shown in the navigation). */
@@ -12,6 +14,20 @@ export interface ToolDefinition {
   /** Emoji for now; may become an icon name later. */
   icon: string;
   /** Lower numbers appear first in the navigation. */
+  order: number;
+  component: ComponentType;
+}
+
+/**
+ * A small tool for the quick tools panel (a roller, a draw box...). It is just a
+ * component; the panel supplies the frame, the collapse button and the order.
+ */
+export interface WidgetDefinition {
+  id: string;
+  label: string;
+  /** Emoji for now; may become an icon name later. */
+  icon: string;
+  /** Lower numbers appear first in the panel. */
   order: number;
   component: ComponentType;
 }
@@ -43,4 +59,5 @@ export interface ModuleDefinition {
   tools?: ToolDefinition[];
   itemTypes?: ItemTypeDefinition[];
   commands?: CommandDefinition[];
+  widgets?: WidgetDefinition[];
 }

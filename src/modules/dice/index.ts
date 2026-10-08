@@ -1,6 +1,7 @@
 import type { ModuleDefinition } from "../../registry/types";
 import { DiceScreen } from "./DiceScreen";
 import { formulaType } from "./formulaType";
+import { QuickRollerWidget } from "./QuickRollerWidget";
 import { savedRollType } from "./savedRollType";
 
 /** Rolling dice (the notation parser lives in `lib/dice`), the roll log, formulas and saved rolls. */
@@ -16,6 +17,9 @@ export const diceModule: ModuleDefinition = {
     },
   ],
   itemTypes: [formulaType, savedRollType],
+  widgets: [
+    { id: "dice.quick-roller", label: "Quick roller", icon: "🎲", order: 10, component: QuickRollerWidget },
+  ],
   commands: [
     {
       id: "dice.open",

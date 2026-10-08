@@ -6,8 +6,11 @@ import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
 import { rollLog } from "../../state/rollLog";
 
-/** Your saved formulas, one tap to roll, plus a small form to add another. */
-export function FormulaList() {
+/**
+ * Your saved formulas, one tap to roll, plus a small form to add another. `compact`
+ * (the quick tools panel) leaves out the heading and the form: make formulas in the Dice tool.
+ */
+export function FormulaList({ compact = false }: { compact?: boolean }) {
   const { campaign } = useCurrentCampaign();
   const { openItem } = useNavigation();
   const dataVersion = useDataVersion();
@@ -59,13 +62,17 @@ export function FormulaList() {
 
   return (
     <div>
-      <h2>Formulas</h2>
+      {!compact && <h2>Formulas</h2>}
       {!campaignId ? (
         <p className="empty">Choose a campaign to save formulas.</p>
       ) : (
         <>
           {formulas.length === 0 ? (
-            <p className="empty">No formulas yet. Add one below, like “Attack” with 1d20+5.</p>
+            <p className="empty">
+              {compact
+                ? "No saved formulas yet. Make them in the Dice tool."
+                : "No formulas yet. Add one below, like “Attack” with 1d20+5."}
+            </p>
           ) : (
             <ul className="list">
               {formulas.map((f) => (
@@ -81,6 +88,7 @@ export function FormulaList() {
               ))}
             </ul>
           )}
+          {!compact && (
           <form
             className="row wrap"
             onSubmit={(e) => {
@@ -105,6 +113,7 @@ export function FormulaList() {
             />
             <button type="submit">Add formula</button>
           </form>
+          )}
           {error && <p className="error" role="alert">{error}</p>}
         </>
       )}

@@ -3,6 +3,7 @@ import type {
   ItemTypeDefinition,
   ModuleDefinition,
   ToolDefinition,
+  WidgetDefinition,
 } from "./types";
 
 /**
@@ -14,6 +15,7 @@ export function createRegistry() {
   const tools = new Map<string, ToolDefinition>();
   const itemTypes = new Map<string, ItemTypeDefinition>();
   const commands = new Map<string, CommandDefinition>();
+  const widgets = new Map<string, WidgetDefinition>();
 
   /** Adds each item to `target`, refusing duplicate ids. */
   function addAll<T extends { id: string }>(
@@ -40,14 +42,17 @@ export function createRegistry() {
     const nextTools = new Map(tools);
     const nextItemTypes = new Map(itemTypes);
     const nextCommands = new Map(commands);
+    const nextWidgets = new Map(widgets);
     addAll("tool", module.id, nextTools, module.tools);
     addAll("item type", module.id, nextItemTypes, module.itemTypes);
     addAll("command", module.id, nextCommands, module.commands);
+    addAll("widget", module.id, nextWidgets, module.widgets);
 
     modules.set(module.id, module);
     nextTools.forEach((v, k) => tools.set(k, v));
     nextItemTypes.forEach((v, k) => itemTypes.set(k, v));
     nextCommands.forEach((v, k) => commands.set(k, v));
+    nextWidgets.forEach((v, k) => widgets.set(k, v));
   }
 
   return {
@@ -62,6 +67,10 @@ export function createRegistry() {
     getItemType: (id: string) => itemTypes.get(id),
     getCommands: () => [...commands.values()],
     getCommand: (id: string) => commands.get(id),
+    /** Quick tools panel widgets in panel order (by `order`, then label). */
+    getWidgets: () =>
+      [...widgets.values()].sort((a, b) => a.order - b.order || a.label.localeCompare(b.label)),
+    getWidget: (id: string) => widgets.get(id),
   };
 }
 

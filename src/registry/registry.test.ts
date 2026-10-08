@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { createRegistry } from "./registry";
-import type { ModuleDefinition, ToolDefinition } from "./types";
+import type { ModuleDefinition, ToolDefinition, WidgetDefinition } from "./types";
 
 const Dummy = () => null;
 
 function tool(id: string, order = 100, label = id): ToolDefinition {
   return { id, label, icon: "T", order, component: Dummy };
+}
+
+function widget(id: string, order = 100, label = id): WidgetDefinition {
+  return { id, label, icon: "W", order, component: Dummy };
 }
 
 describe("registry", () => {
@@ -78,5 +82,37 @@ describe("registry", () => {
     // And the failed module's id is free to be registered again once fixed.
     registry.register({ id: "two", tools: [tool("fresh")] });
     expect(registry.getTool("fresh")).toBeDefined();
+  });
+
+  describe("widgets (the small tools in the quick tools panel)", () => {
+    it("returns what a module contributes, by id", () => {
+      const registry = createRegistry();
+      registry.register({ id: "m", widgets: [widget("roller", 10, "Roller")] });
+      expect(registry.getWidget("roller")?.label).toBe("Roller");
+      expect(registry.getWidget("nope")).toBeUndefined();
+    });
+
+    it("has none until a module adds some", () => {
+      const registry = createRegistry();
+      registry.register({ id: "empty" });
+      expect(registry.getWidgets()).toEqual([]);
+    });
+
+    it("sorts by order, then by label, across modules", () => {
+      const registry = createRegistry();
+      registry.register({ id: "a", widgets: [widget("b", 20, "Beta"), widget("c", 10, "Charlie")] });
+      registry.register({ id: "b", widgets: [widget("a", 20, "Alpha")] });
+      expect(registry.getWidgets().map((w) => w.id)).toEqual(["c", "a", "b"]);
+    });
+
+    it("rejects duplicate widget ids, and leaves the registry unchanged when it does", () => {
+      const registry = createRegistry();
+      registry.register({ id: "one", widgets: [widget("taken")] });
+      expect(() =>
+        registry.register({ id: "two", tools: [tool("fresh-tool")], widgets: [widget("fresh"), widget("taken")] }),
+      ).toThrow(/Duplicate widget id "taken"/);
+      expect(registry.getWidget("fresh")).toBeUndefined();
+      expect(registry.getTool("fresh-tool")).toBeUndefined();
+    });
   });
 });

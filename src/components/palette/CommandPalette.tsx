@@ -18,9 +18,11 @@ type Result =
 export function CommandPalette({
   onClose,
   onOpenTool,
+  onOpenQuickTools,
 }: {
   onClose: () => void;
   onOpenTool: (toolId: string) => void;
+  onOpenQuickTools: () => void;
 }) {
   const { campaign } = useCurrentCampaign();
   const { openItem } = useNavigation();
@@ -61,7 +63,7 @@ export function CommandPalette({
   function choose(result: Result) {
     onClose();
     if (result.kind === "command") {
-      result.command.run({ openTool: onOpenTool });
+      result.command.run({ openTool: onOpenTool, openQuickTools: onOpenQuickTools });
     } else {
       openItem(result.item.id);
     }

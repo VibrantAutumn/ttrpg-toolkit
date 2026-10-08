@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ItemView } from "./components/item/ItemView";
 import { CommandPalette } from "./components/palette/CommandPalette";
+import { QuickToolsPanel } from "./components/quick/QuickToolsPanel";
 import { StatusBar } from "./components/StatusBar";
 import { registry } from "./registry";
 import { CurrentCampaignProvider, useCurrentCampaign } from "./state/CurrentCampaign";
@@ -38,13 +39,18 @@ function Shell() {
     setActiveId(id);
   }
 
-  // Ctrl+K (Cmd+K on a Mac) opens or closes the command palette.
+  // Ctrl+K (Cmd+K on a Mac) opens or closes the command palette; Ctrl+J the quick tools panel.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const openQuickTools = useCallback(() => setQuickOpen(true), []);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((open) => !open);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        setQuickOpen((open) => !open);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -56,13 +62,19 @@ function Shell() {
       <div className="shell">
         <StatusBar
           onChangeCampaign={() =>
-            registry.getCommand("core.open-campaigns")?.run({ openTool })
+            registry.getCommand("core.open-campaigns")?.run({ openTool, openQuickTools })
           }
           onOpenPalette={() => setPaletteOpen(true)}
+          onToggleQuickTools={() => setQuickOpen((open) => !open)}
         />
         {paletteOpen && (
-          <CommandPalette onClose={() => setPaletteOpen(false)} onOpenTool={openTool} />
+          <CommandPalette
+            onClose={() => setPaletteOpen(false)}
+            onOpenTool={openTool}
+            onOpenQuickTools={openQuickTools}
+          />
         )}
+        {quickOpen && <QuickToolsPanel onClose={() => setQuickOpen(false)} />}
         <nav className="nav" aria-label="Tools">
           {tools.map((t) => (
             <button

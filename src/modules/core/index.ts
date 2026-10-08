@@ -20,5 +20,11 @@ export const coreModule: ModuleDefinition = {
       keywords: ["campaign", "switch", "list"],
       run: (ctx) => ctx.openTool("campaigns"),
     },
+    {
+      id: "core.quick-tools",
+      label: "Open quick tools",
+      keywords: ["quick", "panel", "widgets", "roll", "draw", "tools"],
+      run: (ctx) => ctx.openQuickTools(),
+    },
   ],
 };
