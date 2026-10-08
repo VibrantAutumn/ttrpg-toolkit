@@ -94,6 +94,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "create_name_generators",
         sql: include_str!("../../migrations/0016_create_name_generators.sql"),
     },
+    Migration {
+        version: 17,
+        name: "remove_name_generators",
+        sql: include_str!("../../migrations/0017_remove_name_generators.sql"),
+    },
 ];
 
 #[derive(Debug)]
@@ -214,6 +219,54 @@ mod tests {
         assert!(migrate(&mut conn, &bad).is_err());
         assert_eq!(current_version(&conn).unwrap(), 0);
         assert!(!table_exists(&conn, "half_done"));
+    }
+
+    #[test]
+    fn a_database_that_had_name_generators_loses_them_cleanly() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", true).unwrap();
+        migrate(&mut conn, &MIGRATIONS[..16]).unwrap();
+        conn.execute("INSERT INTO campaigns (id, name, created_at, updated_at) VALUES ('c', 'C', 1, 1)", []).unwrap();
+        let item = |id: &str, kind: &str| {
+            conn.execute(
+                "INSERT INTO items (id, campaign_id, library, item_type, name, created_at, updated_at)
+                 VALUES (?1, 'c', 'tables', ?2, ?1, 1, 1)",
+                [id, kind],
+            )
+            .unwrap();
+        };
+        item("gen", "name_generator");
+        item("tab", "table");
+        let entry = |id: &str, owner: &str, part: &str| {
+            conn.execute(
+                "INSERT INTO table_entries (id, table_id, part, position, text, weight, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, 1, 'text', 1, 1, 1)",
+                [id, owner, part],
+            )
+            .unwrap();
+        };
+        entry("gen-entry", "gen", "first");
+        entry("tab-entry", "tab", "");
+        conn.execute("INSERT INTO name_generators (item_id, created_at, updated_at) VALUES ('gen', 1, 1)", []).unwrap();
+
+        assert_eq!(migrate(&mut conn, MIGRATIONS).unwrap(), MIGRATIONS.last().unwrap().version);
+
+        // The generator and everything of its own are gone; the table is untouched.
+        assert!(!table_exists(&conn, "name_generators"));
+        let count = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap();
+        assert_eq!(count("SELECT COUNT(*) FROM items WHERE item_type = 'name_generator'"), 0);
+        assert_eq!(count("SELECT COUNT(*) FROM items WHERE id = 'tab'"), 1);
+        assert_eq!(count("SELECT COUNT(*) FROM table_entries"), 1);
+        assert_eq!(count("SELECT COUNT(*) FROM pragma_table_info('table_entries') WHERE name = 'part'"), 0);
+        // Entries can still be added and changed (the search triggers work again).
+        conn.execute(
+            "INSERT INTO table_entries (id, table_id, position, text, weight, created_at, updated_at)
+             VALUES ('more', 'tab', 2, 'a dragon', 1, 1, 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute("UPDATE table_entries SET text = 'a kraken' WHERE id = 'more'", []).unwrap();
+        conn.execute("DELETE FROM table_entries WHERE id = 'more'", []).unwrap();
     }
 
     #[test]

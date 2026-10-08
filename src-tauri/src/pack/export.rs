@@ -34,7 +34,6 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     let random_tables = read_random_tables(conn, campaign_id)?;
     let table_entries = read_table_entries(conn, campaign_id)?;
     let table_entry_tags = read_table_entry_tags(conn, campaign_id)?;
-    let name_generators = read_name_generators(conn, campaign_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -63,7 +62,6 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
             random_tables: random_tables.len() as u32,
             table_entries: table_entries.len() as u32,
             table_entry_tags: table_entry_tags.len() as u32,
-            name_generators: name_generators.len() as u32,
         },
     };
 
@@ -86,7 +84,6 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     put(&mut zip, options, RANDOM_TABLES_FILE, &random_tables, false)?;
     put(&mut zip, options, TABLE_ENTRIES_FILE, &table_entries, false)?;
     put(&mut zip, options, TABLE_ENTRY_TAGS_FILE, &table_entry_tags, false)?;
-    put(&mut zip, options, NAME_GENERATORS_FILE, &name_generators, false)?;
     put(&mut zip, options, COLLECTION_MEMBERS_FILE, &collection_members, false)?;
     let image_records: Vec<CardImageRecord> = card_images.iter().map(|(r, _, _)| r.clone()).collect();
     put(&mut zip, options, CARD_IMAGES_FILE, &image_records, false)?;
@@ -457,21 +454,20 @@ fn read_random_tables(conn: &Connection, campaign_id: &str) -> Result<Vec<Random
 /// Every entry, including deleted ones. (What was recently rolled is per-device memory and is not exported.)
 fn read_table_entries(conn: &Connection, campaign_id: &str) -> Result<Vec<TableEntryRecord>, PackError> {
     let mut stmt = conn.prepare(
-        "SELECT e.id, e.table_id, e.part, e.position, e.text, e.weight, e.created_at, e.updated_at, e.deleted_at
+        "SELECT e.id, e.table_id, e.position, e.text, e.weight, e.created_at, e.updated_at, e.deleted_at
          FROM table_entries e JOIN items i ON i.id = e.table_id
-         WHERE i.campaign_id = ?1 ORDER BY e.table_id, e.part, e.position, e.created_at, e.id",
+         WHERE i.campaign_id = ?1 ORDER BY e.table_id, e.position, e.created_at, e.id",
     )?;
     let rows = stmt.query_map([campaign_id], |r| {
         Ok(TableEntryRecord {
             id: r.get(0)?,
             table_id: r.get(1)?,
-            part: r.get(2)?,
-            position: r.get(3)?,
-            text: r.get(4)?,
-            weight: r.get(5)?,
-            created_at: r.get(6)?,
-            updated_at: r.get(7)?,
-            deleted_at: r.get(8)?,
+            position: r.get(2)?,
+            text: r.get(3)?,
+            weight: r.get(4)?,
+            created_at: r.get(5)?,
+            updated_at: r.get(6)?,
+            deleted_at: r.get(7)?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
@@ -492,28 +488,6 @@ fn read_table_entry_tags(conn: &Connection, campaign_id: &str) -> Result<Vec<Tab
             created_at: r.get(2)?,
             updated_at: r.get(3)?,
             deleted_at: r.get(4)?,
-        })
-    })?;
-    Ok(rows.collect::<Result<_, _>>()?)
-}
-
-fn read_name_generators(conn: &Connection, campaign_id: &str) -> Result<Vec<NameGeneratorRecord>, PackError> {
-    let mut stmt = conn.prepare(
-        "SELECT g.item_id, g.notes, g.mode, g.join1, g.join2, g.capitalisation, g.merge_doubles, g.created_at, g.updated_at
-         FROM name_generators g JOIN items i ON i.id = g.item_id
-         WHERE i.campaign_id = ?1 ORDER BY g.created_at, g.item_id",
-    )?;
-    let rows = stmt.query_map([campaign_id], |r| {
-        Ok(NameGeneratorRecord {
-            item_id: r.get(0)?,
-            notes: r.get(1)?,
-            mode: r.get(2)?,
-            join1: r.get(3)?,
-            join2: r.get(4)?,
-            capitalisation: r.get(5)?,
-            merge_doubles: r.get(6)?,
-            created_at: r.get(7)?,
-            updated_at: r.get(8)?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)

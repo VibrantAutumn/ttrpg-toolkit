@@ -39,7 +39,8 @@ export interface RollableTableData {
   id: string;
   name: string;
   avoidRecent: number;
-  entries: { id: string; text: string; weight: number }[];
+  /** Each entry carries its live campaign tags (ids). */
+  entries: { id: string; text: string; weight: number; tagIds: string[] }[];
   /** Entry ids recently rolled from this table, newest first. */
   recent: string[];
 }

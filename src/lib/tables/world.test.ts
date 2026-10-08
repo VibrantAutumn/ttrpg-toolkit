@@ -6,7 +6,7 @@ const data = (name: string, entries: string[], recent: string[] = [], avoidRecen
   id: name.toLowerCase(),
   name,
   avoidRecent,
-  entries: entries.map((text, i) => ({ id: `${name}-${i}`, text, weight: 1 })),
+  entries: entries.map((text, i) => ({ id: `${name}-${i}`, text, weight: 1, tagIds: [] })),
   recent,
 });
 
@@ -23,7 +23,7 @@ describe("buildWorld", () => {
   });
 
   it("gives a table's entries to the roller as they are", () => {
-    expect(world.findTable("Rumors")?.entries).toEqual([{ id: "Rumors-0", text: "a", weight: 1 }]);
+    expect(world.findTable("Rumors")?.entries).toEqual([{ id: "Rumors-0", text: "a", weight: 1, tagIds: [] }]);
   });
 
   it("finds the first table when two share a name (the list is oldest first)", () => {

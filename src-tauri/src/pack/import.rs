@@ -9,7 +9,6 @@
 use super::format::*;
 use super::PackError;
 use crate::db::campaigns::{self, Campaign};
-use crate::db::name_generators::{self, GeneratorSettings};
 use crate::db::{cards, collections, documents, formulas, play_decks, saved_draws, saved_rolls, settings, spreads, tables};
 use rusqlite::{params, Connection, ErrorCode};
 use serde::de::DeserializeOwned;
@@ -59,7 +58,6 @@ pub struct ParsedPack {
     pub random_tables: Vec<RandomTableRecord>,
     pub table_entries: Vec<TableEntryRecord>,
     pub table_entry_tags: Vec<TableEntryTagRecord>,
-    pub name_generators: Vec<NameGeneratorRecord>,
     /// Plain-language notes about anything that had to be fixed or skipped.
     pub warnings: Vec<String>,
 }
@@ -86,7 +84,6 @@ impl ParsedPack {
             random_tables: self.random_tables.len() as u32,
             table_entries: self.table_entries.len() as u32,
             table_entry_tags: self.table_entry_tags.len() as u32,
-            name_generators: self.name_generators.len() as u32,
         }
     }
 }
@@ -182,7 +179,6 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         random_tables: read_list(&mut archive, RANDOM_TABLES_FILE, limits, &mut total)?,
         table_entries: read_list(&mut archive, TABLE_ENTRIES_FILE, limits, &mut total)?,
         table_entry_tags: read_list(&mut archive, TABLE_ENTRY_TAGS_FILE, limits, &mut total)?,
-        name_generators: read_list(&mut archive, NAME_GENERATORS_FILE, limits, &mut total)?,
         warnings: Vec::new(),
     };
     sanitize(&mut pack);
@@ -408,40 +404,31 @@ fn sanitize(pack: &mut ParsedPack) {
     note(bad_visibility, "item(s) had an unknown visibility and were set to the default.");
     note(bad_folder, "item(s) pointed at a missing folder and were moved to the top level.");
 
-    // Slots find tables by name, so live tables must have different names, and name
-    // generators are held to the same rule among themselves: the older keeps its name
-    // and later ones get a number.
-    for (kind, message) in [
-        (tables::TABLE_TYPE, "table(s) had the same name as another table and were renamed with a number."),
-        (
-            name_generators::GENERATOR_TYPE,
-            "name generator(s) had the same name as another name generator and were renamed with a number.",
-        ),
-    ] {
-        let mut live: Vec<usize> = (0..pack.items.len())
-            .filter(|&i| {
-                let item = &pack.items[i];
-                item.library == tables::LIBRARY && item.item_type == kind && item.deleted_at.is_none()
-            })
-            .collect();
-        live.sort_by_key(|&i| (pack.items[i].created_at, pack.items[i].id.clone()));
-        let mut taken_names = HashSet::new();
-        let mut renamed = 0;
-        for i in live {
-            let name = pack.items[i].name.clone();
-            let mut candidate = name.clone();
-            let mut n = 2;
-            while !taken_names.insert(candidate.to_lowercase()) {
-                candidate = format!("{name} ({n})");
-                n += 1;
-            }
-            if candidate != name {
-                pack.items[i].name = candidate;
-                renamed += 1;
-            }
+    // Slots find tables by name, so live tables must have different names: the older keeps
+    // its name and later ones get a number.
+    let mut live_tables: Vec<usize> = (0..pack.items.len())
+        .filter(|&i| {
+            let item = &pack.items[i];
+            item.library == tables::LIBRARY && item.item_type == tables::TABLE_TYPE && item.deleted_at.is_none()
+        })
+        .collect();
+    live_tables.sort_by_key(|&i| (pack.items[i].created_at, pack.items[i].id.clone()));
+    let mut taken_names = HashSet::new();
+    let mut renamed_tables = 0;
+    for i in live_tables {
+        let name = pack.items[i].name.clone();
+        let mut candidate = name.clone();
+        let mut n = 2;
+        while !taken_names.insert(candidate.to_lowercase()) {
+            candidate = format!("{name} ({n})");
+            n += 1;
         }
-        note(renamed, message);
+        if candidate != name {
+            pack.items[i].name = candidate;
+            renamed_tables += 1;
+        }
     }
+    note(renamed_tables, "table(s) had the same name as another table and were renamed with a number.");
 
     // Tags
     let before = pack.tags.len();
@@ -648,38 +635,14 @@ fn sanitize(pack: &mut ParsedPack) {
     });
     note(before - pack.random_tables.len(), "table setting(s) belonged to something missing or were unreadable and were skipped.");
 
-    // Name generators: settings for generators only, readable, once each.
-    let before = pack.name_generators.len();
-    let mut seen = HashSet::new();
-    pack.name_generators.retain(|g| {
-        let settings = GeneratorSettings {
-            mode: g.mode.clone(),
-            join1: g.join1.clone(),
-            join2: g.join2.clone(),
-            capitalisation: g.capitalisation.clone(),
-            merge_doubles: g.merge_doubles,
-        };
-        item_type.get(g.item_id.as_str()) == Some(&name_generators::GENERATOR_TYPE)
-            && g.notes.len() <= cards::MAX_NOTES_BYTES
-            && name_generators::validate_settings(&settings).is_ok()
-            && seen.insert(g.item_id.clone())
-    });
-    note(before - pack.name_generators.len(), "name generator setting(s) belonged to something missing or were unreadable and were skipped.");
-
-    // Entries: for tables and name generators, readable, a unique id, and no more than 5,000 live ones per list.
+    // Entries: for tables, readable, a unique id, and no more than 5,000 live ones per table.
     let before = pack.table_entries.len();
     let mut seen = HashSet::new();
-    let mut live_per_list: HashMap<(String, String), usize> = HashMap::new();
+    let mut live_per_table: HashMap<String, usize> = HashMap::new();
     pack.table_entries.sort_by_key(|e| e.position);
     pack.table_entries.retain(|e| {
-        // A table's entries have no part; a name generator's belong to one of its lists.
-        let part_fits = match item_type.get(e.table_id.as_str()) {
-            Some(&tables::TABLE_TYPE) => e.part.is_empty(),
-            Some(&name_generators::GENERATOR_TYPE) => name_generators::PARTS.contains(&e.part.as_str()),
-            _ => false,
-        };
         let keep = !e.id.is_empty()
-            && part_fits
+            && item_type.get(e.table_id.as_str()) == Some(&tables::TABLE_TYPE)
             && tables::validate_entry(&e.text, e.weight).is_ok()
             && seen.insert(e.id.clone());
         if !keep {
@@ -688,11 +651,11 @@ fn sanitize(pack: &mut ParsedPack) {
         if e.deleted_at.is_some() {
             return true;
         }
-        let n = live_per_list.entry((e.table_id.clone(), e.part.clone())).or_insert(0);
+        let n = live_per_table.entry(e.table_id.clone()).or_insert(0);
         *n += 1;
         *n <= tables::MAX_ENTRIES
     });
-    note(before - pack.table_entries.len(), "table entry(ies) belonged to something missing, were in the wrong list, were unreadable or were beyond the 5,000 allowed, and were skipped.");
+    note(before - pack.table_entries.len(), "table entry(ies) belonged to something missing, were unreadable or were beyond the 5,000 allowed, and were skipped.");
 
     let entry_ids: HashSet<String> = pack.table_entries.iter().map(|e| e.id.clone()).collect();
     let before = pack.table_entry_tags.len();
@@ -919,24 +882,13 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
         )
         .map_err(db_error)?;
     }
-    for g in &pack.name_generators {
-        tx.execute(
-            "INSERT INTO name_generators (item_id, notes, mode, join1, join2, capitalisation, merge_doubles, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            params![
-                item_ids[&g.item_id], g.notes, g.mode, g.join1, g.join2, g.capitalisation, g.merge_doubles,
-                g.created_at, g.updated_at
-            ],
-        )
-        .map_err(db_error)?;
-    }
     let entry_ids = new_ids(pack.table_entries.iter().map(|e| e.id.as_str()).collect());
     for e in &pack.table_entries {
         tx.execute(
-            "INSERT INTO table_entries (id, table_id, part, position, text, weight, created_at, updated_at, deleted_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO table_entries (id, table_id, position, text, weight, created_at, updated_at, deleted_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
-                entry_ids[&e.id], item_ids[&e.table_id], e.part, e.position, e.text, e.weight,
+                entry_ids[&e.id], item_ids[&e.table_id], e.position, e.text, e.weight,
                 e.created_at, e.updated_at, e.deleted_at
             ],
         )
