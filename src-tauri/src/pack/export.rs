@@ -28,6 +28,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     let collection_members = read_collection_members(conn, campaign_id)?;
     let card_images = read_card_images(conn, campaign_id)?;
     let saved_draws = read_saved_draws(conn, campaign_id)?;
+    let play_decks = read_play_decks(conn, campaign_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -50,6 +51,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
             collection_members: collection_members.len() as u32,
             card_images: card_images.len() as u32,
             saved_draws: saved_draws.len() as u32,
+            play_decks: play_decks.len() as u32,
         },
     };
 
@@ -66,6 +68,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     put(&mut zip, options, FORMULAS_FILE, &formulas, false)?;
     put(&mut zip, options, CARD_DETAILS_FILE, &card_details, false)?;
     put(&mut zip, options, SAVED_DRAWS_FILE, &saved_draws, false)?;
+    put(&mut zip, options, PLAY_DECKS_FILE, &play_decks, false)?;
     put(&mut zip, options, COLLECTION_MEMBERS_FILE, &collection_members, false)?;
     let image_records: Vec<CardImageRecord> = card_images.iter().map(|(r, _, _)| r.clone()).collect();
     put(&mut zip, options, CARD_IMAGES_FILE, &image_records, false)?;
@@ -353,6 +356,25 @@ fn read_saved_draws(conn: &Connection, campaign_id: &str) -> Result<Vec<SavedDra
             notes: r.get(5)?,
             created_at: r.get(6)?,
             updated_at: r.get(7)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_play_decks(conn: &Connection, campaign_id: &str) -> Result<Vec<PlayDeckRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT p.item_id, p.source_id, p.source_name, p.state_json, p.created_at, p.updated_at
+         FROM play_decks p JOIN items i ON i.id = p.item_id
+         WHERE i.campaign_id = ?1 ORDER BY p.created_at, p.item_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(PlayDeckRecord {
+            item_id: r.get(0)?,
+            source_id: r.get(1)?,
+            source_name: r.get(2)?,
+            state_json: r.get(3)?,
+            created_at: r.get(4)?,
+            updated_at: r.get(5)?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)

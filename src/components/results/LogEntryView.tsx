@@ -7,6 +7,7 @@ import type { DiceLogEntry, DrawLogEntry, RollLogEntry } from "../../lib/results
 import { useCurrentCampaign } from "../../state/CurrentCampaign";
 import { bumpDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
+import { drawFromPlayDeck } from "../../state/playActions";
 import { rollLog } from "../../state/rollLog";
 import { DrawnCards } from "../cards/DrawnCards";
 
@@ -57,9 +58,17 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
     }
   }
 
-  /** Draws again from the same place with the same options, using the cards as they are now. */
+  /**
+   * Draws again from the same place with the same options, using the cards as they
+   * are now. For a deck in play that means the next cards from the top of that game.
+   */
   async function drawAgain(e: DrawLogEntry) {
     setNote(null);
+    if (e.playId) {
+      const outcome = await drawFromPlayDeck(e.playId, e.options.count);
+      setError(outcome.ok ? null : outcome.message);
+      return;
+    }
     try {
       const cards = await resolveCollectionCards(e.sourceId);
       const outcome = rollLog.drawFrom(

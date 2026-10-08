@@ -13,6 +13,7 @@ use crate::db::folders::{self, Folder};
 use crate::db::items::{self, Item};
 use crate::db::formulas::{self, Formula, FormulaEntry};
 use crate::db::links;
+use crate::db::play_decks::{self, NewPlayDeck, PlayDeck, PlayDeckEntry};
 use crate::db::saved_draws::{self, NewSavedDraw, SavedDraw};
 use crate::db::saved_rolls::{self, NewSavedRoll, SavedRoll};
 use crate::db::tags::{self, Tag, TagLink};
@@ -283,6 +284,49 @@ pub fn set_saved_draw_notes(db: Db, item_id: String, notes: String) -> Result<()
 #[tauri::command]
 pub fn list_collections(db: Db, campaign_id: String) -> Result<Vec<Item>, String> {
     with_conn(&db, |c| collections::list_all(c, &campaign_id))
+}
+
+// ---- Decks in play ----
+
+/// Starts a deck in play. The app has already shuffled a copy of the cards and
+/// made the state (see `src/lib/cards/play.ts`); the database only keeps it.
+#[tauri::command]
+pub fn create_play_deck(
+    db: Db,
+    campaign_id: String,
+    name: String,
+    folder_id: Option<String>,
+    source_id: Option<String>,
+    source_name: String,
+    state_json: String,
+) -> Result<Item, String> {
+    with_conn(&db, |c| {
+        let new = NewPlayDeck {
+            campaign_id: &campaign_id,
+            name: &name,
+            folder_id: folder_id.as_deref(),
+            source_id: source_id.as_deref(),
+            source_name: &source_name,
+            state_json: &state_json,
+        };
+        play_decks::create(c, new, db::now_ms()).map(|(item, _)| item)
+    })
+}
+
+#[tauri::command]
+pub fn get_play_deck(db: Db, item_id: String) -> Result<PlayDeck, String> {
+    with_conn(&db, |c| play_decks::get(c, &item_id))
+}
+
+#[tauri::command]
+pub fn set_play_deck_state(db: Db, item_id: String, state_json: String) -> Result<(), String> {
+    with_conn(&db, |c| play_decks::set_state(c, &item_id, &state_json, db::now_ms()))
+}
+
+/// Every deck in play in the campaign, with how many cards are left.
+#[tauri::command]
+pub fn list_play_decks(db: Db, campaign_id: String) -> Result<Vec<PlayDeckEntry>, String> {
+    with_conn(&db, |c| play_decks::list(c, &campaign_id))
 }
 
 // ---- Content packs ----

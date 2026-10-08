@@ -31,9 +31,11 @@ export interface DiceLogEntry extends EntryBase {
 
 export interface DrawLogEntry extends EntryBase {
   kind: "draw";
-  /** The set, deck or pool that was drawn from (it may be deleted later). */
+  /** What was drawn from: a set, deck or pool, or the deck in play itself (it may be deleted later). */
   sourceId: string;
   sourceName: string;
+  /** The deck in play this came from, or null for a plain draw from a set, deck or pool. */
+  playId: string | null;
   options: DrawOptions;
   cards: DrawnCard[];
 }
@@ -57,6 +59,15 @@ export interface RollLog {
     options: DrawOptions,
     seed?: number,
   ): DrawLogOutcome;
+  /** Logs cards that a deck in play has already dealt. */
+  logDraw(input: {
+    sourceId: string;
+    sourceName: string;
+    playId: string | null;
+    options: DrawOptions;
+    cards: readonly DrawnCard[];
+    seed: number;
+  }): DrawLogEntry;
   /** Rolls a dice entry again (keeping its locked terms) as a new entry; null if unknown or not dice. */
   reroll(id: string, seed?: number): DiceLogEntry | null;
   /** Dice only: keeps or releases one term of a result when rerolling. */
@@ -133,6 +144,31 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
     return filtered.out;
   };
 
+  function makeDrawEntry(input: {
+    sourceId: string;
+    sourceName: string;
+    playId: string | null;
+    options: DrawOptions;
+    cards: readonly DrawnCard[];
+    seed: number;
+  }): DrawLogEntry {
+    const cards = input.cards.map((c) => ({ id: c.id, name: c.name, reversed: c.reversed }));
+    return {
+      id: newId(),
+      kind: "draw",
+      createdAt: now(),
+      seed: input.seed,
+      label: null,
+      text: formatDrawResult(input.sourceName, cards),
+      savedItemId: null,
+      sourceId: input.sourceId,
+      sourceName: input.sourceName,
+      playId: input.playId,
+      options: { ...input.options },
+      cards,
+    };
+  }
+
   return {
     // The overloads promise narrower lists for "dice" and "draw"; the filter delivers them.
     entries: entries as RollLog["entries"],
@@ -148,21 +184,22 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
     drawFrom(source, candidates, drawOptions, seed = newSeed()) {
       const drawn = drawCards(candidates, drawOptions, createRng(seed));
       if (!drawn.ok) return drawn;
-      const entry: DrawLogEntry = {
-        id: newId(),
-        kind: "draw",
-        createdAt: now(),
-        seed,
-        label: null,
-        text: formatDrawResult(source.name, drawn.cards),
-        savedItemId: null,
+      const entry = makeDrawEntry({
         sourceId: source.id,
         sourceName: source.name,
-        options: { ...drawOptions },
+        playId: null,
+        options: drawOptions,
         cards: drawn.cards,
-      };
+        seed,
+      });
       push(entry);
       return { ok: true, entry };
+    },
+
+    logDraw(input) {
+      const entry = makeDrawEntry(input);
+      push(entry);
+      return entry;
     },
 
     reroll(id, seed = newSeed()) {

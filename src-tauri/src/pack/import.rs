@@ -9,7 +9,7 @@
 use super::format::*;
 use super::PackError;
 use crate::db::campaigns::{self, Campaign};
-use crate::db::{cards, collections, documents, formulas, saved_draws, saved_rolls, settings};
+use crate::db::{cards, collections, documents, formulas, play_decks, saved_draws, saved_rolls, settings};
 use rusqlite::{params, Connection, ErrorCode};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -52,6 +52,7 @@ pub struct ParsedPack {
     pub collection_members: Vec<CollectionMemberRecord>,
     pub card_images: Vec<ParsedCardImage>,
     pub saved_draws: Vec<SavedDrawRecord>,
+    pub play_decks: Vec<PlayDeckRecord>,
     /// Plain-language notes about anything that had to be fixed or skipped.
     pub warnings: Vec<String>,
 }
@@ -72,6 +73,7 @@ impl ParsedPack {
             collection_members: self.collection_members.len() as u32,
             card_images: self.card_images.len() as u32,
             saved_draws: self.saved_draws.len() as u32,
+            play_decks: self.play_decks.len() as u32,
         }
     }
 }
@@ -161,6 +163,7 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         collection_members: read_list(&mut archive, COLLECTION_MEMBERS_FILE, limits, &mut total)?,
         card_images,
         saved_draws: read_list(&mut archive, SAVED_DRAWS_FILE, limits, &mut total)?,
+        play_decks: read_list(&mut archive, PLAY_DECKS_FILE, limits, &mut total)?,
         warnings: Vec::new(),
     };
     sanitize(&mut pack);
@@ -531,6 +534,15 @@ fn sanitize(pack: &mut ParsedPack) {
     });
     note(before - pack.saved_draws.len(), "saved draw(s) belonged to something missing or were unreadable and were skipped.");
 
+    let before = pack.play_decks.len();
+    let mut seen = HashSet::new();
+    pack.play_decks.retain(|p| {
+        item_type.get(p.item_id.as_str()) == Some(&play_decks::PLAY_TYPE)
+            && play_decks::validate(&p.source_name, &p.state_json).is_ok()
+            && seen.insert(p.item_id.clone())
+    });
+    note(before - pack.play_decks.len(), "deck(s) in play belonged to something missing or were unreadable and were skipped.");
+
     pack.warnings = warnings;
 }
 
@@ -543,6 +555,38 @@ fn db_error(e: rusqlite::Error) -> PackError {
             PackError::Corrupt(format!("its data is inconsistent ({e})"))
         }
         _ => e.into(),
+    }
+}
+
+/// Rewrites every string in `value` that is an old item id into its new id (a
+/// saved draw or a game in play remembers cards by id, and import gives every
+/// item a new id). Returns whether anything changed.
+fn remap_ids(value: &mut serde_json::Value, ids: &HashMap<String, String>) -> bool {
+    use serde_json::Value;
+    match value {
+        Value::String(s) => match ids.get(s.as_str()) {
+            Some(new) => {
+                *s = new.clone();
+                true
+            }
+            None => false,
+        },
+        Value::Array(list) => list.iter_mut().fold(false, |changed, v| remap_ids(v, ids) || changed),
+        Value::Object(map) => map.values_mut().fold(false, |changed, v| remap_ids(v, ids) || changed),
+        _ => false,
+    }
+}
+
+/// JSON text with old item ids replaced by new ones. Text with nothing to
+/// replace (or that isn't JSON) is returned exactly as it was.
+fn remapped_json(text: &str, ids: &HashMap<String, String>) -> String {
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(text) else {
+        return text.to_string();
+    };
+    if remap_ids(&mut value, ids) {
+        value.to_string()
+    } else {
+        text.to_string()
     }
 }
 
@@ -679,13 +723,26 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
     }
 
     for d in &pack.saved_draws {
+        // The cards in a saved draw are remembered by id: point them at the imported cards.
+        let result_json = remapped_json(&d.result_json, &item_ids);
         tx.execute(
             "INSERT INTO saved_draws (item_id, source_name, seed, text, result_json, notes, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
-                item_ids[&d.item_id], d.source_name, d.seed, d.text, d.result_json, d.notes,
+                item_ids[&d.item_id], d.source_name, d.seed, d.text, result_json, d.notes,
                 d.created_at, d.updated_at
             ],
+        )
+        .map_err(db_error)?;
+    }
+    for p in &pack.play_decks {
+        let state_json = remapped_json(&p.state_json, &item_ids);
+        // Where the cards came from: the imported copy of it, or nothing if it wasn't in the pack.
+        let source_id = p.source_id.as_ref().and_then(|s| item_ids.get(s));
+        tx.execute(
+            "INSERT INTO play_decks (item_id, source_id, source_name, state_json, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![item_ids[&p.item_id], source_id, p.source_name, state_json, p.created_at, p.updated_at],
         )
         .map_err(db_error)?;
     }

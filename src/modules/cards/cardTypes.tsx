@@ -2,6 +2,7 @@ import type { ItemTypeDefinition } from "../../registry/types";
 import { CardEditor } from "./CardEditor";
 import { CollectionEditor } from "./CollectionEditor";
 import { cardTypeIcon } from "./icons";
+import { PlayDeckView } from "./PlayDeckView";
 import { SavedDrawView } from "./SavedDrawView";
 
 export const cardType: ItemTypeDefinition = {
@@ -46,4 +47,14 @@ export const drawType: ItemTypeDefinition = {
   editor: SavedDrawView,
 };
 
-export const cardItemTypes = [cardType, setType, deckType, poolType, drawType];
+/** A deck in play is started from a set, deck or pool page, never from the "New item" form. */
+export const playType: ItemTypeDefinition = {
+  id: "play",
+  label: "Deck in play",
+  icon: cardTypeIcon("play"),
+  toolId: "cards",
+  creatable: false,
+  editor: PlayDeckView,
+};
+
+export const cardItemTypes = [cardType, setType, deckType, poolType, drawType, playType];

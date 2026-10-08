@@ -253,3 +253,53 @@ describe("createRollLog: draws", () => {
     expect(calls).toBe(1);
   });
 });
+
+describe("createRollLog: draws from a deck in play", () => {
+  const drawn = [
+    { id: "a", name: "The Fool", reversed: false },
+    { id: "b", name: "Two of Cups", reversed: true },
+  ];
+  const options = { ...DEFAULT_DRAW_OPTIONS, count: 2 };
+
+  it("logs the cards a deck in play dealt, remembering which game it was", () => {
+    const log = makeLog();
+    const entry = log.logDraw({ sourceId: "play-1", sourceName: "Harrow deck", playId: "play-1", options, cards: drawn, seed: 9 });
+    expect(entry).toMatchObject({
+      kind: "draw",
+      sourceId: "play-1",
+      sourceName: "Harrow deck",
+      playId: "play-1",
+      seed: 9,
+      label: null,
+      savedItemId: null,
+    });
+    expect(entry.text).toBe("Harrow deck → The Fool, Two of Cups (reversed)");
+    expect(log.entries("draw")).toEqual([entry]);
+  });
+
+  it("plain draws from a set, deck or pool have no game", () => {
+    const log = makeLog();
+    const r = log.drawFrom({ id: "deck-1", name: "Tarot" }, [{ id: "x", name: "X" }], { ...options, count: 1 }, 1);
+    if (!r.ok) throw new Error(r.message);
+    expect(r.entry.playId).toBeNull();
+  });
+
+  it("copies the cards it is given, so later changes to them don't alter the log", () => {
+    const log = makeLog();
+    const mine = drawn.map((c) => ({ ...c }));
+    const entry = log.logDraw({ sourceId: "p", sourceName: "P", playId: "p", options, cards: mine, seed: 1 });
+    mine[0].name = "changed";
+    expect(entry.cards[0].name).toBe("The Fool");
+  });
+
+  it("notifies subscribers and shares the capacity like any other result", () => {
+    const log = makeLog(2);
+    let calls = 0;
+    log.subscribe(() => calls++);
+    log.roll("1d6", 1);
+    log.logDraw({ sourceId: "p", sourceName: "P", playId: "p", options, cards: drawn, seed: 1 });
+    log.logDraw({ sourceId: "p", sourceName: "P", playId: "p", options, cards: drawn, seed: 2 });
+    expect(calls).toBe(3);
+    expect(log.entries().map((e) => e.kind)).toEqual(["draw", "draw"]);
+  });
+});

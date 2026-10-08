@@ -79,3 +79,37 @@ export const setSavedDrawNotes = (itemId: string, notes: string) =>
 /** Every set, deck and pool in the campaign: what can be drawn from. */
 export const listCollections = (campaignId: string) =>
   invoke<Item[]>("list_collections", { campaignId });
+
+/** Mirrors the Rust `PlayDeck`: a running game (see `lib/cards/play.ts` for the state's shape). */
+export interface PlayDeck {
+  itemId: string;
+  sourceId: string | null;
+  sourceName: string;
+  stateJson: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** One row of the list of decks in play. */
+export interface PlayDeckEntry {
+  itemId: string;
+  name: string;
+  sourceName: string;
+  remaining: number;
+  drawn: number;
+}
+
+/** Starts a deck in play. `stateJson` comes from `startPlay`; a blank name uses "<source> in play". */
+export const createPlayDeck = (
+  campaignId: string,
+  name: string,
+  folderId: string | null,
+  sourceId: string | null,
+  sourceName: string,
+  stateJson: string,
+) => invoke<Item>("create_play_deck", { campaignId, name, folderId, sourceId, sourceName, stateJson });
+export const getPlayDeck = (itemId: string) => invoke<PlayDeck>("get_play_deck", { itemId });
+export const setPlayDeckState = (itemId: string, stateJson: string) =>
+  invoke<void>("set_play_deck_state", { itemId, stateJson });
+export const listPlayDecks = (campaignId: string) =>
+  invoke<PlayDeckEntry[]>("list_play_decks", { campaignId });

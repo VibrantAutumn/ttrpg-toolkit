@@ -13,6 +13,7 @@ import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
 import { cardTypeIcon } from "./icons";
 import { DrawPanel } from "./DrawPanel";
+import { PlayStarter } from "./PlayStarter";
 
 const WHAT: Record<string, { holds: string; empty: string }> = {
   set: { holds: "cards", empty: "This set is empty. Add some cards." },
@@ -31,6 +32,7 @@ export function CollectionEditor({ itemId, kind }: { itemId: string; kind: "set"
   const { openItem } = useNavigation();
   const dataVersion = useDataVersion();
   const [name, setName] = useState("");
+  const [campaignId, setCampaignId] = useState("");
   const [members, setMembers] = useState<Item[]>([]);
   const [cards, setCards] = useState<Item[]>([]);
   const [candidates, setCandidates] = useState<Item[]>([]);
@@ -47,6 +49,7 @@ export function CollectionEditor({ itemId, kind }: { itemId: string; kind: "set"
         listCollectionCandidates(itemId),
       ]);
       setName(item.name);
+      setCampaignId(item.campaignId);
       setMembers(m);
       setCards(c);
       setCandidates(cand);
@@ -180,6 +183,7 @@ export function CollectionEditor({ itemId, kind }: { itemId: string; kind: "set"
       )}
 
       {name && <DrawPanel sourceId={itemId} sourceName={name} />}
+      {name && campaignId && <PlayStarter source={{ id: itemId, name, campaignId }} />}
     </div>
   );
 }
