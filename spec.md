@@ -163,7 +163,7 @@ A new campaign should be playable within a minute.
 
 - **Rulesets:** a generic d20 system and a generic narrative system, plus a blank one to build from.
 - **Decks:** a standard tarot deck and a standard playing-card deck, with names, meanings and reversals filled in. You supply or pick the card art.
-- **Tables:** fantasy name tables (several cultures), tavern names, NPC quirks, rumors, weather by climate, and an adventure-hook generator using entity slots.
+- **Tables:** fantasy name tables (several cultures, each entry tagged with its culture, with a name preset per culture), tavern names, NPC quirks, rumors and weather by climate. An adventure-hook generator using entity slots comes with Phase 4.
 - **Templates:** NPC, Location, Faction, Item, Quest, Session. Other tools get starter blueprints where they help (spread layouts, travel-mode sets).
 - **Calendars:** a real-world-style calendar and a simple fantasy calendar with one moon.
 - **GM screen:** a default layout with dice, a name generator and pinned documents.
@@ -235,21 +235,29 @@ One dice notation used everywhere: the roller, tables, stat blocks and encounter
 
 ## Tool: Random tables and generators
 
-Tables roll text, dice, cards and your own documents; generators combine rolls into new documents.
+Tables roll text, dice, cards and your own documents; generators combine rolls into new documents. Tables and the name generator are built (Phase 3); parts marked *(Phase 4)* wait for documents with fields and the query system.
 
 **Tables**
 
-- Entries with text, tags and optional weights. View, add, edit and delete freely.
-- **Slots** inside an entry can roll: another table, dice, a card draw, or **documents or other items matching a query** (`[Person] is missing [Object]`).
-- **Labels** reuse a roll: `[Person as A] ... [A]`. **Field references** pull data: `[A.Faction]`.
-- **Unique picks** (`[3 unique Rumors]`), **avoid recent** results, and a depth limit on nesting.
-- **Tag filtering:** all combined parts must match by default; toggle to "any part".
+- Entries with text, tags and weights. View, add, edit, reorder and delete freely (a deleted entry can be brought back). A weight of 0 means never picked. Weights make number ranges in entry order, like a printed table (an entry of weight 20 after 10 others covers 11-30); a table can note the printed die (d20, d100) it comes from, and says when the entries don't add up to it.
+- **Names:** a table is found by its name, so two tables in a campaign can't share a name. Renaming a table finds the slots that use the old name and offers to update them (showing each change first, with undo).
+- **Slots** inside an entry can roll: another table, dice, a card draw, or *(Phase 4)* **documents or other items matching a query** (`[Person] is missing [Object]`). They can be written short (`[2d4]`, `[Rumors]`, `[draw 1 from Tarot]`) or in the explicit form that always means what it says (`[dice:2d4]`, `[table:Rumors]`, `[draw:1 from Tarot]`, useful for a table called "d6"). In the editor slots appear as chips, with a plain-text mode for the raw text.
+- **Labels** reuse a roll: `[Person as A] ... [A]`. **Field references** pull data: `[A.Faction]` *(Phase 4, once documents have fields)*.
+- **Unique picks** (`[3 unique Rumors]`), **avoid recent** results (skip the last N entries rolled from a table; remembered on the device, and relaxed with a note when every entry would be skipped), and a depth limit on nesting. A slot that can't be rolled (a deleted table, a deck with too few cards) shows a warning in the result instead of stopping the roll.
+- **Lock and reroll** any slot of a result.
+- **Tag filtering:** entries carry the campaign's tags. The name generator already filters by them: all of the chosen tags by default, or any one of them, and a tag nested under a chosen tag counts. Filtering other rolls by tag arrives with the query system *(Phase 4)*.
 
-**Name generator** (built-in tables): full names, prefix + suffix, or prefix + middle + suffix, with joining rules (capitalization, hyphens, apostrophes). Save a result back to a list.
+**Name generator:** one tool, not a list of generators, working like the dice roller and card draw.
 
-**Roll context:** a query applied to the whole roll and its nested slots (only documents tagged Sword Coast). Can default to the party's current region from campaign state.
+- A name has one, two or three parts (a whole name; prefix + suffix; prefix + middle + suffix). Each part comes from a table chosen while generating, so any table can serve: an adjective table and an object table make a place name, and prefix, middle and suffix tables make an elven name.
+- **Tag filter:** only use entries with the chosen tags, so one set of tables can hold several cultures, each entry tagged with its culture.
+- **Joining rules:** a separator at each join (nothing, a space, a hyphen or an apostrophe), capital letters (as typed, first letter of the name, or first letter of every part), and an option to merge a letter doubled where two parts meet (Dar + rin = Darin).
+- Lock a part and reroll the rest. Save a result back to a table, or to a new one.
+- **Presets** save a whole setup ("Elven name", "Place name") as an item in the Tables library; the last setup used is remembered on the device. Also available in the quick tools panel.
 
-**Generators**
+**Roll context:** a query applied to the whole roll and its nested slots (only documents tagged Sword Coast). Can default to the party's current region from campaign state. *(Phase 4)*
+
+**Generators** *(Phase 4)*
 
 - A named set of rolls that fills a template (NPC: Name, Race, Personality, Secret).
 - Shows a **preview** with lock and reroll per field; **Create** makes the document.
@@ -373,7 +381,7 @@ Nine phases, each usable at the table. Shared engines are **designed** in Phase 
 
 1. **Foundation:** app shell, SQLite with migrations, module registry, campaigns, library framework (folders, tags, search, trash), links and backlinks, a plain document editor, basic command palette, content pack export/import (backups). A test build running on Android.
 2. **Dice, results and cards:** dice notation, results engine and roll log, widget framework and quick tools panel, deck library, cards, sets, pools, draws, spreads, decks in play. Starter tarot and playing-card decks.
-3. **Random tables:** tables with weights, nesting, dice and card slots, labels, unique picks, name generator. Starter tables.
+3. **Random tables:** tables with weights and number ranges, nesting, dice and card slots, labels, unique picks, avoid recent, entry tags, a slot-chip editor, rename-with-update, and the name generator (draws from chosen tables, tag filter, presets). Starter tables. *(Done.)*
 4. **Worldbuilding:** rich text editor, nested document tabs, fields and field sets, templates, queries and smart collections, field views, global search. Then entity slots, roll context and generators. Starter templates.
 5. **Rulesets and encounters:** ruleset editor, stat blocks, encounter library and runner, first version of the player display. Starter rulesets.
 6. **Time:** calendar builder, multiple calendars, campaign state and status bar, sessions, weather, events, timelines.
