@@ -43,6 +43,13 @@ const HTML = /^ {0,3}<(?!\/?(?:strong|b|em|i|del|s)>)[A-Za-z/!?]/i;
 const DIRECTIVE_OPEN = /^ {0,3}(:{3,})[ \t]*([A-Za-z][\w-]*)[ \t]*(.*?)[ \t]*$/;
 const DIRECTIVE_CLOSE = /^ {0,3}(:{3,})[ \t]*$/;
 
+/** Blocks written as directives; their writing needs a fence longer than anything inside. */
+const DIRECTIVES = new Set(["columns", "column", "callout", "toggle", "secret"]);
+export const CALLOUT_KINDS = ["info", "tip", "warning", "danger"];
+const calloutKind = (kind: unknown) => (CALLOUT_KINDS.includes(String(kind)) ? String(kind) : "info");
+/** Who a secret block is for, as one line of text, or null. */
+const secretTo = (to: unknown) => String(to ?? "").replace(/\s+/g, " ").trim() || null;
+
 const indentOf = (line: string) => / */.exec(line)?.[0].length ?? 0;
 const isBlank = (line: string) => line.trim() === "";
 
@@ -164,6 +171,13 @@ function parseBlocks(lines: string[], inColumns = false): DocNode[] {
         out.push({ type: "columns", content: groupColumns(parseBlocks(inner, true)) });
       } else if (name === "column" && directive[3] === "" && inColumns) {
         out.push({ type: "column", content: nonEmpty(parseBlocks(inner)) });
+      } else if (name === "callout" && (directive[3] === "" || CALLOUT_KINDS.includes(directive[3].toLowerCase()))) {
+        out.push({ type: "callout", attrs: { kind: calloutKind(directive[3].toLowerCase()) }, content: nonEmpty(parseBlocks(inner)) });
+      } else if (name === "toggle") {
+        const title = parseInline(directive[3]);
+        out.push({ type: "toggle", content: [{ type: "toggleSummary", ...(title.length ? { content: title } : {}) }, ...parseBlocks(inner)] });
+      } else if (name === "secret") {
+        out.push({ type: "secret", attrs: { to: secretTo(directive[3]) }, content: nonEmpty(parseBlocks(inner)) });
       } else {
         // Not a block this app knows: keep every line, opening and closing included.
         out.push({ type: "rawMarkdown", attrs: { text: lines.slice(i, Math.min(end + 1, lines.length)).join("\n") } });
@@ -389,6 +403,17 @@ function normalizeBlock(b: DocNode, inColumns: boolean): DocNode[] | null {
     case "column":
       if (!inColumns) return normalizeBlocks(b.content ?? []); // a column only makes sense inside columns
       return [{ type: "column", content: nonEmpty(normalizeBlocks(b.content ?? [])) }];
+    case "callout":
+      return [{ type: "callout", attrs: { kind: calloutKind(b.attrs?.kind) }, content: nonEmpty(normalizeBlocks(b.content ?? [])) }];
+    case "secret":
+      return [{ type: "secret", attrs: { to: secretTo(b.attrs?.to) }, content: nonEmpty(normalizeBlocks(b.content ?? [])) }];
+    case "toggle": {
+      const [first, ...rest] = b.content ?? [];
+      const hasSummary = first?.type === "toggleSummary";
+      const title = normalizeInline(hasSummary ? (first.content ?? []) : [], true);
+      const body = normalizeBlocks(hasSummary ? rest : (b.content ?? []));
+      return [{ type: "toggle", content: [{ type: "toggleSummary", ...(title.length ? { content: title } : {}) }, ...body] }];
+    }
     default:
       // A node type this converter does not know: keep what it contains.
       return b.content ? normalizeBlocks(b.content) : null;
@@ -418,7 +443,7 @@ function interruptsAParagraph(n: DocNode): boolean {
 function fenceSize(node: DocNode): number {
   let inner = 2;
   const visit = (n: DocNode) => {
-    if (n.type === "columns" || n.type === "column") inner = Math.max(inner, fenceSize(n));
+    if (DIRECTIVES.has(n.type)) inner = Math.max(inner, fenceSize(n));
     else if (n.type === "rawMarkdown") {
       for (const m of String(n.attrs?.text ?? "").matchAll(/^ {0,3}(:{3,})/gm)) inner = Math.max(inner, m[1].length);
     } else (n.content ?? []).forEach(visit);
@@ -485,6 +510,22 @@ function blockToLines(b: DocNode, alternate: boolean): string[] {
     case "column": {
       const fence = ":".repeat(fenceSize(b));
       return [fence + "column", ...blocksToLines(b.content ?? [], false), fence];
+    }
+    case "callout": {
+      const fence = ":".repeat(fenceSize(b));
+      const kind = calloutKind(b.attrs?.kind);
+      return [fence + "callout" + (kind === "info" ? "" : " " + kind), ...blocksToLines(b.content ?? [], false), fence];
+    }
+    case "secret": {
+      const fence = ":".repeat(fenceSize(b));
+      const to = secretTo(b.attrs?.to);
+      return [fence + "secret" + (to ? " " + to : ""), ...blocksToLines(b.content ?? [], false), fence];
+    }
+    case "toggle": {
+      const fence = ":".repeat(fenceSize(b));
+      const [first, ...rest] = b.content ?? [];
+      const title = first ? serializeInline(first.content ?? [], true) : "";
+      return [fence + "toggle" + (title ? " " + title : ""), ...blocksToLines(rest, false), fence];
     }
     default:
       return blocksToLines(normalizeBlocks([b]), false);

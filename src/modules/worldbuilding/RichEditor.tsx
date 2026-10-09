@@ -6,10 +6,11 @@ import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
 import { exitSuggestion, type SuggestionProps } from "@tiptap/suggestion";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
-import type { BlockCommand } from "../../lib/documents/blockCommands";
+import { BLOCK_COMMANDS, type BlockCommand, type BlockCommandId } from "../../lib/documents/blockCommands";
 import { canOpenExternally, normalizeLinkAddress } from "../../lib/documents/links";
 import { docToMarkdown, markdownToDoc } from "../../lib/documents/markdown";
 import type { DocNode } from "../../lib/documents/types";
+import { ancestorOf, CALLOUT_KINDS, Callout, Secret, Toggle, ToggleSummary, unwrapBlock } from "./containerNodes";
 import { addColumn, Column, Columns, columnsContext, deleteColumn, insertColumns, insideNode, MAX_COLUMNS, unwrapColumns } from "./layoutNodes";
 import { RawMarkdown } from "./rawMarkdownNode";
 import { runBlockCommand, slashCommands, type SlashBridge } from "./slashCommands";
@@ -26,6 +27,9 @@ interface SlashView {
   rect: DOMRect | null;
   pick: (item: BlockCommand) => void;
 }
+
+/** What the toolbar's Insert menu offers (the rest are on the toolbar already). */
+const INSERT_OPTIONS = BLOCK_COMMANDS.filter((c) => ["callout", "warning", "toggle", "secret", "table", "columns2", "columns3"].includes(c.id));
 
 // A table cell holds one paragraph (the Markdown table format has nothing more), and the first row is the header.
 const MarkdownCell = TableCell.extend({ content: "paragraph+" });
@@ -63,6 +67,7 @@ export function RichEditor({
 
   const latestDoc = useRef<ProseNode | null>(null);
   const dirty = useRef(false);
+  const lastReported = useRef<string | null>(null);
   const timer = useRef<number | undefined>(undefined);
   const editorRef = useRef<Editor | null>(null);
 
@@ -79,7 +84,10 @@ export function RichEditor({
     window.clearTimeout(timer.current);
     if (!dirty.current || !latestDoc.current) return;
     dirty.current = false;
-    onMarkdownRef.current(docToMarkdown(latestDoc.current.toJSON() as DocNode));
+    const markdown = docToMarkdown(latestDoc.current.toJSON() as DocNode);
+    if (markdown === lastReported.current) return; // e.g. only a toggle was opened or closed
+    lastReported.current = markdown;
+    onMarkdownRef.current(markdown);
   }, []);
 
   useImperativeHandle(ref, () => ({ commit }), [commit]);
@@ -135,6 +143,10 @@ export function RichEditor({
       MarkdownCell,
       Columns,
       Column,
+      Callout,
+      Secret,
+      ToggleSummary,
+      Toggle,
       slashCommands(bridge),
     ],
     [bridge],
@@ -198,6 +210,10 @@ export function RichEditor({
             canRedo: e.can().redo(),
             inTable: insideNode(e, "table"),
             columnCount: columnsContext(e)?.columnsNode.childCount ?? 0,
+            calloutKind: ancestorOf(e, "callout") ? String(ancestorOf(e, "callout")?.node.attrs.kind) : "",
+            inToggle: ancestorOf(e, "toggle") !== null,
+            inSecret: ancestorOf(e, "secret") !== null,
+            secretTo: String(ancestorOf(e, "secret")?.node.attrs.to ?? ""),
           }
         : null,
   });
@@ -268,6 +284,21 @@ export function RichEditor({
         <ToolButton label="Columns" active={ui.columnCount > 0} onClick={() => insertColumns(editor, 2)}>
           ◫
         </ToolButton>
+        <select
+          aria-label="Insert a block"
+          value=""
+          onChange={(e) => {
+            const id = e.currentTarget.value as BlockCommandId;
+            if (id) runBlockCommand(editor, id);
+          }}
+        >
+          <option value="">Insert…</option>
+          {INSERT_OPTIONS.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.label}
+            </option>
+          ))}
+        </select>
         <ToolButton label="Divider" onClick={() => runBlockCommand(editor, "divider")}>
           ―
         </ToolButton>
@@ -363,6 +394,47 @@ export function RichEditor({
           </ToolButton>
           <ToolButton wide label="Remove columns (keep the content)" onClick={() => unwrapColumns(editor)}>
             Remove columns
+          </ToolButton>
+        </div>
+      )}
+
+      {ui.calloutKind !== "" && (
+        <div className="rich-context" role="toolbar" aria-label="Callout">
+          <select
+            aria-label="Callout kind"
+            value={ui.calloutKind}
+            onChange={(e) => run().updateAttributes("callout", { kind: e.currentTarget.value }).run()}
+          >
+            {CALLOUT_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {k[0].toUpperCase() + k.slice(1)}
+              </option>
+            ))}
+          </select>
+          <ToolButton wide label="Remove callout (keep the content)" onClick={() => unwrapBlock(editor, "callout")}>
+            Remove callout
+          </ToolButton>
+        </div>
+      )}
+      {ui.inToggle && (
+        <div className="rich-context" role="toolbar" aria-label="Toggle">
+          <ToolButton wide label="Remove toggle (keep the content)" onClick={() => unwrapBlock(editor, "toggle")}>
+            Remove toggle
+          </ToolButton>
+        </div>
+      )}
+      {ui.inSecret && (
+        <div className="rich-context" role="toolbar" aria-label="Secret block">
+          <input
+            type="text"
+            className="secret-to"
+            aria-label="Who this will be revealed to (optional)"
+            placeholder="Reveal to (optional)"
+            value={ui.secretTo}
+            onChange={(e) => run().updateAttributes("secret", { to: e.currentTarget.value }).run()}
+          />
+          <ToolButton wide label="Remove secret block (keep the content)" onClick={() => unwrapBlock(editor, "secret")}>
+            Remove secret block
           </ToolButton>
         </div>
       )}

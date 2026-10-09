@@ -54,7 +54,7 @@ function randomInline(rng: Rng): DocNode[] {
 }
 
 function randomBlock(rng: Rng, depth: number): DocNode {
-  const roll = rng.int(1, depth >= 3 ? 5 : 15);
+  const roll = rng.int(1, depth >= 3 ? 5 : 18);
   if (roll <= 4) return { type: "paragraph", content: randomInline(rng) };
   if (roll === 5) return { type: "heading", attrs: { level: rng.int(1, 6) }, content: randomInline(rng) };
   if (roll === 6 || roll === 7) {
@@ -90,6 +90,19 @@ function randomBlock(rng: Rng, depth: number): DocNode {
       rows.push({ type: "tableRow", content: cells });
     }
     return { type: "table", content: rows };
+  }
+  if (roll === 15) {
+    return { type: "callout", attrs: { kind: pick(rng, ["info", "tip", "warning", "danger"]) }, content: randomBlocks(rng, depth + 1, 1, 2, false) };
+  }
+  if (roll === 16) {
+    const title = randomInline(rng).filter((n) => n.type !== "hardBreak");
+    return {
+      type: "toggle",
+      content: [{ type: "toggleSummary", ...(title.length ? { content: title } : {}) }, ...randomBlocks(rng, depth + 1, 0, 2, false)],
+    };
+  }
+  if (roll === 17) {
+    return { type: "secret", attrs: { to: pick(rng, [null, "Ed", "Ed, Sam"]) }, content: randomBlocks(rng, depth + 1, 1, 2, false) };
   }
   if (roll === 14) {
     const cols: DocNode[] = [];

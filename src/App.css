@@ -432,6 +432,134 @@ button.link.name {
   color: var(--danger);
 }
 
+/* Callouts, secret blocks and toggles */
+.rich-text .callout {
+  --callout-color: var(--accent);
+  position: relative;
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem 0.5rem 2.25rem;
+  border-left: 4px solid var(--callout-color);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--callout-color) 14%, transparent);
+}
+
+.rich-text .callout::before {
+  content: "ℹ️";
+  position: absolute;
+  left: 0.6rem;
+  top: 0.5rem;
+}
+
+.rich-text .callout[data-callout="tip"] {
+  --callout-color: #2f9e44;
+}
+
+.rich-text .callout[data-callout="tip"]::before {
+  content: "💡";
+}
+
+.rich-text .callout[data-callout="warning"] {
+  --callout-color: #f08c00;
+}
+
+.rich-text .callout[data-callout="warning"]::before {
+  content: "⚠️";
+}
+
+.rich-text .callout[data-callout="danger"] {
+  --callout-color: var(--danger);
+}
+
+.rich-text .callout[data-callout="danger"]::before {
+  content: "⛔";
+}
+
+.rich-text .callout > :last-child,
+.rich-text .secret > :last-child {
+  margin-bottom: 0;
+}
+
+.rich-text .secret {
+  margin: 0 0 0.75rem;
+  padding: 0.25rem 0.75rem 0.5rem;
+  border: 2px dashed var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+}
+
+.rich-text .secret::before {
+  content: "🔒 GM only";
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.rich-text .secret[data-secret-to]::before {
+  content: "🔒 GM only · for " attr(data-secret-to);
+}
+
+.rich-text .toggle {
+  position: relative;
+  margin: 0 0 0.75rem;
+}
+
+.rich-text .toggle-arrow {
+  position: absolute;
+  left: 0;
+  top: 0.15rem;
+  width: 1.5rem;
+  min-height: 0;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.rich-text .toggle-arrow::before {
+  content: "▾";
+}
+
+.rich-text .toggle[data-open="false"] .toggle-arrow::before {
+  content: "▸";
+}
+
+.rich-text .toggle-summary {
+  padding-left: 1.5rem;
+  font-weight: 600;
+}
+
+.rich-text .toggle-content > :not(.toggle-summary) {
+  margin-left: 1.5rem;
+}
+
+.rich-text .toggle[data-open="false"] .toggle-content > :not(.toggle-summary) {
+  display: none;
+}
+
+.rich-text .toggle-summary:empty::before {
+  content: "Title";
+  opacity: 0.4;
+}
+
+.rich-context select,
+.rich-context .secret-to {
+  min-height: 32px;
+  font-size: 0.85rem;
+}
+
+.rich-context .secret-to {
+  padding: 0 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: inherit;
+  background: var(--surface);
+}
+
 .rich-bubble {
   z-index: 20;
   display: flex;

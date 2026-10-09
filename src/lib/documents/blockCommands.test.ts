@@ -43,6 +43,14 @@ describe("filterBlockCommands", () => {
     expect(ids("3 col")).toEqual(["columns3"]);
   });
 
+  it("finds callouts, toggles and secret blocks", () => {
+    expect(ids("secret")).toEqual(["secret"]);
+    expect(ids("toggle")).toEqual(["toggle"]);
+    expect(ids("callout")).toEqual(["callout", "warning"]);
+    expect(ids("danger")).toEqual(["warning"]);
+    expect(ids("accordion")).toEqual(["toggle"]);
+  });
+
   it("gives nothing for text that matches nothing", () => {
     expect(ids("zzzz")).toEqual([]);
   });
