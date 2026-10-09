@@ -110,15 +110,6 @@ describe("markdownToDoc: blocks", () => {
     expect(blocks("---\n***\n_ _ _")).toEqual([{ type: "horizontalRule" }, { type: "horizontalRule" }, { type: "horizontalRule" }]);
   });
 
-  it("keeps tables as raw Markdown instead of losing them", () => {
-    const table = "| a | b |\n|---|---|\n| 1 | 2 |";
-    expect(blocks(`Before\n\n${table}\n\nAfter`)).toEqual([
-      p(t("Before")),
-      { type: "rawMarkdown", attrs: { text: table } },
-      p(t("After")),
-    ]);
-  });
-
   it("keeps HTML blocks as raw Markdown", () => {
     expect(blocks('<div class="x">\nhi\n</div>')).toEqual([
       { type: "rawMarkdown", attrs: { text: '<div class="x">\nhi\n</div>' } },

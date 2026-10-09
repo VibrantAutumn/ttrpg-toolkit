@@ -1,4 +1,5 @@
 import { normalizeInline, parseInline, serializeInline, textNode } from "./inline";
+import { hasUnescapedPipe, isRuleRow, parseCell, serializeCell, splitRow } from "./tables";
 import type { DocNode, DocRoot } from "./types";
 
 /**
@@ -6,13 +7,27 @@ import type { DocNode, DocRoot } from "./types";
  * search stay readable); the editor works on the JSON in `types.ts`.
  *
  *  - `markdownToDoc` never throws and never drops text. What it does not understand
- *    (tables, HTML) is kept whole as a `rawMarkdown` block and written back unchanged.
+ *    (HTML, directives it does not know) is kept whole as a `rawMarkdown` block and written
+ *    back unchanged.
  *  - `docToMarkdown` followed by `markdownToDoc` gives the same document back, apart from
  *    the tidying in `normalizeDoc` (e.g. empty paragraphs between blocks are not kept).
  *
  * Line breaks inside a paragraph are real line breaks (the old plain editor stored text
  * that way), and are written as a backslash before the newline so other Markdown viewers
  * show them too.
+ *
+ * Tables are GFM tables (`| a | b |` with a `| --- | --- |` rule). Layout blocks are
+ * "directives": a line of three or more colons and a name opens one, a line of colons closes
+ * it, and the opening line has more colons than anything inside it:
+ *
+ *     ::::columns
+ *     :::column
+ *     Left
+ *     :::
+ *     :::column
+ *     Right
+ *     :::
+ *     ::::
  */
 
 const para = (content: DocNode[]): DocNode => (content.length ? { type: "paragraph", content } : { type: "paragraph" });
@@ -25,29 +40,19 @@ const HR = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
 const QUOTE = /^ {0,3}>/;
 const LIST = /^( {0,3})([-+*]|\d{1,9}[.)])([ \t]+|$)/;
 const HTML = /^ {0,3}<(?!\/?(?:strong|b|em|i|del|s)>)[A-Za-z/!?]/i;
-const TABLE_RULE = /^ {0,3}\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/;
+const DIRECTIVE_OPEN = /^ {0,3}(:{3,})[ \t]*([A-Za-z][\w-]*)[ \t]*(.*?)[ \t]*$/;
+const DIRECTIVE_CLOSE = /^ {0,3}(:{3,})[ \t]*$/;
 
-const indentOf = (line: string) => /^ */.exec(line)?.[0].length ?? 0;
+const indentOf = (line: string) => / */.exec(line)?.[0].length ?? 0;
 const isBlank = (line: string) => line.trim() === "";
 
 /** Could this line start a block that is allowed to interrupt a paragraph? */
 function interruptsParagraph(line: string): boolean {
-  if (FENCE.test(line) || HR.test(line) || QUOTE.test(line)) return true;
+  if (FENCE.test(line) || HR.test(line) || QUOTE.test(line) || DIRECTIVE_OPEN.test(line)) return true;
   if (ATX.test(line)) return true;
   const m = LIST.exec(line);
   if (m && line.slice(m[0].length).trim() !== "") return !/^\d/.test(m[2]) || /^1[.)]$/.test(m[2]);
   return false;
-}
-
-function isTableStart(lines: string[], i: number): boolean {
-  const unescapedPipe = /(^|[^\\])\|/;
-  return (
-    i + 1 < lines.length &&
-    unescapedPipe.test(lines[i]) &&
-    unescapedPipe.test(lines[i + 1]) &&
-    lines[i + 1].includes("-") &&
-    TABLE_RULE.test(lines[i + 1])
-  );
 }
 
 /** Item content must start with a paragraph; the editor's list items require it. */
@@ -55,7 +60,79 @@ function itemBlocks(blocks: DocNode[]): DocNode[] {
   return blocks.length > 0 && blocks[0].type === "paragraph" ? blocks : [para([]), ...blocks];
 }
 
-function parseBlocks(lines: string[]): DocNode[] {
+/** Content of a `columns` block: loose blocks go together into a column; there is always at least one. */
+function groupColumns(blocks: DocNode[]): DocNode[] {
+  const out: DocNode[] = [];
+  let loose: DocNode[] = [];
+  const endLoose = () => {
+    if (loose.length) out.push({ type: "column", content: loose });
+    loose = [];
+  };
+  for (const b of blocks) {
+    if (b.type === "column") {
+      endLoose();
+      out.push(b);
+    } else loose.push(b);
+  }
+  endLoose();
+  return out.length ? out : [{ type: "column", content: [para([])] }];
+}
+
+const nonEmpty = (blocks: DocNode[]) => (blocks.length ? blocks : [para([])]);
+
+/** Index after the closing fence of a code block that opens at `lines[at]`. */
+function skipFence(lines: string[], at: number): number {
+  const open = FENCE.exec(lines[at]) as RegExpExecArray;
+  let i = at + 1;
+  while (i < lines.length) {
+    const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(lines[i]);
+    i++;
+    if (close && close[1][0] === open[1][0] && close[1].length >= open[1].length) break;
+  }
+  return i;
+}
+
+/** The line that closes a directive opened with `size` colons, or `lines.length` if it never closes. */
+function findDirectiveEnd(lines: string[], from: number, size: number): number {
+  let i = from;
+  while (i < lines.length) {
+    if (FENCE.test(lines[i])) {
+      i = skipFence(lines, i);
+      continue;
+    }
+    const close = DIRECTIVE_CLOSE.exec(lines[i]);
+    if (close && close[1].length >= size) return i;
+    i++;
+  }
+  return lines.length;
+}
+
+/** Reads a table that starts at `lines[at]`, or returns null if it is not one. */
+function parseTable(lines: string[], at: number): { node: DocNode; next: number } | null {
+  if (at + 1 >= lines.length || !hasUnescapedPipe(lines[at]) || !hasUnescapedPipe(lines[at + 1])) return null;
+  const header = splitRow(lines[at]);
+  if (!isRuleRow(splitRow(lines[at + 1])) || splitRow(lines[at + 1]).length !== header.length) return null;
+  const rows = [header];
+  let i = at + 2;
+  while (i < lines.length && !isBlank(lines[i]) && hasUnescapedPipe(lines[i])) {
+    rows.push(splitRow(lines[i]));
+    i++;
+  }
+  const width = header.length;
+  const node: DocNode = {
+    type: "table",
+    content: rows.map((cells, r) => ({
+      type: "tableRow",
+      content: Array.from({ length: width }, (_, c) => ({
+        type: r === 0 ? "tableHeader" : "tableCell",
+        content: [para(parseCell(cells[c] ?? ""))],
+      })),
+    })),
+  };
+  return { node, next: i };
+}
+
+function parseBlocks(lines: string[], inColumns = false): DocNode[] {
   const out: DocNode[] = [];
   let i = 0;
   while (i < lines.length) {
@@ -67,21 +144,31 @@ function parseBlocks(lines: string[]): DocNode[] {
 
     const fence = FENCE.exec(line);
     if (fence) {
-      const mark = fence[1];
-      const body: string[] = [];
-      i++;
-      while (i < lines.length) {
-        const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(lines[i]);
-        if (close && close[1][0] === mark[0] && close[1].length >= mark.length) {
-          i++;
-          break;
-        }
-        body.push(lines[i]);
-        i++;
-      }
+      const end = skipFence(lines, i);
+      const closed = end > i + 1 && /^ {0,3}(`{3,}|~{3,})[ \t]*$/.test(lines[end - 1]) && end - 1 > i && isClosing(fence[1], lines[end - 1]);
+      const body = lines.slice(i + 1, closed ? end - 1 : end);
       const language = fence[2].split(/\s+/)[0] || null;
       const text = body.join("\n");
       out.push({ type: "codeBlock", attrs: { language }, ...(text ? { content: [textNode(text)] } : {}) });
+      i = end;
+      continue;
+    }
+
+    const directive = DIRECTIVE_OPEN.exec(line);
+    if (directive) {
+      const size = directive[1].length;
+      const end = findDirectiveEnd(lines, i + 1, size);
+      const inner = lines.slice(i + 1, end);
+      const name = directive[2].toLowerCase();
+      if (name === "columns" && directive[3] === "") {
+        out.push({ type: "columns", content: groupColumns(parseBlocks(inner, true)) });
+      } else if (name === "column" && directive[3] === "" && inColumns) {
+        out.push({ type: "column", content: nonEmpty(parseBlocks(inner)) });
+      } else {
+        // Not a block this app knows: keep every line, opening and closing included.
+        out.push({ type: "rawMarkdown", attrs: { text: lines.slice(i, Math.min(end + 1, lines.length)).join("\n") } });
+      }
+      i = Math.min(end + 1, lines.length);
       continue;
     }
 
@@ -106,18 +193,23 @@ function parseBlocks(lines: string[]): DocNode[] {
         inner.push(lines[i].replace(/^ {0,3}> ?/, ""));
         i++;
       }
-      const content = parseBlocks(inner);
-      out.push({ type: "blockquote", content: content.length ? content : [para([])] });
+      out.push({ type: "blockquote", content: nonEmpty(parseBlocks(inner)) });
       continue;
     }
 
-    const first = LIST.exec(line);
-    if (first) {
+    if (LIST.test(line)) {
       i = parseList(lines, i, out);
       continue;
     }
 
-    if (HTML.test(line) || isTableStart(lines, i)) {
+    const table = parseTable(lines, i);
+    if (table) {
+      out.push(table.node);
+      i = table.next;
+      continue;
+    }
+
+    if (HTML.test(line)) {
       const start = i;
       while (i < lines.length && !isBlank(lines[i])) i++;
       out.push({ type: "rawMarkdown", attrs: { text: lines.slice(start, i).join("\n") } });
@@ -127,7 +219,7 @@ function parseBlocks(lines: string[]): DocNode[] {
     // A paragraph: lines up to a blank line or a block that may interrupt it.
     const body: string[] = [line.replace(/^[ \t]+/, "").replace(/[ \t]+$/, "")];
     i++;
-    while (i < lines.length && !isBlank(lines[i]) && !interruptsParagraph(lines[i])) {
+    while (i < lines.length && !isBlank(lines[i]) && !interruptsParagraph(lines[i]) && parseTable(lines, i) === null) {
       body.push(lines[i].replace(/^[ \t]+/, "").replace(/[ \t]+$/, ""));
       i++;
     }
@@ -135,6 +227,12 @@ function parseBlocks(lines: string[]): DocNode[] {
     if (content.length) out.push(para(content));
   }
   return out;
+}
+
+/** Does `line` close a code fence that was opened with `open`? */
+function isClosing(open: string, line: string): boolean {
+  const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+  return !!close && close[1][0] === open[0] && close[1].length >= open.length;
 }
 
 /** Reads one whole list starting at `lines[start]`; returns the index after it. */
@@ -156,7 +254,7 @@ function parseList(lines: string[], start: number, out: DocNode[]): number {
     const rest = lines[i].slice(m[0].length);
     const spaces = m[3].length;
     const contentIndent = m[1].length + m[2].length + (rest === "" || spaces > 4 ? 1 : spaces);
-    const itemLines: string[] = [rest === "" ? "" : rest + ""];
+    const itemLines: string[] = [rest];
     if (spaces > 4 && rest !== "") itemLines[0] = " ".repeat(spaces - 1) + rest;
     i++;
     while (i < lines.length) {
@@ -216,16 +314,45 @@ function textOf(node: DocNode): string {
   return (node.content ?? []).map(textOf).join("");
 }
 
-function normalizeBlocks(blocks: DocNode[]): DocNode[] {
+function normalizeBlocks(blocks: DocNode[], inColumns = false): DocNode[] {
   const out: DocNode[] = [];
   for (const b of blocks) {
-    const n = normalizeBlock(b);
+    const n = normalizeBlock(b, inColumns);
     if (n) out.push(...n);
   }
   return out;
 }
 
-function normalizeBlock(b: DocNode): DocNode[] | null {
+/** The inline content of a table cell: its paragraphs joined by line breaks. */
+function cellInline(cell: DocNode): DocNode[] {
+  const parts = (cell.content ?? []).map((c) => (c.type === "paragraph" ? (c.content ?? []) : [textNode(textOf(c))]));
+  const joined: DocNode[] = [];
+  parts.forEach((part, i) => {
+    if (i > 0) joined.push({ type: "hardBreak" });
+    joined.push(...part);
+  });
+  return normalizeInline(joined);
+}
+
+function normalizeTable(b: DocNode): DocNode[] | null {
+  const rows = (b.content ?? []).filter((r) => r.type === "tableRow");
+  if (rows.length === 0) return null;
+  const width = Math.max(1, (rows[0].content ?? []).length);
+  return [
+    {
+      type: "table",
+      content: rows.map((row, r) => ({
+        type: "tableRow",
+        content: Array.from({ length: width }, (_, c) => ({
+          type: r === 0 ? "tableHeader" : "tableCell",
+          content: [para(cellInline((row.content ?? [])[c] ?? { type: "tableCell" }))],
+        })),
+      })),
+    },
+  ];
+}
+
+function normalizeBlock(b: DocNode, inColumns: boolean): DocNode[] | null {
   switch (b.type) {
     case "paragraph": {
       const content = normalizeInline(b.content ?? []);
@@ -244,10 +371,8 @@ function normalizeBlock(b: DocNode): DocNode[] | null {
         ? [{ type: "bulletList", content: items }]
         : [{ type: "orderedList", attrs: { start: Math.max(0, Math.floor(Number(b.attrs?.start ?? 1)) || 1) }, content: items }];
     }
-    case "blockquote": {
-      const content = normalizeBlocks(b.content ?? []);
-      return [{ type: "blockquote", content: content.length ? content : [para([])] }];
-    }
+    case "blockquote":
+      return [{ type: "blockquote", content: nonEmpty(normalizeBlocks(b.content ?? [])) }];
     case "codeBlock": {
       const text = textOf(b);
       const language = typeof b.attrs?.language === "string" && b.attrs.language ? b.attrs.language : null;
@@ -257,6 +382,13 @@ function normalizeBlock(b: DocNode): DocNode[] | null {
       return [{ type: "horizontalRule" }];
     case "rawMarkdown":
       return [{ type: "rawMarkdown", attrs: { text: String(b.attrs?.text ?? "") } }];
+    case "table":
+      return normalizeTable(b);
+    case "columns":
+      return [{ type: "columns", content: groupColumns(normalizeBlocks(b.content ?? [], true)) }];
+    case "column":
+      if (!inColumns) return normalizeBlocks(b.content ?? []); // a column only makes sense inside columns
+      return [{ type: "column", content: nonEmpty(normalizeBlocks(b.content ?? [])) }];
     default:
       // A node type this converter does not know: keep what it contains.
       return b.content ? normalizeBlocks(b.content) : null;
@@ -264,9 +396,7 @@ function normalizeBlock(b: DocNode): DocNode[] | null {
 }
 
 function normalizeItem(item: DocNode): DocNode {
-  let blocks = normalizeBlocks(item.content ?? []);
-  blocks = blocks.length > 0 ? blocks : [para([])];
-  return { type: "listItem", content: itemBlocks(blocks) };
+  return { type: "listItem", content: itemBlocks(nonEmpty(normalizeBlocks(item.content ?? []))) };
 }
 
 // ---------------------------------------------------------------- writing
@@ -284,6 +414,19 @@ function interruptsAParagraph(n: DocNode): boolean {
   return startsOk && (firstParagraph?.content?.length ?? 0) > 0;
 }
 
+/** How many colons a directive block must open with: more than anything inside it. */
+function fenceSize(node: DocNode): number {
+  let inner = 2;
+  const visit = (n: DocNode) => {
+    if (n.type === "columns" || n.type === "column") inner = Math.max(inner, fenceSize(n));
+    else if (n.type === "rawMarkdown") {
+      for (const m of String(n.attrs?.text ?? "").matchAll(/^ {0,3}(:{3,})/gm)) inner = Math.max(inner, m[1].length);
+    } else (n.content ?? []).forEach(visit);
+  };
+  (node.content ?? []).forEach(visit);
+  return inner + 1;
+}
+
 function blocksToLines(blocks: DocNode[], inItem: boolean): string[] {
   const out: string[] = [];
   let prev: DocNode | null = null;
@@ -295,6 +438,13 @@ function blocksToLines(blocks: DocNode[], inItem: boolean): string[] {
     prev = b;
   }
   return out;
+}
+
+function tableToLines(b: DocNode): string[] {
+  const rows = (b.content ?? []).map((row) => (row.content ?? []).map((cell) => serializeCell(cell.content?.[0]?.content ?? [])));
+  const width = rows[0]?.length ?? 1;
+  const line = (cells: string[]) => "| " + cells.join(" | ") + " |";
+  return [line(rows[0] ?? [""]), line(Array.from({ length: width }, () => "---")), ...rows.slice(1).map(line)];
 }
 
 function blockToLines(b: DocNode, alternate: boolean): string[] {
@@ -325,6 +475,17 @@ function blockToLines(b: DocNode, alternate: boolean): string[] {
       return ["---"];
     case "rawMarkdown":
       return String(b.attrs?.text ?? "").split("\n");
+    case "table":
+      return tableToLines(b);
+    case "columns": {
+      const fence = ":".repeat(fenceSize(b));
+      const columns = (b.content ?? []).map((c) => blockToLines(c, false));
+      return [fence + "columns", ...columns.flatMap((lines, i) => (i > 0 ? ["", ...lines] : lines)), fence];
+    }
+    case "column": {
+      const fence = ":".repeat(fenceSize(b));
+      return [fence + "column", ...blocksToLines(b.content ?? [], false), fence];
+    }
     default:
       return blocksToLines(normalizeBlocks([b]), false);
   }
@@ -338,5 +499,5 @@ function itemToLines(item: DocNode, marker: string): string[] {
 
 /** Writes a document as Markdown text (no trailing newline). */
 export function docToMarkdown(doc: DocNode): string {
-  return blocksToLines(normalizeDoc(doc).content ?? [], false).join("\n");
+  return blocksToLines(normalizeDoc(doc).content, false).join("\n");
 }

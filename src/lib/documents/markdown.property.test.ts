@@ -54,7 +54,7 @@ function randomInline(rng: Rng): DocNode[] {
 }
 
 function randomBlock(rng: Rng, depth: number): DocNode {
-  const roll = rng.int(1, depth >= 3 ? 5 : 12);
+  const roll = rng.int(1, depth >= 3 ? 5 : 15);
   if (roll <= 4) return { type: "paragraph", content: randomInline(rng) };
   if (roll === 5) return { type: "heading", attrs: { level: rng.int(1, 6) }, content: randomInline(rng) };
   if (roll === 6 || roll === 7) {
@@ -76,7 +76,25 @@ function randomBlock(rng: Rng, depth: number): DocNode {
   }
   if (roll === 10) return { type: "horizontalRule" };
   if (roll === 11) {
-    return { type: "rawMarkdown", attrs: { text: pick(rng, ["| a | b |\n|---|---|\n| 1 | 2 |", "<div>\nhi\n</div>", "<!-- note -->"]) } };
+    return { type: "rawMarkdown", attrs: { text: pick(rng, [":::mystery\nx\n:::", "<div>\nhi\n</div>", "<!-- note -->", "::::odd\n:::inner\nz\n:::\n::::"]) } };
+  }
+  if (roll === 12 || roll === 13) {
+    const width = rng.int(1, 3);
+    const rows: DocNode[] = [];
+    for (let r = rng.int(1, 3); r > 0; r--) {
+      const cells: DocNode[] = [];
+      for (let c = 0; c < width; c++) {
+        // A cell holds one paragraph of inline text (a line break is written <br>).
+        cells.push({ type: rows.length === 0 ? "tableHeader" : "tableCell", content: [{ type: "paragraph", content: randomInline(rng) }] });
+      }
+      rows.push({ type: "tableRow", content: cells });
+    }
+    return { type: "table", content: rows };
+  }
+  if (roll === 14) {
+    const cols: DocNode[] = [];
+    for (let c = rng.int(1, 3); c > 0; c--) cols.push({ type: "column", content: randomBlocks(rng, depth + 1, 1, 2, false) });
+    return { type: "columns", content: cols };
   }
   return { type: "paragraph", content: [{ type: "text", text: pick(rng, ["# x", "1. x", "- x", "> x", "---", "```", ":::x", "| a |", "<b>"]) }] };
 }

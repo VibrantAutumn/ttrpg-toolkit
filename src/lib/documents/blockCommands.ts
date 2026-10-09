@@ -3,7 +3,7 @@
  * the list and the typing filter; what each one does to the editor lives in the module,
  * so the list can be tested without an editor.
  */
-export type BlockCommandId = "text" | "h1" | "h2" | "h3" | "h4" | "bullet" | "ordered" | "quote" | "code" | "divider";
+export type BlockCommandId = "text" | "h1" | "h2" | "h3" | "h4" | "bullet" | "ordered" | "quote" | "code" | "divider" | "table" | "columns2" | "columns3";
 
 export interface BlockCommand {
   id: BlockCommandId;
@@ -23,6 +23,9 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
   { id: "ordered", label: "Numbered list", hint: "A list with numbers", keywords: ["ol", "ordered", "steps"] },
   { id: "quote", label: "Quote", hint: "Set text apart", keywords: ["blockquote", "callout"] },
   { id: "code", label: "Code block", hint: "Text kept exactly as typed", keywords: ["monospace", "pre"] },
+  { id: "table", label: "Table", hint: "Rows and columns of text", keywords: ["grid", "rows", "spreadsheet"] },
+  { id: "columns2", label: "2 columns", hint: "Side by side", keywords: ["column", "layout", "split"] },
+  { id: "columns3", label: "3 columns", hint: "Three side by side", keywords: ["column", "layout"] },
   { id: "divider", label: "Divider", hint: "A line across the page", keywords: ["rule", "hr", "line", "separator"] },
 ];
 

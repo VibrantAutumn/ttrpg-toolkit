@@ -1,6 +1,8 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import type { Node as ProseNode } from "@tiptap/pm/model";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
+import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
 import { exitSuggestion, type SuggestionProps } from "@tiptap/suggestion";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
@@ -8,6 +10,7 @@ import type { BlockCommand } from "../../lib/documents/blockCommands";
 import { canOpenExternally, normalizeLinkAddress } from "../../lib/documents/links";
 import { docToMarkdown, markdownToDoc } from "../../lib/documents/markdown";
 import type { DocNode } from "../../lib/documents/types";
+import { addColumn, Column, Columns, columnsContext, deleteColumn, insertColumns, insideNode, MAX_COLUMNS, unwrapColumns } from "./layoutNodes";
 import { RawMarkdown } from "./rawMarkdownNode";
 import { runBlockCommand, slashCommands, type SlashBridge } from "./slashCommands";
 
@@ -24,7 +27,14 @@ interface SlashView {
   pick: (item: BlockCommand) => void;
 }
 
-const BLOCK_OPTIONS: { value: string; label: string }[] = [
+// A table cell holds one paragraph (the Markdown table format has nothing more), and the first row is the header.
+const MarkdownCell = TableCell.extend({ content: "paragraph+" });
+const MarkdownHeader = TableHeader.extend({ content: "paragraph+" });
+
+/** True on a phone or tablet, where the system shows its own menu above a selection. */
+const touchScreen = () => typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches === true;
+
+const BLOCK_OPTIONS:{ value: string; label: string }[] = [
   { value: "text", label: "Text" },
   ...[1, 2, 3, 4, 5, 6].map((n) => ({ value: `h${n}`, label: `Heading ${n}` })),
 ];
@@ -119,6 +129,12 @@ export function RichEditor({
         link: { openOnClick: false, autolink: false, linkOnPaste: true },
       }),
       RawMarkdown,
+      Table.configure({ resizable: false }),
+      TableRow,
+      MarkdownHeader,
+      MarkdownCell,
+      Columns,
+      Column,
       slashCommands(bridge),
     ],
     [bridge],
@@ -180,6 +196,8 @@ export function RichEditor({
             block: e.isActive("heading") ? `h${e.getAttributes("heading").level}` : "text",
             canUndo: e.can().undo(),
             canRedo: e.can().redo(),
+            inTable: insideNode(e, "table"),
+            columnCount: columnsContext(e)?.columnsNode.childCount ?? 0,
           }
         : null,
   });
@@ -244,6 +262,12 @@ export function RichEditor({
         <ToolButton label="Code block" active={ui.codeBlock} onClick={() => run().toggleCodeBlock().run()}>
           {"{ }"}
         </ToolButton>
+        <ToolButton label="Table" active={ui.inTable} onClick={() => runBlockCommand(editor, "table")}>
+          ▦
+        </ToolButton>
+        <ToolButton label="Columns" active={ui.columnCount > 0} onClick={() => insertColumns(editor, 2)}>
+          ◫
+        </ToolButton>
         <ToolButton label="Divider" onClick={() => runBlockCommand(editor, "divider")}>
           ―
         </ToolButton>
@@ -304,8 +328,73 @@ export function RichEditor({
         )
       )}
 
+      {ui.inTable && (
+        <div className="rich-context" role="toolbar" aria-label="Table">
+          <ToolButton wide label="Row above" onClick={() => run().addRowBefore().run()}>
+            Row above
+          </ToolButton>
+          <ToolButton wide label="Row below" onClick={() => run().addRowAfter().run()}>
+            Row below
+          </ToolButton>
+          <ToolButton wide label="Column left" onClick={() => run().addColumnBefore().run()}>
+            Column left
+          </ToolButton>
+          <ToolButton wide label="Column right" onClick={() => run().addColumnAfter().run()}>
+            Column right
+          </ToolButton>
+          <ToolButton wide label="Delete row" onClick={() => run().deleteRow().run()}>
+            Delete row
+          </ToolButton>
+          <ToolButton wide label="Delete column" onClick={() => run().deleteColumn().run()}>
+            Delete column
+          </ToolButton>
+          <ToolButton wide danger label="Delete table" onClick={() => run().deleteTable().run()}>
+            Delete table
+          </ToolButton>
+        </div>
+      )}
+      {ui.columnCount > 0 && (
+        <div className="rich-context" role="toolbar" aria-label="Columns">
+          <ToolButton wide label="Add column" disabled={ui.columnCount >= MAX_COLUMNS} onClick={() => addColumn(editor)}>
+            Add column
+          </ToolButton>
+          <ToolButton wide label="Delete this column" disabled={ui.columnCount <= 1} onClick={() => deleteColumn(editor)}>
+            Delete this column
+          </ToolButton>
+          <ToolButton wide label="Remove columns (keep the content)" onClick={() => unwrapColumns(editor)}>
+            Remove columns
+          </ToolButton>
+        </div>
+      )}
+
+      <BubbleMenu
+        editor={editor}
+        className="rich-bubble"
+        options={{ placement: touchScreen() ? "bottom" : "top", offset: 8, flip: true, shift: { padding: 8 } }}
+        shouldShow={({ editor: e, state }) =>
+          // A text selection (not a selected block or cell): only those have a "$cursor" property.
+          e.isEditable && "$cursor" in state.selection && !state.selection.empty && !e.isActive("codeBlock")
+        }
+      >
+        <ToolButton label="Bold" active={ui.bold} onClick={() => run().toggleBold().run()}>
+          <strong>B</strong>
+        </ToolButton>
+        <ToolButton label="Italic" active={ui.italic} onClick={() => run().toggleItalic().run()}>
+          <em>I</em>
+        </ToolButton>
+        <ToolButton label="Strikethrough" active={ui.strike} onClick={() => run().toggleStrike().run()}>
+          <s>S</s>
+        </ToolButton>
+        <ToolButton label="Inline code" active={ui.code} onClick={() => run().toggleCode().run()}>
+          {"</>"}
+        </ToolButton>
+        <ToolButton label="Link" active={ui.link} onClick={() => setLinkDraft(ui.linkHref)}>
+          🔗
+        </ToolButton>
+      </BubbleMenu>
+
       <EditorContent editor={editor} />
-      {slash && slash.items.length > 0 && <SlashMenu view={slash} />}
+      {slash &&slash.items.length > 0 && <SlashMenu view={slash} />}
     </div>
   );
 }
@@ -314,19 +403,24 @@ function ToolButton({
   label,
   active,
   disabled,
+  wide,
+  danger,
   onClick,
   children,
 }: {
   label: string;
   active?: boolean;
   disabled?: boolean;
+  /** A text button (as opposed to a one-symbol one). */
+  wide?: boolean;
+  danger?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
-      className={active ? "tool on" : "tool"}
+      className={["tool", active && "on", wide && "wide", danger && "danger"].filter(Boolean).join(" ")}
       aria-label={label}
       aria-pressed={active ?? false}
       title={label}

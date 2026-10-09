@@ -344,6 +344,117 @@ button.link.name {
   color: #fff;
 }
 
+/* Tables, columns, the bars that appear inside them, and the floating menu over a selection */
+.rich-text .tableWrapper {
+  margin: 0 0 0.75rem;
+  overflow-x: auto;
+}
+
+.rich-text table {
+  width: 100%;
+  min-width: 20rem;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.rich-text th,
+.rich-text td {
+  position: relative;
+  min-width: 3em;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  vertical-align: top;
+  text-align: left;
+}
+
+.rich-text th {
+  background: var(--bg);
+  font-weight: 600;
+}
+
+.rich-text td > p,
+.rich-text th > p {
+  margin: 0;
+}
+
+.rich-text .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  opacity: 0.2;
+  pointer-events: none;
+}
+
+.rich-text .columns {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 1rem;
+  margin: 0 0 0.75rem;
+}
+
+.rich-text .column {
+  min-width: 0;
+  padding: 0.25rem 0.5rem;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+
+.rich-text .column > :last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  .rich-text .columns {
+    grid-auto-flow: row;
+  }
+}
+
+.rich-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  background: var(--surface);
+}
+
+.rich-toolbar .tool.wide,
+.rich-context .tool.wide {
+  min-height: 32px;
+  font-size: 0.85rem;
+}
+
+.rich-context .tool.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.rich-bubble {
+  z-index: 20;
+  display: flex;
+  gap: 0.2rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.rich-bubble .tool {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 0.5rem;
+}
+
+.rich-bubble .tool.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .import-pack {
   margin-top: 0.5rem;
 }

@@ -37,6 +37,12 @@ describe("filterBlockCommands", () => {
     expect(ids("heading zzz")).toEqual([]);
   });
 
+  it("finds tables and columns", () => {
+    expect(ids("table")).toEqual(["table"]);
+    expect(ids("col")).toEqual(["columns2", "columns3"]);
+    expect(ids("3 col")).toEqual(["columns3"]);
+  });
+
   it("gives nothing for text that matches nothing", () => {
     expect(ids("zzzz")).toEqual([]);
   });
