@@ -224,6 +224,11 @@ describe("docToMarkdown", () => {
     );
   });
 
+  it("ignores the extra attributes the editor puts on links (target, rel), and keeps the emphasis", () => {
+    const editorLink: DocMark = { type: "link", attrs: { href: "https://x.com", target: "_blank", rel: "noopener", class: null } };
+    expect(docToMarkdown(doc(p(t("a "), t("b", "bold"), t(" "), t("c", editorLink))))).toBe("a **b** [c](https://x.com)");
+  });
+
   it("keeps spaces outside emphasis so it still reads back", () => {
     const md = docToMarkdown(doc(p(t("bold ", "bold"), t("rest"))));
     expect(md).toBe("**bold** rest");
@@ -270,6 +275,42 @@ describe("docToMarkdown", () => {
   it("writes text from node types it does not know instead of losing it", () => {
     const unknown: DocNode = { type: "mystery", content: [p(t("kept"))] };
     expect(docToMarkdown(doc(unknown))).toBe("kept");
+  });
+});
+
+describe("emphasis written as tags", () => {
+  const inline = (md: string) => (blocks(md)[0].content ?? []) as DocNode[];
+
+  it("reads <strong>, <em> and <del> (and <b>, <i>, <s>) as emphasis", () => {
+    expect(inline("<strong>a</strong> <em>b</em> <del>c</del>")).toEqual([
+      t("a", "bold"),
+      t(" "),
+      t("b", "italic"),
+      t(" "),
+      t("c", "strike"),
+    ]);
+    expect(inline("<b>x</b><i>y</i>")).toEqual([t("x", "bold"), t("y", "italic")]);
+  });
+
+  it("is not raw HTML when a paragraph starts with such a tag", () => {
+    expect(blocks("<em>hi</em> there")).toEqual([p(t("hi", "italic"), t(" there"))]);
+  });
+
+  it("leaves a tag with no partner as text", () => {
+    expect(inline("a <b> b")).toEqual([t("a <b> b")]);
+  });
+
+  it("writes text that looks like a tag with a backslash, so it stays text", () => {
+    const md = docToMarkdown(doc(p(t("<b>not bold</b>"))));
+    expect(md).toBe("\\<b>not bold\\</b>");
+    expect(blocks(md)).toEqual([p(t("<b>not bold</b>"))]);
+  });
+
+  it("keeps bold, italic and strike apart when * and _ alone would be ambiguous", () => {
+    // Italic next to a letter must use *, which collides with bold's **; tags avoid that.
+    const nodes = [t("&]]c"), t("&+", "italic"), t("*|~ !", "bold", "italic"), t("\\a", "bold", "strike")];
+    const md = docToMarkdown(doc(p(...nodes)));
+    expect(blocks(md)).toEqual([p(...nodes)]);
   });
 });
 

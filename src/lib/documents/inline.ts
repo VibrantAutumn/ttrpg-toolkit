@@ -32,7 +32,9 @@ export function sortMarks(marks: DocMark[]): DocMark[] {
     const r = MARK_ORDER.indexOf(m.type);
     return r < 0 ? MARK_ORDER.length : r;
   };
-  return unique.sort((a, b) => rank(a) - rank(b) || markKey(a).localeCompare(markKey(b)));
+  // Only the address matters for a link; the editor adds attributes (target, rel) that Markdown cannot hold.
+  const canonical = unique.map((m): DocMark => (m.type === "link" ? { type: "link", attrs: { href: String(m.attrs?.href ?? "") } } : { type: m.type }));
+  return canonical.sort((a, b) => rank(a) - rank(b) || markKey(a).localeCompare(markKey(b)));
 }
 
 export function textNode(text: string, marks: DocMark[] = []): DocNode {
@@ -52,7 +54,12 @@ type Atom =
   | { k: "br" }
   | { k: "link"; href: string; children: DocNode[] }
   | Delim
+  | { k: "tag"; mark: string; closing: boolean; raw: string }
   | { k: "wrap"; mark: DocMark; children: Atom[] };
+
+/** The few HTML tags read as emphasis. Writing uses them when `*` and `_` would be ambiguous. */
+const TAG = /^<(\/?)(strong|b|em|i|del|s)>/i;
+const TAG_MARK: Record<string, string> = { strong: "bold", b: "bold", em: "italic", i: "italic", del: "strike", s: "strike" };
 
 /** Index of the `]` that closes the `[` at `start`, or -1. Skips escapes and code spans. */
 function findBracketEnd(src: string, start: number): number {
@@ -194,6 +201,16 @@ function scan(src: string): Atom[] {
         buf += c;
         i++;
       }
+    } else if (c === "<") {
+      const tag = TAG.exec(src.slice(i, i + 12));
+      if (tag) {
+        flush();
+        atoms.push({ k: "tag", mark: TAG_MARK[tag[2].toLowerCase()], closing: tag[1] === "/", raw: tag[0] });
+        i += tag[0].length;
+      } else {
+        buf += c;
+        i++;
+      }
     } else if (c === "*" || c === "_" || c === "~") {
       let n = 1;
       while (src[i + n] === c) n++;
@@ -292,6 +309,9 @@ function flatten(items: Atom[], marks: DocMark[], out: DocNode[]): void {
           } else out.push(child);
         }
         break;
+      case "tag":
+        out.push(textNode(it.raw, marks)); // a tag with no partner is just text
+        break;
       case "wrap":
         flatten(it.children, [...marks, it.mark], out);
         break;
@@ -302,9 +322,37 @@ function flatten(items: Atom[], marks: DocMark[], out: DocNode[]): void {
 const stripLinks = (nodes: DocNode[]): DocNode[] =>
   nodes.map((n) => (n.marks ? { ...n, marks: n.marks.filter((m) => m.type !== "link") } : n));
 
+/**
+ * Pairs `<em>`-style tags (nearest open tag of the same kind), then resolves `*`/`_`/`~~`
+ * inside each pair and in what is left. A tag with no partner stays as the text it was.
+ */
+function resolveAll(items: Atom[]): Atom[] {
+  const stack: { index: number; mark: string }[] = [];
+  const out: Atom[] = [];
+  for (const it of items) {
+    if (it.k === "tag" && !it.closing) {
+      stack.push({ index: out.length, mark: it.mark });
+      out.push(it);
+    } else if (it.k === "tag") {
+      let s = stack.length - 1;
+      while (s >= 0 && stack[s].mark !== it.mark) s--;
+      if (s < 0) {
+        out.push({ k: "text", s: it.raw });
+        continue;
+      }
+      const { index } = stack[s];
+      stack.length = s; // tags opened inside the pair are left as text
+      const inner = out.splice(index + 1);
+      out.pop(); // the opening tag
+      out.push({ k: "wrap", mark: { type: it.mark }, children: resolveAll(inner) });
+    } else out.push(it);
+  }
+  return resolveEmphasis(out);
+}
+
 function readInline(src: string): DocNode[] {
   const out: DocNode[] = [];
-  flatten(resolveEmphasis(scan(src)), [], out);
+  flatten(resolveAll(scan(src)), [], out);
   return out;
 }
 
@@ -433,6 +481,7 @@ function escapeText(text: string, atLineStart: boolean, inHeading: boolean): str
       const bothSidesWord = i > 0 && i < text.length - 1 && isAlnum(text[i - 1]) && isAlnum(text[i + 1]);
       out += bothSidesWord ? c : "\\" + c;
     } else if (c === "#" && inHeading) out += "\\#";
+    else if (c === "<" && /^<\/?(strong|b|em|i|del|s)>/i.test(text.slice(i, i + 12))) out += "\\<"; // would read as a tag
     else out += c;
   }
   if (atLineStart) out = escapeLineStart(text, out);
@@ -441,8 +490,10 @@ function escapeText(text: string, atLineStart: boolean, inHeading: boolean): str
 
 /** Escapes a line start that would otherwise read as a heading, list, quote, rule or similar. */
 function escapeLineStart(raw: string, escaped: string): string {
-  if (/^#{1,6}([ \t]|$)/.test(raw) || /^>/.test(raw) || /^<(?=[A-Za-z/!?])/.test(raw)) return "\\" + escaped;
-  if (/^[-+]([ \t]|$)/.test(raw) || /^-{3,}[ \t]*$/.test(raw)) return "\\" + escaped;
+  if (/^<(?=[A-Za-z/!?])/.test(raw)) return escaped.startsWith("\\<") ? escaped : "\\" + escaped; // maybe already escaped as a tag
+  if (/^#{1,6}([ \t]|$)/.test(raw) || /^>/.test(raw)) return "\\" + escaped;
+  // A dash at the start can make a list item or a rule (and after a list marker, "- --" is a rule too).
+  if (/^-([- \t]|$)/.test(raw) || /^\+([ \t]|$)/.test(raw)) return "\\" + escaped;
   if (/^:::/.test(raw)) return "\\" + escaped;
   const ordered = /^(\d{1,9})([.)])([ \t]|$)/.exec(raw);
   if (ordered) return ordered[1] + "\\" + escaped.slice(ordered[1].length);
@@ -468,9 +519,19 @@ function destination(href: string): string {
 
 /** Italic is a placeholder here; `resolveItalics` picks `_` or `*` once the neighbours are known. */
 type Piece = string | { italic: "open" | "close" };
-const openToken = (m: DocMark): Piece => (m.type === "link" ? "[" : m.type === "bold" ? "**" : m.type === "italic" ? { italic: "open" } : "~~");
-const closeToken = (m: DocMark): Piece =>
-  m.type === "link" ? `](${destination(String(m.attrs?.href ?? ""))})` : m.type === "bold" ? "**" : m.type === "italic" ? { italic: "close" } : "~~";
+const TAG_NAME: Record<string, string> = { bold: "strong", italic: "em", strike: "del" };
+const openToken = (m: DocMark, tags: boolean): Piece =>
+  m.type === "link" ? "[" : tags ? `<${TAG_NAME[m.type]}>` : m.type === "bold" ? "**" : m.type === "italic" ? { italic: "open" } : "~~";
+const closeToken = (m: DocMark, tags: boolean): Piece =>
+  m.type === "link"
+    ? `](${destination(String(m.attrs?.href ?? ""))})`
+    : tags
+      ? `</${TAG_NAME[m.type]}>`
+      : m.type === "bold"
+        ? "**"
+        : m.type === "italic"
+          ? { italic: "close" }
+          : "~~";
 
 /**
  * Italic is written with `_` (it can never be confused with the `**` of bold), except where
@@ -515,29 +576,32 @@ function resolveItalics(pieces: Piece[]): string {
  *
  * Some combinations of marks next to punctuation are ambiguous in Markdown itself, so the
  * result is read back and compared. If it does not match, the marks are written one
- * piece at a time, and as a last resort the emphasis is dropped rather than letting the
- * text change (so no words are ever lost). The last resort needs bold, italic and
- * punctuation piled against each other; it showed up once in 40,000 random test documents
- * built from nothing but awkward characters.
+ * piece at a time, and then with <strong>/<em>/<del> tags (valid in Markdown, and never
+ * ambiguous). Only if even that fails is the emphasis dropped rather than letting the
+ * text change; the tests make sure that does not happen.
  */
 export function serializeInline(input: DocNode[], inHeading = false): string {
   const nodes = normalizeInline(input, inHeading);
   const same = (text: string) => JSON.stringify(normalizeInline(readInline(text), inHeading)) === JSON.stringify(nodes);
-  const nested = emitInline(nodes, inHeading, false);
-  if (same(nested)) return nested;
-  const isolated = emitInline(nodes, inHeading, true);
-  if (same(isolated)) return isolated;
+  for (const mode of ["nested", "isolated", "tags"] as const) {
+    const text = emitInline(nodes, inHeading, mode);
+    if (same(text)) return text;
+  }
   const plain = nodes.map((n) => (n.type === "text" ? textNode(n.text ?? "", (n.marks ?? []).filter((m) => !EMPHASIS.has(m.type))) : n));
-  return emitInline(normalizeInline(plain, inHeading), inHeading, true);
+  return emitInline(normalizeInline(plain, inHeading), inHeading, "isolated");
 }
 
-function emitInline(nodes: DocNode[], inHeading: boolean, isolated: boolean): string {
+type EmitMode = "nested" | "isolated" | "tags";
+
+function emitInline(nodes: DocNode[], inHeading: boolean, mode: EmitMode): string {
+  const isolated = mode === "isolated";
+  const tags = mode === "tags";
   const out: Piece[] = [];
   const stack: DocMark[] = [];
   let lineStart = true;
 
   const closeDownTo = (height: number) => {
-    while (stack.length > height) out.push(closeToken(stack.pop() as DocMark));
+    while (stack.length > height) out.push(closeToken(stack.pop() as DocMark, tags));
   };
 
   /** How many of the following nodes (up to the next line break) carry this mark. */
@@ -566,7 +630,7 @@ function emitInline(nodes: DocNode[], inHeading: boolean, isolated: boolean): st
       .sort((a, b) => b.len - a.len || MARK_ORDER.indexOf(a.m.type) - MARK_ORDER.indexOf(b.m.type));
     let opened = false;
     for (const { m } of toOpen) {
-      out.push(openToken(m));
+      out.push(openToken(m, tags));
       stack.push(m);
       opened = true;
     }

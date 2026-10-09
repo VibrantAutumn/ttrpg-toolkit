@@ -24,7 +24,7 @@ const ATX = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t]*$/;
 const HR = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
 const QUOTE = /^ {0,3}>/;
 const LIST = /^( {0,3})([-+*]|\d{1,9}[.)])([ \t]+|$)/;
-const HTML = /^ {0,3}<[A-Za-z/!?]/;
+const HTML = /^ {0,3}<(?!\/?(?:strong|b|em|i|del|s)>)[A-Za-z/!?]/i;
 const TABLE_RULE = /^ {0,3}\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/;
 
 const indentOf = (line: string) => /^ */.exec(line)?.[0].length ?? 0;

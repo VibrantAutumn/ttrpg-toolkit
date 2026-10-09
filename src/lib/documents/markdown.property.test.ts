@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRng, type Rng } from "../dice/rng";
+import { normalizeInline, parseInline, serializeInline } from "./inline";
 import { docToMarkdown, markdownToDoc, normalizeDoc } from "./markdown";
 import type { DocMark, DocNode } from "./types";
 
@@ -27,7 +28,11 @@ function randomMarks(rng: Rng): DocMark[] {
   if (rng.int(1, 5) === 1) marks.push({ type: "bold" });
   if (rng.int(1, 5) === 1) marks.push({ type: "italic" });
   if (rng.int(1, 8) === 1) marks.push({ type: "strike" });
-  if (rng.int(1, 6) === 1) marks.push({ type: "link", attrs: { href: pick(rng, HREFS) } });
+  if (rng.int(1, 6) === 1) {
+    // Sometimes with the extra attributes TipTap adds to every link.
+    const extra = rng.int(1, 2) === 1 ? { target: "_blank", rel: "noopener", class: null } : {};
+    marks.push({ type: "link", attrs: { href: pick(rng, HREFS), ...extra } });
+  }
   return marks;
 }
 
@@ -83,7 +88,43 @@ function randomBlocks(rng: Rng, depth: number, min: number, max: number, paragra
   return blocks;
 }
 
+/** Where two documents first differ, so a failure in a big document is easy to find. */
+function firstDifference(a: unknown, b: unknown, path = "doc"): string | null {
+  if (JSON.stringify(a) === JSON.stringify(b)) return null;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      const d = firstDifference(a[i], b[i], `${path}[${i}]`);
+      if (d) return d;
+    }
+  }
+  if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) {
+    for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      const d = firstDifference((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key], `${path}.${key}`);
+      if (d) return d;
+    }
+  }
+  return `${path}: expected ${JSON.stringify(a)} but got ${JSON.stringify(b)}`;
+}
+
 const randomDoc = (rng: Rng): DocNode => ({ type: "doc", content: randomBlocks(rng, 0, 1, 5, false) });
+
+describe("random inline text survives writing and reading", () => {
+  it("reads back what was written, for text full of marks and punctuation", () => {
+    const rng = createRng(2025);
+    let worst: string | null = null;
+    for (let n = 0; n < 20000; n++) {
+      const nodes = randomInline(rng);
+      const expected = normalizeInline(nodes);
+      const text = serializeInline(nodes);
+      const back = parseInline(text);
+      if (JSON.stringify(back) !== JSON.stringify(expected)) {
+        const report = ["Written: " + JSON.stringify(text), "Expected: " + JSON.stringify(expected), "Got:      " + JSON.stringify(back)].join("\n");
+        if (worst === null || report.length < worst.length) worst = report;
+      }
+    }
+    if (worst) throw new Error("Inline text changed.\n" + worst);
+  });
+});
 
 describe("random documents survive writing and reading", () => {
   it("reads back exactly what was written (after tidying)", () => {
@@ -95,7 +136,7 @@ describe("random documents survive writing and reading", () => {
       const back = markdownToDoc(md);
       const expected = normalizeDoc(doc);
       if (JSON.stringify(back) !== JSON.stringify(expected)) {
-        const report = ["Markdown: " + JSON.stringify(md), "Expected: " + JSON.stringify(expected), "Got:      " + JSON.stringify(back)].join("\n");
+        const report = ["Markdown: " + JSON.stringify(md), "First difference: " + firstDifference(expected, back), ...(md.length < 300 ? ["Expected: " + JSON.stringify(expected)] : [])].join("\n");
         if (worst === null || report.length < worst.length) worst = report;
       }
     }

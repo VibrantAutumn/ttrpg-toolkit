@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { getDocumentBody, setDocumentBody } from "../../api/library";
 import { createAutosaver, type Autosaver, type SaveStatus } from "../../lib/autosave";
+import { deviceStorage } from "../../state/deviceStorage";
+import { RichEditor, type RichEditorHandle } from "./RichEditor";
 
 const STATUS_LABEL: Record<SaveStatus, string> = {
   saved: "Saved",
@@ -9,17 +11,42 @@ const STATUS_LABEL: Record<SaveStatus, string> = {
   error: "Couldn't save",
 };
 
+type Mode = "rich" | "markdown";
+const MODE_KEY = "documents.editorMode";
+
+/** Which view was used last on this device. Only a convenience: unreadable storage means "rich". */
+function loadMode(): Mode {
+  try {
+    return deviceStorage()?.getItem(MODE_KEY) === "markdown" ? "markdown" : "rich";
+  } catch {
+    return "rich";
+  }
+}
+
+function saveMode(mode: Mode) {
+  try {
+    deviceStorage()?.setItem(MODE_KEY, mode);
+  } catch {
+    // Not remembered; nothing else is affected.
+  }
+}
+
 /**
- * A plain text box for a document's Markdown, with autosave: it saves shortly
- * after you stop typing, when you leave the box, when you navigate away, and when
- * the app is hidden (Android can close a hidden app at any time).
- * The Phase 4 rich editor replaces this component.
+ * A document's editor. The rich view is the everyday one; the Markdown view shows the
+ * stored text itself (the way to see or change anything the rich view shows as "as
+ * written", like tables). Both save through the same autosave: shortly after you stop
+ * typing, when you leave the text, when you navigate away, and when the app is hidden
+ * (Android can close a hidden app at any time).
  */
 export function DocumentEditor({ itemId }: { itemId: string }) {
-  const [text, setText] = useState<string | null>(null); // null while loading
+  const [text, setText] = useState<string | null>(null); // the text a view starts from; null while loading
+  const [mode, setMode] = useState<Mode>(loadMode);
   const [status, setStatus] = useState<SaveStatus>("saved");
   const [error, setError] = useState<string | null>(null);
+  const [richKey, setRichKey] = useState(0);
   const saver = useRef<Autosaver | null>(null);
+  const latest = useRef<string>(""); // the newest text from whichever view is showing
+  const rich = useRef<RichEditorHandle | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -35,7 +62,11 @@ export function DocumentEditor({ itemId }: { itemId: string }) {
     saver.current = autosaver;
 
     getDocumentBody(itemId)
-      .then((body) => active && setText(body))
+      .then((body) => {
+        if (!active) return;
+        latest.current = body;
+        setText(body);
+      })
       .catch((e) => active && setError(String(e)));
 
     const saveWhenHidden = () => {
@@ -55,23 +86,51 @@ export function DocumentEditor({ itemId }: { itemId: string }) {
     return error ? <p className="error">{error}</p> : <p className="empty">Loading...</p>;
   }
 
+  function changeText(markdown: string) {
+    latest.current = markdown;
+    saver.current?.change(markdown);
+  }
+
+  function switchMode(next: Mode) {
+    rich.current?.commit(); // get the rich view's newest edits into `latest`
+    setText(latest.current);
+    if (next === "rich") setRichKey((k) => k + 1); // a fresh editor reads the text
+    setMode(next);
+    saveMode(next);
+  }
+
   return (
     <div className="doc-editor">
-      <textarea
-        value={text}
-        onChange={(e) => {
-          setText(e.currentTarget.value);
-          saver.current?.change(e.currentTarget.value);
-        }}
-        onBlur={() => void saver.current?.flush()}
-        placeholder="Write here. Markdown works: # Heading, **bold**, - list"
-        aria-label="Document text"
-        spellCheck
-      />
-      <p className={status === "error" ? "error" : "meta"} role="status">
-        {STATUS_LABEL[status]}
-        {status === "error" && error ? `: ${error}` : ""}
-      </p>
+      {mode === "rich" ? (
+        <RichEditor
+          key={richKey}
+          ref={rich}
+          initial={text}
+          onMarkdown={changeText}
+          onFlush={() => void saver.current?.flush()}
+        />
+      ) : (
+        <textarea
+          value={text}
+          onChange={(e) => {
+            setText(e.currentTarget.value);
+            changeText(e.currentTarget.value);
+          }}
+          onBlur={() => void saver.current?.flush()}
+          placeholder="Write here. Markdown works: # Heading, **bold**, - list"
+          aria-label="Document text (Markdown)"
+          spellCheck
+        />
+      )}
+      <div className="doc-editor-foot row">
+        <p className={status === "error" ? "error grow" : "meta grow"} role="status">
+          {STATUS_LABEL[status]}
+          {status === "error" && error ? `: ${error}` : ""}
+        </p>
+        <button type="button" className="link" onClick={() => switchMode(mode === "rich" ? "markdown" : "rich")}>
+          {mode === "rich" ? "Edit as Markdown" : "Back to rich editor"}
+        </button>
+      </div>
     </div>
   );
 }
