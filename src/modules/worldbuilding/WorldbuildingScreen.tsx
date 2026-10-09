@@ -2,8 +2,10 @@ import { useState } from "react";
 import { FieldsManager } from "../../components/fields/FieldsManager";
 import { LibraryScreen } from "../../components/library/LibraryScreen";
 import { documentType } from "./documentType";
+import { NewFromTemplate } from "./NewFromTemplate";
+import { templateType } from "./templateType";
 
-const itemTypes = [documentType];
+const itemTypes = [documentType, templateType];
 
 /** The Worldbuilding tool: the document library, and the fields (and field sets) any item can use. */
 export function WorldbuildingScreen() {
@@ -20,7 +22,12 @@ export function WorldbuildingScreen() {
       </div>
       {/* Both stay mounted (just hidden) so the library keeps its folder and search. */}
       <div hidden={tab !== "documents"}>
-        <LibraryScreen library="worldbuilding" title="Worldbuilding" itemTypes={itemTypes} />
+        <LibraryScreen
+          library="worldbuilding"
+          title="Worldbuilding"
+          itemTypes={itemTypes}
+          extraCreate={({ folderId }) => <NewFromTemplate folderId={folderId} />}
+        />
       </div>
       <div hidden={tab !== "fields"}>
         <h1>Fields</h1>

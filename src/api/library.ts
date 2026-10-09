@@ -85,6 +85,14 @@ export const deleteItem = (id: string) => invoke<void>("delete_item", { id });
 
 export const getItem = (id: string) => invoke<Item>("get_item", { id });
 
+/** Every live item of one type in a library, from every folder. */
+export const listItemsOfType = (campaignId: string, library: string, itemType: string) =>
+  invoke<Item[]>("list_items_of_type", { campaignId, library, itemType });
+
+/** Makes a new document from a template: its text, tags, field sets and default values. */
+export const createFromTemplate = (templateId: string, name: string, folderId: string | null) =>
+  invoke<Item>("create_from_template", { templateId, name, folderId });
+
 // Document text (Markdown)
 export const getDocumentBody = (itemId: string) =>
   invoke<string>("get_document_body", { itemId });

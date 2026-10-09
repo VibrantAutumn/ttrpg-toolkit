@@ -46,6 +46,8 @@ pub fn run() {
             commands::set_document_body,
             commands::list_manual_link_ids,
             commands::create_from_template,
+            commands::list_items_of_type,
+            commands::install_template_bundle,
             commands::list_field_definitions,
             commands::list_deleted_field_definitions,
             commands::create_field_definition,

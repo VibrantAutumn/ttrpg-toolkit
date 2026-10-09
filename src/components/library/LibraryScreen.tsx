@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   createFolder,
   createItem,
@@ -48,10 +48,13 @@ export function LibraryScreen({
   title,
   itemTypes,
   allowNewItems = true,
+  extraCreate,
 }: {
   library: string;
   title: string;
   itemTypes: ItemTypeDefinition[];
+  /** Another way to make items (for example "New from template"), drawn under the "New item" form. */
+  extraCreate?: (context: { folderId: string | null }) => ReactNode;
   /** False for libraries whose items are made elsewhere (e.g. saved rolls): hides the "New item" form. */
   allowNewItems?: boolean;
 }) {
@@ -442,6 +445,8 @@ export function LibraryScreen({
             </button>
           </form>
           )}
+
+          {extraCreate?.({ folderId })}
 
           {subfolders.length === 0 && items.length === 0 ? (
             <p className="empty">

@@ -1,0 +1,392 @@
+{
+  "id": "starter:templates",
+  "name": "Templates",
+  "tags": [
+    {
+      "name": "NPC",
+      "color": null
+    },
+    {
+      "name": "Location",
+      "color": null
+    },
+    {
+      "name": "Faction",
+      "color": null
+    },
+    {
+      "name": "Item",
+      "color": null
+    },
+    {
+      "name": "Quest",
+      "color": null
+    },
+    {
+      "name": "Session",
+      "color": null
+    }
+  ],
+  "fields": [
+    {
+      "key": "role",
+      "name": "Role",
+      "kind": "text",
+      "description": "What they do: innkeeper, guard captain, hedge witch...",
+      "configJson": "{\"multiline\":false}"
+    },
+    {
+      "key": "species",
+      "name": "Species",
+      "kind": "text",
+      "description": "",
+      "configJson": "{\"multiline\":false}"
+    },
+    {
+      "key": "npc-status",
+      "name": "Status",
+      "kind": "dropdown",
+      "description": "",
+      "configJson": "{\"options\":[{\"id\":\"alive\",\"label\":\"Alive\",\"color\":null},{\"id\":\"dead\",\"label\":\"Dead\",\"color\":null},{\"id\":\"missing\",\"label\":\"Missing\",\"color\":null},{\"id\":\"unknown\",\"label\":\"Unknown\",\"color\":null}]}"
+    },
+    {
+      "key": "faction",
+      "name": "Faction",
+      "kind": "link",
+      "description": "The group they belong to",
+      "configJson": "{\"many\":false,\"library\":null,\"itemTypes\":[]}"
+    },
+    {
+      "key": "home",
+      "name": "Home",
+      "kind": "link",
+      "description": "Where they live",
+      "configJson": "{\"many\":false,\"library\":null,\"itemTypes\":[]}"
+    },
+    {
+      "key": "motivation",
+      "name": "Motivation",
+      "kind": "text",
+      "description": "What they want",
+      "configJson": "{\"multiline\":true}"
+    },
+    {
+      "key": "secret",
+      "name": "Secret",
+      "kind": "text",
+      "description": "Something only the GM knows",
+      "configJson": "{\"multiline\":true}"
+    },
+    {
+      "key": "location-kind",
+      "name": "Location kind",
+      "kind": "dropdown",
+      "description": "",
+      "configJson": "{\"options\":[{\"id\":\"settlement\",\"label\":\"Settlement\",\"color\":null},{\"id\":\"building\",\"label\":\"Building\",\"color\":null},{\"id\":\"dungeon\",\"label\":\"Dungeon\",\"color\":null},{\"id\":\"wilderness\",\"label\":\"Wilderness\",\"color\":null},{\"id\":\"landmark\",\"label\":\"Landmark\",\"color\":null},{\"id\":\"other\",\"label\":\"Other\",\"color\":null}]}"
+    },
+    {
+      "key": "region",
+      "name": "Region",
+      "kind": "text",
+      "description": "",
+      "configJson": "{\"multiline\":false}"
+    },
+    {
+      "key": "population",
+      "name": "Population",
+      "kind": "number",
+      "description": "",
+      "configJson": "{\"min\":0,\"max\":null,\"decimals\":0,\"unit\":\"\"}"
+    },
+    {
+      "key": "ruler",
+      "name": "Ruler",
+      "kind": "link",
+      "description": "",
+      "configJson": "{\"many\":false,\"library\":null,\"itemTypes\":[]}"
+    },
+    {
+      "key": "points-of-interest",
+      "name": "Points of interest",
+      "kind": "list",
+      "description": "Notable places and features here",
+      "configJson": "{}"
+    },
+    {
+      "key": "goal",
+      "name": "Goal",
+      "kind": "text",
+      "description": "What the group is trying to achieve",
+      "configJson": "{\"multiline\":true}"
+    },
+    {
+      "key": "leader",
+      "name": "Leader",
+      "kind": "link",
+      "description": "",
+      "configJson": "{\"many\":false,\"library\":null,\"itemTypes\":[]}"
+    },
+    {
+      "key": "headquarters",
+      "name": "Headquarters",
+      "kind": "link",
+      "description": "",
+      "configJson": "{\"many\":false,\"library\":null,\"itemTypes\":[]}"
+    },
+    {
+      "key": "allies",
+      "name": "Allies",
+      "kind": "link",
+      "description": "",
+      "configJson": "{\"many\":true,\"library\":null,\"itemTypes\":[]}"
+    },
+    {
+      "key": "rivals",
+      "name": "Rivals",
+      "kind": "link",
+      "description": "",
+      "configJson": "{\"many\":true,\"library\":null,\"itemTypes\":[]}"
+    },
+    {
+      "key": "item-kind",
+      "name": "Item kind",
+      "kind": "dropdown",
+      "description": "",
+      "configJson": "{\"options\":[{\"id\":\"weapon\",\"label\":\"Weapon\",\"color\":null},{\"id\":\"armour\",\"label\":\"Armour\",\"color\":null},{\"id\":\"wondrous-item\",\"label\":\"Wondrous item\",\"color\":null},{\"id\":\"consumable\",\"label\":\"Consumable\",\"color\":null},{\"id\":\"tool\",\"label\":\"Tool\",\"color\":null},{\"id\":\"treasure\",\"label\":\"Treasure\",\"color\":null}]}"
+    },
+    {
+      "key": "rarity",
+      "name": "Rarity",
+      "kind": "dropdown",
+      "description": "",
+      "configJson": "{\"options\":[{\"id\":\"common\",\"label\":\"Common\",\"color\":null},{\"id\":\"uncommon\",\"label\":\"Uncommon\",\"color\":null},{\"id\":\"rare\",\"label\":\"Rare\",\"color\":null},{\"id\":\"legendary\",\"label\":\"Legendary\",\"color\":null},{\"id\":\"unique\",\"label\":\"Unique\",\"color\":null}]}"
+    },
+    {
+      "key": "value",
+      "name": "Value",
+      "kind": "number",
+      "description": "",
+      "configJson": "{\"min\":0,\"max\":null,\"decimals\":0,\"unit\":\"\"}"
+    },
+    {
+      "key": "held-by",
+      "name": "Held by",
+      "kind": "link",
+      "description": "",
+      "configJson": "{\"many\":false,\"library\":null,\"itemTypes\":[]}"
+    },
+    {
+      "key": "properties",
+      "name": "Properties",
+      "kind": "list",
+      "description": "What it does, each with its rules",
+      "configJson": "{}"
+    },
+    {
+      "key": "progress",
+      "name": "Progress",
+      "kind": "dropdown",
+      "description": "",
+      "configJson": "{\"options\":[{\"id\":\"rumour\",\"label\":\"Rumour\",\"color\":null},{\"id\":\"open\",\"label\":\"Open\",\"color\":null},{\"id\":\"in-progress\",\"label\":\"In progress\",\"color\":null},{\"id\":\"completed\",\"label\":\"Completed\",\"color\":null},{\"id\":\"failed\",\"label\":\"Failed\",\"color\":null}]}"
+    },
+    {
+      "key": "quest-giver",
+      "name": "Quest giver",
+      "kind": "link",
+      "description": "",
+      "configJson": "{\"many\":false,\"library\":null,\"itemTypes\":[]}"
+    },
+    {
+      "key": "where",
+      "name": "Where",
+      "kind": "link",
+      "description": "Where it takes place",
+      "configJson": "{\"many\":false,\"library\":null,\"itemTypes\":[]}"
+    },
+    {
+      "key": "reward",
+      "name": "Reward",
+      "kind": "text",
+      "description": "",
+      "configJson": "{\"multiline\":true}"
+    },
+    {
+      "key": "objectives",
+      "name": "Objectives",
+      "kind": "list",
+      "description": "What needs doing",
+      "configJson": "{}"
+    },
+    {
+      "key": "session-number",
+      "name": "Session number",
+      "kind": "number",
+      "description": "",
+      "configJson": "{\"min\":1,\"max\":null,\"decimals\":0,\"unit\":\"\"}"
+    },
+    {
+      "key": "played-on",
+      "name": "Played on",
+      "kind": "text",
+      "description": "",
+      "configJson": "{\"multiline\":false}"
+    },
+    {
+      "key": "players",
+      "name": "Players",
+      "kind": "text",
+      "description": "",
+      "configJson": "{\"multiline\":false}"
+    },
+    {
+      "key": "next-time",
+      "name": "Next time",
+      "kind": "text",
+      "description": "Where to pick up",
+      "configJson": "{\"multiline\":true}"
+    }
+  ],
+  "sets": [
+    {
+      "name": "NPC",
+      "description": "A person in the world",
+      "fieldKeys": [
+        "role",
+        "species",
+        "npc-status",
+        "faction",
+        "home",
+        "motivation",
+        "secret"
+      ]
+    },
+    {
+      "name": "Location",
+      "description": "A place",
+      "fieldKeys": [
+        "location-kind",
+        "region",
+        "population",
+        "ruler",
+        "points-of-interest"
+      ]
+    },
+    {
+      "name": "Faction",
+      "description": "A group",
+      "fieldKeys": [
+        "goal",
+        "leader",
+        "headquarters",
+        "allies",
+        "rivals"
+      ]
+    },
+    {
+      "name": "Item",
+      "description": "A thing worth noting",
+      "fieldKeys": [
+        "item-kind",
+        "rarity",
+        "value",
+        "held-by",
+        "properties"
+      ]
+    },
+    {
+      "name": "Quest",
+      "description": "Something the party can do",
+      "fieldKeys": [
+        "progress",
+        "quest-giver",
+        "where",
+        "reward",
+        "objectives"
+      ]
+    },
+    {
+      "name": "Session",
+      "description": "One session at the table",
+      "fieldKeys": [
+        "session-number",
+        "played-on",
+        "players",
+        "next-time"
+      ]
+    }
+  ],
+  "templates": [
+    {
+      "key": "npc",
+      "name": "NPC",
+      "icon": "🧙",
+      "body": "## Appearance\n\n## Personality\n\n## Background\n\n:::secret\n## Secrets\n:::",
+      "sets": [
+        "NPC"
+      ],
+      "tags": [
+        "NPC"
+      ]
+    },
+    {
+      "key": "location",
+      "name": "Location",
+      "icon": "🏰",
+      "body": "## Description\n\n## Who lives here\n\n## Adventure hooks",
+      "sets": [
+        "Location"
+      ],
+      "tags": [
+        "Location"
+      ]
+    },
+    {
+      "key": "faction",
+      "name": "Faction",
+      "icon": "🏴",
+      "body": "## Overview\n\n## Structure\n\n## Methods\n\n## Relationships",
+      "sets": [
+        "Faction"
+      ],
+      "tags": [
+        "Faction"
+      ]
+    },
+    {
+      "key": "item",
+      "name": "Item",
+      "icon": "🎒",
+      "body": "## Description\n\n## Properties and rules\n\n## History",
+      "sets": [
+        "Item"
+      ],
+      "tags": [
+        "Item"
+      ]
+    },
+    {
+      "key": "quest",
+      "name": "Quest",
+      "icon": "📜",
+      "body": "## Summary\n\n## How it begins\n\n## Complications\n\n## Outcomes",
+      "sets": [
+        "Quest"
+      ],
+      "tags": [
+        "Quest"
+      ]
+    },
+    {
+      "key": "session",
+      "name": "Session",
+      "icon": "🎲",
+      "body": "## Recap\n\n## Scenes\n\n## Loose ends\n\n:::secret\n## GM notes\n:::",
+      "sets": [
+        "Session"
+      ],
+      "tags": [
+        "Session"
+      ]
+    }
+  ]
+}

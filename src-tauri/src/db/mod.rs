@@ -18,6 +18,7 @@ pub mod settings;
 pub mod spreads;
 pub mod starters;
 pub mod table_starters;
+pub mod template_starters;
 pub mod templates;
 pub mod tables;
 pub mod tags;

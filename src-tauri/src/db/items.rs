@@ -141,6 +141,18 @@ pub fn list(
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
+/// Every live item of one type in a library, in any folder, alphabetical (for pickers such as
+/// "New from template").
+pub fn list_of_type(conn: &Connection, campaign_id: &str, library: &str, item_type: &str) -> Result<Vec<Item>, DbError> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {COLUMNS} FROM items
+         WHERE campaign_id = ?1 AND library = ?2 AND item_type = ?3 AND deleted_at IS NULL
+         ORDER BY name COLLATE NOCASE, created_at"
+    ))?;
+    let rows = stmt.query_map(params![campaign_id, library, item_type], from_row)?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
 pub fn rename(conn: &Connection, id: &str, name: &str, now: i64) -> Result<Item, DbError> {
     let name = clean_name(name)?;
     let current = get(conn, id)?;
@@ -200,6 +212,20 @@ mod tests {
         let conn = open_in_memory();
         let c = campaigns::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
+    }
+
+    #[test]
+    fn items_of_one_type_are_listed_from_every_folder_and_not_from_the_trash() {
+        let (conn, camp) = setup();
+        let f = folders::create(&conn, &camp, "w", None, "Sub", 1).unwrap();
+        create(&conn, &camp, "w", "template", "Zeta", None, 2).unwrap();
+        create(&conn, &camp, "w", "template", "alpha", Some(&f.id), 3).unwrap();
+        create(&conn, &camp, "w", "document", "Not a template", None, 4).unwrap();
+        create(&conn, &camp, "other", "template", "Other library", None, 5).unwrap();
+        let gone = create(&conn, &camp, "w", "template", "Gone", None, 6).unwrap();
+        soft_delete(&conn, &gone.id, 7).unwrap();
+        let names: Vec<String> = list_of_type(&conn, &camp, "w", "template").unwrap().into_iter().map(|i| i.name).collect();
+        assert_eq!(names, ["alpha", "Zeta"]);
     }
 
     #[test]

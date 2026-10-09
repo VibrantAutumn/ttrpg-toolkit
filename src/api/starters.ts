@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { BundleJson } from "../lib/cards/starters";
 import type { TableBundleJson } from "../lib/tables/starterTables";
+import type { TemplateBundleJson } from "../lib/templates/starterTemplates";
 
 /** Mirrors the Rust `InstallResult`. */
 export interface InstallResult {
@@ -36,3 +37,19 @@ export interface TableInstallResult {
  */
 export const installTableBundle = (campaignId: string, bundle: TableBundleJson) =>
   invoke<TableInstallResult>("install_table_bundle", { campaignId, bundleJson: JSON.stringify(bundle) });
+
+/** Mirrors the Rust `TemplateInstallResult`. */
+export interface TemplateInstallResult {
+  folderId: string;
+  templates: number;
+  fieldsMade: number;
+  setsMade: number;
+}
+
+/**
+ * Adds the starter templates (and the fields and field sets they use) to a campaign in one
+ * all-or-nothing step. Refuses if they were added before, if a template with one of their names
+ * exists, or if a field of one of their names exists with a different kind.
+ */
+export const installTemplateBundle = (campaignId: string, bundle: TemplateBundleJson) =>
+  invoke<TemplateInstallResult>("install_template_bundle", { campaignId, bundleJson: JSON.stringify(bundle) });

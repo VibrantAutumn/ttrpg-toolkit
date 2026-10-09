@@ -1487,3 +1487,20 @@ input.narrow {
   margin: 0.5rem 0;
   padding-left: 1.25rem;
 }
+
+/* New from template */
+.new-from-template {
+  margin: 0.5rem 0;
+}
+
+.template-panel {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.template-hint {
+  margin: 0.5rem 0;
+}

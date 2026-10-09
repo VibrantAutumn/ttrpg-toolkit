@@ -24,6 +24,7 @@ use crate::db::saved_draws::{self, NewSavedDraw, SavedDraw};
 use crate::db::saved_rolls::{self, NewSavedRoll, SavedRoll};
 use crate::db::tags::{self, Tag, TagLink};
 use crate::db::trash::{self, Trash};
+use crate::db::template_starters::{self, TemplateInstallResult};
 use crate::db::templates;
 use crate::db::{self, search, settings};
 use crate::pack::import::{ImportResult, PackPreview};
@@ -677,6 +678,21 @@ pub fn get_items(db: Db, ids: Vec<String>) -> Result<Vec<Item>, String> {
 }
 
 // ---- Templates ----
+
+/// Adds the starter templates (with the fields and field sets they use) to a campaign in one
+/// all-or-nothing step, sent as JSON text.
+#[tauri::command]
+pub async fn install_template_bundle(db: Db<'_>, campaign_id: String, bundle_json: String) -> Result<TemplateInstallResult, String> {
+    let bundle: template_starters::TemplateBundle = serde_json::from_str(&bundle_json)
+        .map_err(|_| "The starter's data couldn't be read.".to_string())?;
+    with_conn(&db, |c| template_starters::install(c, &campaign_id, &bundle, db::now_ms()))
+}
+
+/// Every live item of one type in a library, from every folder.
+#[tauri::command]
+pub fn list_items_of_type(db: Db, campaign_id: String, library: String, item_type: String) -> Result<Vec<Item>, String> {
+    with_conn(&db, |c| items::list_of_type(c, &campaign_id, &library, &item_type))
+}
 
 /// Makes a new document from a template (its text, tags, field sets and default values).
 #[tauri::command]
