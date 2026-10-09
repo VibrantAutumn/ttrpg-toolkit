@@ -344,6 +344,180 @@ button.link.name {
   color: #fff;
 }
 
+/* Fields: the panel on an item's page, the value editors, and the forms in Worldbuilding's Fields tab */
+.item-fields {
+  margin-top: 1.5rem;
+}
+
+.field-group {
+  margin: 0 0 1rem;
+  padding: 0.25rem 0.75rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.field-group h3 {
+  margin: 0.5rem 0;
+  font-size: 1rem;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 11rem) 1fr;
+  gap: 0.25rem 0.75rem;
+  align-items: start;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.field-group > .field-row:first-of-type,
+.field-group > h3 + .field-row {
+  border-top: none;
+}
+
+.field-name {
+  padding-top: 0.5rem;
+  font-weight: 600;
+}
+
+.field-editor input[type="text"],
+.field-editor textarea,
+.field-editor select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.field-editor textarea {
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  resize: vertical;
+}
+
+.field-actions {
+  grid-column: 2;
+}
+
+.field-error {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+}
+
+.field-secret {
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+
+.field-number,
+.field-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.field-bar-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.field-bar {
+  height: 0.5rem;
+  margin-top: 0.35rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.field-bar-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+.field-list {
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.field-list-entry {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.field-links {
+  margin: 0 0 0.35rem;
+  padding: 0;
+  list-style: none;
+}
+
+.field-links button {
+  min-height: 0;
+  margin-left: 0.35rem;
+  padding: 0 0.4rem;
+}
+
+.field-form {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0.5rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.field-form h3 {
+  margin: 0;
+}
+
+.field-form label {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.field-form label.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.field-form input[type="text"],
+.field-form select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.field-form .choices {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.fields-manager h2 {
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 600px) {
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .field-name {
+    padding-top: 0;
+  }
+
+  .field-actions {
+    grid-column: 1;
+  }
+}
+
 /* Mentions: a chip linking to another item */
 .rich-text .mention {
   display: inline-block;

@@ -16,6 +16,7 @@ import {
 import { registry } from "../../registry";
 import { useNavigation } from "../../state/Navigation";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
+import { ItemFieldsPanel } from "../fields/ItemFieldsPanel";
 import { useRenameItem } from "../../state/renameReview";
 import { ConfirmButton } from "../ConfirmButton";
 import { TagChips } from "../library/TagChips";
@@ -206,6 +207,8 @@ export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => voi
             </p>
           )}
 
+          {!trashed && <ItemFieldsPanel item={item} />}
+
           <h2>Links</h2>
           {outgoing.length === 0 && !picking && (
             <p className="empty">
@@ -221,8 +224,8 @@ export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => voi
                     Remove
                   </button>
                 ) : (
-                  <span className="meta" title="Mentioned in this item's text. Remove the mention to remove the link.">
-                    mentioned in text
+                  <span className="meta" title="Made by a mention in this item's text or by a link field. Remove the mention or the field's value to remove the link.">
+                    from text or a field
                   </span>
                 )}
               </li>
