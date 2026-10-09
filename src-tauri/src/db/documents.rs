@@ -11,13 +11,19 @@ pub const DOCUMENT_TYPE: &str = "document";
 /// A safety limit (in bytes) so a runaway paste can't bloat the database.
 pub const MAX_BODY_BYTES: usize = 2_000_000;
 
-/// Checks the item exists, is live, and is a document.
+/// Does an item of this type hold text? Documents do, and so do templates (their text is the
+/// starter text of the documents made from them).
+pub fn holds_text(item_type: &str) -> bool {
+    item_type == DOCUMENT_TYPE || item_type == super::templates::TEMPLATE_TYPE
+}
+
+/// Checks the item exists, is live, and holds text.
 fn require_live_document(conn: &Connection, item_id: &str) -> Result<(), DbError> {
     let item = items::get(conn, item_id)?;
     if item.deleted_at.is_some() {
         return Err(DbError::NotFound);
     }
-    if item.item_type != DOCUMENT_TYPE {
+    if !holds_text(&item.item_type) {
         return Err(DbError::Invalid("This item doesn't hold document text."));
     }
     Ok(())

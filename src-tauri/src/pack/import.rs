@@ -584,7 +584,7 @@ fn sanitize(pack: &mut ParsedPack) {
     let before = pack.documents.len();
     let mut seen = HashSet::new();
     pack.documents.retain(|d| {
-        item_type.get(d.item_id.as_str()) == Some(&documents::DOCUMENT_TYPE)
+        item_type.get(d.item_id.as_str()).is_some_and(|t| documents::holds_text(t))
             && d.body.len() <= documents::MAX_BODY_BYTES
             && seen.insert(d.item_id.clone())
     });

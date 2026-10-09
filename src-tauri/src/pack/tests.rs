@@ -1947,3 +1947,30 @@ fn remapped_body_replaces_only_known_item_addresses() {
     assert_eq!(remapped_body("item:ffffffff-ffff-4fff-8fff-ffffffffffff", &map), "item:ffffffff-ffff-4fff-8fff-ffffffffffff");
     assert_eq!(remapped_body("héllo item:é wörld item:", &map), "héllo item:é wörld item:");
 }
+
+#[test]
+fn a_templates_starter_text_and_setup_survive_a_pack_round_trip() {
+    use crate::db::templates;
+    let source = open_in_memory();
+    let camp = campaigns::create(&source, "Templates", 1000).unwrap();
+    let c = camp.id.as_str();
+    let template = items::create(&source, c, "worldbuilding", templates::TEMPLATE_TYPE, "NPC", None, 1100).unwrap();
+    documents::set_body(&source, &template.id, "## Motivation\n\n", 1200).unwrap();
+    let race = fields::create_definition(&source, c, "Race", "text", "", "{}", 1300).unwrap();
+    let people = fields::create_set(&source, c, "People", "", 1310).unwrap();
+    fields::set_set_fields(&source, &people.id, &[race.id.clone()], 1320).unwrap();
+    fields::apply_set(&source, &template.id, &people.id, 1330).unwrap();
+
+    let bytes = export_campaign(&source, c, 5000).unwrap();
+    let target = open_in_memory();
+    let result = import_pack(&target, &bytes, 6000).unwrap();
+    assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+    let imported = search::search(&target, &result.campaign.id, "NPC", None, 10).unwrap().remove(0);
+    assert_eq!(imported.item_type, templates::TEMPLATE_TYPE);
+    assert_eq!(documents::get_body(&target, &imported.id).unwrap(), "## Motivation\n\n");
+
+    // And a document made from the imported template gets the imported field set.
+    let made = templates::create_from(&target, &imported.id, "Ireena", None, 7000).unwrap();
+    assert_eq!(documents::get_body(&target, &made.id).unwrap(), "## Motivation\n\n");
+    assert_eq!(fields::list_item_sets(&target, &made.id).unwrap().len(), 1);
+}

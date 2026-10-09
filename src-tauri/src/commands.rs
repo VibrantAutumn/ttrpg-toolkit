@@ -24,6 +24,7 @@ use crate::db::saved_draws::{self, NewSavedDraw, SavedDraw};
 use crate::db::saved_rolls::{self, NewSavedRoll, SavedRoll};
 use crate::db::tags::{self, Tag, TagLink};
 use crate::db::trash::{self, Trash};
+use crate::db::templates;
 use crate::db::{self, search, settings};
 use crate::pack::import::{ImportResult, PackPreview};
 use crate::pack::{self, PackError};
@@ -673,6 +674,14 @@ pub fn get_items(db: Db, ids: Vec<String>) -> Result<Vec<Item>, String> {
     with_conn(&db, |c| {
         Ok(ids.iter().filter_map(|id| items::get(c, id).ok()).collect())
     })
+}
+
+// ---- Templates ----
+
+/// Makes a new document from a template (its text, tags, field sets and default values).
+#[tauri::command]
+pub fn create_from_template(db: Db, template_id: String, name: String, folder_id: Option<String>) -> Result<Item, String> {
+    with_conn(&db, |c| templates::create_from(c, &template_id, &name, folder_id.as_deref(), db::now_ms()))
 }
 
 // ---- Fields ----
