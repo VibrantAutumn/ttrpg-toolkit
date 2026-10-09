@@ -35,6 +35,11 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     let table_entries = read_table_entries(conn, campaign_id)?;
     let table_entry_tags = read_table_entry_tags(conn, campaign_id)?;
     let name_presets = read_name_presets(conn, campaign_id)?;
+    let field_definitions = read_field_definitions(conn, campaign_id)?;
+    let field_sets = read_field_sets(conn, campaign_id)?;
+    let field_set_members = read_field_set_members(conn, campaign_id)?;
+    let item_field_sets = read_item_field_sets(conn, campaign_id)?;
+    let field_values = read_field_values(conn, campaign_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -64,6 +69,11 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
             table_entries: table_entries.len() as u32,
             table_entry_tags: table_entry_tags.len() as u32,
             name_presets: name_presets.len() as u32,
+            field_definitions: field_definitions.len() as u32,
+            field_sets: field_sets.len() as u32,
+            field_set_members: field_set_members.len() as u32,
+            item_field_sets: item_field_sets.len() as u32,
+            field_values: field_values.len() as u32,
         },
     };
 
@@ -87,6 +97,11 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     put(&mut zip, options, TABLE_ENTRIES_FILE, &table_entries, false)?;
     put(&mut zip, options, TABLE_ENTRY_TAGS_FILE, &table_entry_tags, false)?;
     put(&mut zip, options, NAME_PRESETS_FILE, &name_presets, false)?;
+    put(&mut zip, options, FIELD_DEFINITIONS_FILE, &field_definitions, false)?;
+    put(&mut zip, options, FIELD_SETS_FILE, &field_sets, false)?;
+    put(&mut zip, options, FIELD_SET_MEMBERS_FILE, &field_set_members, false)?;
+    put(&mut zip, options, ITEM_FIELD_SETS_FILE, &item_field_sets, false)?;
+    put(&mut zip, options, FIELD_VALUES_FILE, &field_values, false)?;
     put(&mut zip, options, COLLECTION_MEMBERS_FILE, &collection_members, false)?;
     let image_records: Vec<CardImageRecord> = card_images.iter().map(|(r, _, _)| r.clone()).collect();
     put(&mut zip, options, CARD_IMAGES_FILE, &image_records, false)?;
@@ -491,6 +506,106 @@ fn read_table_entry_tags(conn: &Connection, campaign_id: &str) -> Result<Vec<Tab
             created_at: r.get(2)?,
             updated_at: r.get(3)?,
             deleted_at: r.get(4)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_field_definitions(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldDefinitionRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, kind, description, config_json, created_at, updated_at, deleted_at
+         FROM field_definitions WHERE campaign_id = ?1 ORDER BY created_at, id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(FieldDefinitionRecord {
+            id: r.get(0)?,
+            name: r.get(1)?,
+            kind: r.get(2)?,
+            description: r.get(3)?,
+            config_json: r.get(4)?,
+            created_at: r.get(5)?,
+            updated_at: r.get(6)?,
+            deleted_at: r.get(7)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_field_sets(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldSetRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, description, created_at, updated_at, deleted_at
+         FROM field_sets WHERE campaign_id = ?1 ORDER BY created_at, id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(FieldSetRecord {
+            id: r.get(0)?,
+            name: r.get(1)?,
+            description: r.get(2)?,
+            created_at: r.get(3)?,
+            updated_at: r.get(4)?,
+            deleted_at: r.get(5)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_field_set_members(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldSetMemberRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT m.set_id, m.field_id, m.position, m.created_at, m.updated_at, m.deleted_at
+         FROM field_set_members m JOIN field_sets s ON s.id = m.set_id
+         WHERE s.campaign_id = ?1 ORDER BY m.set_id, m.position, m.field_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(FieldSetMemberRecord {
+            set_id: r.get(0)?,
+            field_id: r.get(1)?,
+            position: r.get(2)?,
+            created_at: r.get(3)?,
+            updated_at: r.get(4)?,
+            deleted_at: r.get(5)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_item_field_sets(conn: &Connection, campaign_id: &str) -> Result<Vec<ItemFieldSetRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT a.item_id, a.set_id, a.position, a.created_at, a.updated_at, a.deleted_at
+         FROM item_field_sets a JOIN items i ON i.id = a.item_id
+         WHERE i.campaign_id = ?1 ORDER BY a.item_id, a.position, a.set_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(ItemFieldSetRecord {
+            item_id: r.get(0)?,
+            set_id: r.get(1)?,
+            position: r.get(2)?,
+            created_at: r.get(3)?,
+            updated_at: r.get(4)?,
+            deleted_at: r.get(5)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_field_values(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldValueRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT v.item_id, v.field_id, v.value_json, v.sort_num, v.sort_text, v.search_text, v.secret,
+                v.created_at, v.updated_at, v.deleted_at
+         FROM field_values v JOIN items i ON i.id = v.item_id
+         WHERE i.campaign_id = ?1 ORDER BY v.item_id, v.field_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(FieldValueRecord {
+            item_id: r.get(0)?,
+            field_id: r.get(1)?,
+            value_json: r.get(2)?,
+            sort_num: r.get(3)?,
+            sort_text: r.get(4)?,
+            search_text: r.get(5)?,
+            secret: r.get::<_, i64>(6)? != 0,
+            created_at: r.get(7)?,
+            updated_at: r.get(8)?,
+            deleted_at: r.get(9)?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)

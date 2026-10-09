@@ -14,6 +14,8 @@
 //!   data/saved_draws.json, data/play_decks.json, data/spreads.json, data/spread_positions.json    (likewise)
 //!   data/random_tables.json, data/table_entries.json, data/table_entry_tags.json    (likewise; recent picks are never exported)
 //!   data/name_presets.json    (likewise; a saved name generator setup, with table and tag ids inside)
+//!   data/field_definitions.json, data/field_sets.json, data/field_set_members.json, data/item_field_sets.json,
+//!   data/field_values.json    (likewise; fields and their values. A link field's value holds item ids)
 //!   assets/cards/<id>.<ext>, assets/cards/<id>.thumb.<ext>   card pictures (one file each)
 //!   assets/                  reserved for future use (images, ...)
 //!
@@ -49,6 +51,11 @@ pub const RANDOM_TABLES_FILE: &str = "data/random_tables.json";
 pub const TABLE_ENTRIES_FILE: &str = "data/table_entries.json";
 pub const TABLE_ENTRY_TAGS_FILE: &str = "data/table_entry_tags.json";
 pub const NAME_PRESETS_FILE: &str = "data/name_presets.json";
+pub const FIELD_DEFINITIONS_FILE: &str = "data/field_definitions.json";
+pub const FIELD_SETS_FILE: &str = "data/field_sets.json";
+pub const FIELD_SET_MEMBERS_FILE: &str = "data/field_set_members.json";
+pub const ITEM_FIELD_SETS_FILE: &str = "data/item_field_sets.json";
+pub const FIELD_VALUES_FILE: &str = "data/field_values.json";
 /// Card picture files live under this folder inside the zip.
 pub const CARD_ASSET_DIR: &str = "assets/cards/";
 
@@ -95,6 +102,11 @@ pub struct Counts {
     pub table_entries: u32,
     pub table_entry_tags: u32,
     pub name_presets: u32,
+    pub field_definitions: u32,
+    pub field_sets: u32,
+    pub field_set_members: u32,
+    pub item_field_sets: u32,
+    pub field_values: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -311,4 +323,79 @@ pub struct NamePresetRecord {
     pub setup_json: String,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+/// A field (its kind never changes). `config_json` holds the kind's settings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldDefinitionRecord {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default = "empty_object")]
+    pub config_json: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deleted_at: Option<i64>,
+}
+
+fn empty_object() -> String {
+    "{}".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldSetRecord {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deleted_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldSetMemberRecord {
+    pub set_id: String,
+    pub field_id: String,
+    pub position: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deleted_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemFieldSetRecord {
+    pub item_id: String,
+    pub set_id: String,
+    pub position: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deleted_at: Option<i64>,
+}
+
+/// What an item holds for a field. A link field's `value_json` is a list of item ids; import
+/// points them at the imported copies.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldValueRecord {
+    pub item_id: String,
+    pub field_id: String,
+    pub value_json: String,
+    #[serde(default)]
+    pub sort_num: Option<f64>,
+    #[serde(default)]
+    pub sort_text: Option<String>,
+    #[serde(default)]
+    pub search_text: String,
+    #[serde(default)]
+    pub secret: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deleted_at: Option<i64>,
 }

@@ -3,6 +3,7 @@ pub mod cards;
 pub mod collections;
 pub mod documents;
 pub mod error;
+pub mod fields;
 pub mod folders;
 pub mod formulas;
 pub mod items;

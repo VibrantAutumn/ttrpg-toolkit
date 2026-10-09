@@ -9,6 +9,7 @@ use crate::db::cards::{self, CardDetails, ImageData};
 use crate::db::collections;
 use crate::db::documents;
 use crate::db::error::DbError;
+use crate::db::fields::{self, FieldDefinition, FieldSet, FieldValue, IndexUpdate, ItemFields, ValueIndex};
 use crate::db::folders::{self, Folder};
 use crate::db::items::{self, Item};
 use crate::db::formulas::{self, Formula, FormulaEntry};
@@ -672,6 +673,135 @@ pub fn get_items(db: Db, ids: Vec<String>) -> Result<Vec<Item>, String> {
     with_conn(&db, |c| {
         Ok(ids.iter().filter_map(|id| items::get(c, id).ok()).collect())
     })
+}
+
+// ---- Fields ----
+
+#[tauri::command]
+pub fn list_field_definitions(db: Db, campaign_id: String) -> Result<Vec<FieldDefinition>, String> {
+    with_conn(&db, |c| fields::list_definitions(c, &campaign_id))
+}
+
+#[tauri::command]
+pub fn list_deleted_field_definitions(db: Db, campaign_id: String) -> Result<Vec<FieldDefinition>, String> {
+    with_conn(&db, |c| fields::list_deleted_definitions(c, &campaign_id))
+}
+
+#[tauri::command]
+pub fn create_field_definition(
+    db: Db,
+    campaign_id: String,
+    name: String,
+    kind: String,
+    description: String,
+    config_json: String,
+) -> Result<FieldDefinition, String> {
+    with_conn(&db, |c| fields::create_definition(c, &campaign_id, &name, &kind, &description, &config_json, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn update_field_definition(
+    db: Db,
+    id: String,
+    name: String,
+    description: String,
+    config_json: String,
+) -> Result<FieldDefinition, String> {
+    with_conn(&db, |c| fields::update_definition(c, &id, &name, &description, &config_json, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn delete_field_definition(db: Db, id: String) -> Result<(), String> {
+    with_conn(&db, |c| fields::delete_definition(c, &id, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn restore_field_definition(db: Db, id: String) -> Result<FieldDefinition, String> {
+    with_conn(&db, |c| fields::restore_definition(c, &id, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn list_field_sets(db: Db, campaign_id: String) -> Result<Vec<FieldSet>, String> {
+    with_conn(&db, |c| fields::list_sets(c, &campaign_id))
+}
+
+#[tauri::command]
+pub fn list_deleted_field_sets(db: Db, campaign_id: String) -> Result<Vec<FieldSet>, String> {
+    with_conn(&db, |c| fields::list_deleted_sets(c, &campaign_id))
+}
+
+#[tauri::command]
+pub fn create_field_set(db: Db, campaign_id: String, name: String, description: String) -> Result<FieldSet, String> {
+    with_conn(&db, |c| fields::create_set(c, &campaign_id, &name, &description, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn update_field_set(db: Db, id: String, name: String, description: String) -> Result<FieldSet, String> {
+    with_conn(&db, |c| fields::update_set(c, &id, &name, &description, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn set_field_set_fields(db: Db, set_id: String, field_ids: Vec<String>) -> Result<FieldSet, String> {
+    with_conn(&db, |c| fields::set_set_fields(c, &set_id, &field_ids, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn delete_field_set(db: Db, id: String) -> Result<(), String> {
+    with_conn(&db, |c| fields::delete_set(c, &id, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn restore_field_set(db: Db, id: String) -> Result<FieldSet, String> {
+    with_conn(&db, |c| fields::restore_set(c, &id, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn apply_field_set(db: Db, item_id: String, set_id: String) -> Result<(), String> {
+    with_conn(&db, |c| fields::apply_set(c, &item_id, &set_id, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn unapply_field_set(db: Db, item_id: String, set_id: String) -> Result<(), String> {
+    with_conn(&db, |c| fields::unapply_set(c, &item_id, &set_id, db::now_ms()))
+}
+
+/// The field sets applied to an item and the values it holds.
+#[tauri::command]
+pub fn get_item_fields(db: Db, item_id: String) -> Result<ItemFields, String> {
+    with_conn(&db, |c| fields::get_item_fields(c, &item_id))
+}
+
+#[tauri::command]
+pub fn set_field_value(
+    db: Db,
+    item_id: String,
+    field_id: String,
+    value_json: String,
+    index: ValueIndex,
+    secret: bool,
+) -> Result<(), String> {
+    with_conn(&db, |c| fields::set_value(c, &item_id, &field_id, &value_json, &index, secret, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn clear_field_value(db: Db, item_id: String, field_id: String) -> Result<(), String> {
+    with_conn(&db, |c| fields::clear_value(c, &item_id, &field_id, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn set_field_secret(db: Db, item_id: String, field_id: String, secret: bool) -> Result<(), String> {
+    with_conn(&db, |c| fields::set_secret(c, &item_id, &field_id, secret, db::now_ms()))
+}
+
+/// Every live value of one field (for re-working how they sort and search).
+#[tauri::command]
+pub fn list_field_values(db: Db, field_id: String) -> Result<Vec<FieldValue>, String> {
+    with_conn(&db, |c| fields::list_values_for_field(c, &field_id))
+}
+
+#[tauri::command]
+pub fn update_field_indexes(db: Db, field_id: String, updates: Vec<IndexUpdate>) -> Result<(), String> {
+    with_conn(&db, |c| fields::update_indexes(c, &field_id, &updates, db::now_ms()))
 }
 
 // ---- Library: links ----

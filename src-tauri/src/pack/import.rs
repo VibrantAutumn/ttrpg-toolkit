@@ -9,6 +9,7 @@
 use super::format::*;
 use super::PackError;
 use crate::db::campaigns::{self, Campaign};
+use crate::db::fields;
 use crate::db::{
     cards, collections, documents, formulas, name_presets, play_decks, saved_draws, saved_rolls, settings, spreads, tables,
 };
@@ -61,6 +62,11 @@ pub struct ParsedPack {
     pub table_entries: Vec<TableEntryRecord>,
     pub table_entry_tags: Vec<TableEntryTagRecord>,
     pub name_presets: Vec<NamePresetRecord>,
+    pub field_definitions: Vec<FieldDefinitionRecord>,
+    pub field_sets: Vec<FieldSetRecord>,
+    pub field_set_members: Vec<FieldSetMemberRecord>,
+    pub item_field_sets: Vec<ItemFieldSetRecord>,
+    pub field_values: Vec<FieldValueRecord>,
     /// Plain-language notes about anything that had to be fixed or skipped.
     pub warnings: Vec<String>,
 }
@@ -88,6 +94,11 @@ impl ParsedPack {
             table_entries: self.table_entries.len() as u32,
             table_entry_tags: self.table_entry_tags.len() as u32,
             name_presets: self.name_presets.len() as u32,
+            field_definitions: self.field_definitions.len() as u32,
+            field_sets: self.field_sets.len() as u32,
+            field_set_members: self.field_set_members.len() as u32,
+            item_field_sets: self.item_field_sets.len() as u32,
+            field_values: self.field_values.len() as u32,
         }
     }
 }
@@ -184,6 +195,11 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         table_entries: read_list(&mut archive, TABLE_ENTRIES_FILE, limits, &mut total)?,
         table_entry_tags: read_list(&mut archive, TABLE_ENTRY_TAGS_FILE, limits, &mut total)?,
         name_presets: read_list(&mut archive, NAME_PRESETS_FILE, limits, &mut total)?,
+        field_definitions: read_list(&mut archive, FIELD_DEFINITIONS_FILE, limits, &mut total)?,
+        field_sets: read_list(&mut archive, FIELD_SETS_FILE, limits, &mut total)?,
+        field_set_members: read_list(&mut archive, FIELD_SET_MEMBERS_FILE, limits, &mut total)?,
+        item_field_sets: read_list(&mut archive, ITEM_FIELD_SETS_FILE, limits, &mut total)?,
+        field_values: read_list(&mut archive, FIELD_VALUES_FILE, limits, &mut total)?,
         warnings: Vec::new(),
     };
     sanitize(&mut pack);
@@ -485,6 +501,56 @@ fn sanitize(pack: &mut ParsedPack) {
     }
     note(renamed, "tag(s) shared a name with a sibling tag and were renamed.");
 
+    // Fields: readable, with live names that differ (ignoring case); sets likewise.
+    let before = pack.field_definitions.len();
+    let mut seen = HashSet::new();
+    pack.field_definitions.retain(|d| {
+        !d.id.is_empty()
+            && fields::KINDS.contains(&d.kind.as_str())
+            && fields::validate_config(&d.config_json).is_ok()
+            && d.description.chars().count() <= fields::MAX_DESCRIPTION_CHARS
+            && !d.name.trim().is_empty()
+            && seen.insert(d.id.clone())
+    });
+    note(before - pack.field_definitions.len(), "field(s) were unreadable or duplicated and were skipped.");
+    let mut renamed_fields = 0;
+    let mut taken_names = HashSet::new();
+    for d in &mut pack.field_definitions {
+        d.name = d.name.trim().chars().take(fields::MAX_NAME_CHARS).collect();
+        if d.deleted_at.is_none() && !unique_name(&mut d.name, &mut taken_names) {
+            renamed_fields += 1;
+        }
+    }
+    note(renamed_fields, "field(s) had the same name as another field and were renamed with a number.");
+    let field_ids: HashSet<String> = pack.field_definitions.iter().map(|d| d.id.clone()).collect();
+
+    let before = pack.field_sets.len();
+    let mut seen = HashSet::new();
+    pack.field_sets.retain(|s| {
+        !s.id.is_empty()
+            && !s.name.trim().is_empty()
+            && s.description.chars().count() <= fields::MAX_DESCRIPTION_CHARS
+            && seen.insert(s.id.clone())
+    });
+    note(before - pack.field_sets.len(), "field set(s) were unreadable or duplicated and were skipped.");
+    let mut renamed_sets = 0;
+    let mut taken_names = HashSet::new();
+    for s in &mut pack.field_sets {
+        s.name = s.name.trim().chars().take(fields::MAX_NAME_CHARS).collect();
+        if s.deleted_at.is_none() && !unique_name(&mut s.name, &mut taken_names) {
+            renamed_sets += 1;
+        }
+    }
+    note(renamed_sets, "field set(s) had the same name as another set and were renamed with a number.");
+    let set_ids: HashSet<String> = pack.field_sets.iter().map(|s| s.id.clone()).collect();
+
+    let before = pack.field_set_members.len();
+    let mut seen = HashSet::new();
+    pack.field_set_members.retain(|m| {
+        set_ids.contains(&m.set_id) && field_ids.contains(&m.field_id) && seen.insert((m.set_id.clone(), m.field_id.clone()))
+    });
+    note(before - pack.field_set_members.len(), "field set member(s) referred to something missing and were skipped.");
+
     // Links between things
     let item_type: HashMap<&str, &str> =
         pack.items.iter().map(|i| (i.id.as_str(), i.item_type.as_str())).collect();
@@ -506,7 +572,9 @@ fn sanitize(pack: &mut ParsedPack) {
         }
     }
     pack.links.retain(|l| {
-        l.source_item_id != l.target_item_id
+        // A link made by a field needs the field to be in the pack (its id is rewritten on import).
+        l.source_ref.strip_prefix(fields::LINK_REF_PREFIX).is_none_or(|f| field_ids.contains(f))
+            && l.source_item_id != l.target_item_id
             && item_type.contains_key(l.source_item_id.as_str())
             && item_type.contains_key(l.target_item_id.as_str())
             && seen.insert((l.source_item_id.clone(), l.target_item_id.clone(), l.source_ref.clone()))
@@ -679,7 +747,56 @@ fn sanitize(pack: &mut ParsedPack) {
     });
     note(before - pack.name_presets.len(), "name preset(s) belonged to something missing or were unreadable and were skipped.");
 
+    let before = pack.item_field_sets.len();
+    let mut seen = HashSet::new();
+    pack.item_field_sets.retain(|a| {
+        item_type.contains_key(a.item_id.as_str()) && set_ids.contains(&a.set_id) && seen.insert((a.item_id.clone(), a.set_id.clone()))
+    });
+    note(before - pack.item_field_sets.len(), "applied field set(s) referred to something missing and were skipped.");
+
+    let kind_of: HashMap<&str, &str> = pack.field_definitions.iter().map(|d| (d.id.as_str(), d.kind.as_str())).collect();
+    let before = pack.field_values.len();
+    let mut seen = HashSet::new();
+    for v in &mut pack.field_values {
+        v.sort_text = v.sort_text.take().map(|s| s.chars().take(fields::MAX_SORT_TEXT_CHARS).collect());
+        if v.sort_num.is_some_and(|n| !n.is_finite()) {
+            v.sort_num = None;
+        }
+    }
+    pack.field_values.retain(|v| {
+        let Some(kind) = kind_of.get(v.field_id.as_str()) else { return false };
+        item_type.contains_key(v.item_id.as_str())
+            && v.value_json.len() <= fields::MAX_VALUE_BYTES
+            && v.search_text.len() <= fields::MAX_VALUE_BYTES
+            && serde_json::from_str::<serde_json::Value>(&v.value_json).is_ok_and(|json| {
+                // A link field holds a list of item ids; nothing else about a value is checked here.
+                *kind != "link" || json.as_array().is_some_and(|a| a.len() <= fields::MAX_LINK_TARGETS && a.iter().all(|x| x.is_string()))
+            })
+            && seen.insert((v.item_id.clone(), v.field_id.clone()))
+    });
+    note(before - pack.field_values.len(), "field value(s) belonged to something missing or were unreadable and were skipped.");
+
     pack.warnings = warnings;
+}
+
+/// Makes `name` different from every name in `taken` (ignoring case) by adding " (2)", " (3)"...
+/// and remembers it. Returns false if it had to be changed.
+fn unique_name(name: &mut String, taken: &mut HashSet<String>) -> bool {
+    if taken.insert(name.to_lowercase()) {
+        return true;
+    }
+    let base = name.clone();
+    let mut n = 2;
+    loop {
+        let suffix = format!(" ({n})");
+        let room = fields::MAX_NAME_CHARS.saturating_sub(suffix.chars().count());
+        let candidate = format!("{}{suffix}", base.chars().take(room).collect::<String>());
+        if taken.insert(candidate.to_lowercase()) {
+            *name = candidate;
+            return false;
+        }
+        n += 1;
+    }
 }
 
 // -------------------------------------------------------------- writing
@@ -783,6 +900,8 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
     let folder_ids = new_ids(pack.folders.iter().map(|f| f.id.as_str()).collect());
     let item_ids = new_ids(pack.items.iter().map(|i| i.id.as_str()).collect());
     let tag_ids = new_ids(pack.tags.iter().map(|t| t.id.as_str()).collect());
+    let field_ids = new_ids(pack.field_definitions.iter().map(|d| d.id.as_str()).collect());
+    let field_set_ids = new_ids(pack.field_sets.iter().map(|s| s.id.as_str()).collect());
 
     // Folders and tags are already ordered parents-first, so each parent exists
     // by the time its children are inserted.
@@ -826,11 +945,17 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
         .map_err(db_error)?;
     }
     for l in &pack.links {
+        // A link made by a field remembers the field by id: point it at the imported field.
+        let source_ref = l
+            .source_ref
+            .strip_prefix(fields::LINK_REF_PREFIX)
+            .and_then(|old| field_ids.get(old))
+            .map_or_else(|| l.source_ref.clone(), |new| fields::link_ref(new));
         tx.execute(
             "INSERT INTO links (source_item_id, target_item_id, source_ref, created_at, updated_at, deleted_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
-                item_ids[&l.source_item_id], item_ids[&l.target_item_id], l.source_ref,
+                item_ids[&l.source_item_id], item_ids[&l.target_item_id], source_ref,
                 l.created_at, l.updated_at, l.deleted_at
             ],
         )
@@ -969,6 +1094,59 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
             "INSERT INTO play_decks (item_id, source_id, source_name, state_json, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![item_ids[&p.item_id], source_id, p.source_name, state_json, p.created_at, p.updated_at],
+        )
+        .map_err(db_error)?;
+    }
+
+    for d in &pack.field_definitions {
+        tx.execute(
+            "INSERT INTO field_definitions (id, campaign_id, name, kind, description, config_json, created_at, updated_at, deleted_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![field_ids[&d.id], campaign.id, d.name, d.kind, d.description, d.config_json, d.created_at, d.updated_at, d.deleted_at],
+        )
+        .map_err(db_error)?;
+    }
+    for s in &pack.field_sets {
+        tx.execute(
+            "INSERT INTO field_sets (id, campaign_id, name, description, created_at, updated_at, deleted_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![field_set_ids[&s.id], campaign.id, s.name, s.description, s.created_at, s.updated_at, s.deleted_at],
+        )
+        .map_err(db_error)?;
+    }
+    for m in &pack.field_set_members {
+        tx.execute(
+            "INSERT INTO field_set_members (set_id, field_id, position, created_at, updated_at, deleted_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![field_set_ids[&m.set_id], field_ids[&m.field_id], m.position, m.created_at, m.updated_at, m.deleted_at],
+        )
+        .map_err(db_error)?;
+    }
+    for a in &pack.item_field_sets {
+        tx.execute(
+            "INSERT INTO item_field_sets (item_id, set_id, position, created_at, updated_at, deleted_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![item_ids[&a.item_id], field_set_ids[&a.set_id], a.position, a.created_at, a.updated_at, a.deleted_at],
+        )
+        .map_err(db_error)?;
+    }
+    // A link field's value lists item ids: point them at the imported copies (ids that aren't in
+    // the pack are left as written). Other kinds of value are never rewritten: a text that happens
+    // to look like an id is just text.
+    let field_kind: HashMap<&str, &str> = pack.field_definitions.iter().map(|d| (d.id.as_str(), d.kind.as_str())).collect();
+    for v in &pack.field_values {
+        let value_json = if field_kind.get(v.field_id.as_str()) == Some(&"link") {
+            remapped_json(&v.value_json, &item_ids)
+        } else {
+            v.value_json.clone()
+        };
+        tx.execute(
+            "INSERT INTO field_values (item_id, field_id, value_json, sort_num, sort_text, search_text, secret, created_at, updated_at, deleted_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                item_ids[&v.item_id], field_ids[&v.field_id], value_json, v.sort_num, v.sort_text, v.search_text,
+                v.secret as i64, v.created_at, v.updated_at, v.deleted_at
+            ],
         )
         .map_err(db_error)?;
     }

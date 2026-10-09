@@ -4,6 +4,7 @@ use super::import::{import_pack, import_parsed, parent_first, read_pack, read_pa
 use super::PackError;
 use crate::db::cards::{self, test_images};
 use crate::db::collections;
+use crate::db::fields::{self, ValueIndex};
 use crate::db::formulas;
 use crate::db::spreads::{self, PositionInput};
 use crate::db::name_presets;
@@ -176,6 +177,30 @@ mind the [Rumors]".into(), weight: 1 },
     let preset = r#"{"version":1,"mode":"two","sources":{"first":"some-table","last":"another-table"},"tagIds":["some-tag"],"tagMatch":"any","join1":"apostrophe","join2":"none","capitalisation":"everyPart","mergeDoubles":true}"#;
     name_presets::create(conn, c, "Elven name", None, preset, 4400).unwrap();
 
+    // Fields: a text field, a link field and a dropdown, a set holding the first two (a third was
+    // taken out again), a deleted field and a deleted set, values (one secret, one cleared) and
+    // a link field that made links.
+    let race = fields::create_definition(conn, c, "Race", "text", "Lineage", "{}", 4500).unwrap();
+    let allies = fields::create_definition(conn, c, "Allies", "link", "", r#"{"many":true,"library":null,"itemTypes":[]}"#, 4510).unwrap();
+    let status = fields::create_definition(conn, c, "Status", "dropdown", "", r#"{"options":[{"id":"o1","label":"Alive","color":null}]}"#, 4520).unwrap();
+    let retired = fields::create_definition(conn, c, "Retired", "text", "", "{}", 4530).unwrap();
+    fields::delete_definition(conn, &retired.id, 4540).unwrap();
+    let npc = fields::create_set(conn, c, "NPC", "People", 4550).unwrap();
+    fields::set_set_fields(conn, &npc.id, &[race.id.clone(), allies.id.clone(), status.id.clone()], 4560).unwrap();
+    fields::set_set_fields(conn, &npc.id, &[race.id.clone(), allies.id.clone()], 4570).unwrap();
+    let old_set = fields::create_set(conn, c, "Old set", "", 4580).unwrap();
+    fields::delete_set(conn, &old_set.id, 4590).unwrap();
+    fields::apply_set(conn, &strahd.id, &npc.id, 4600).unwrap();
+    fields::apply_set(conn, &barovia.id, &npc.id, 4610).unwrap();
+    fields::unapply_set(conn, &barovia.id, &npc.id, 4620).unwrap();
+    let text_index = |t: &str| ValueIndex { sort_num: None, sort_text: Some(t.to_lowercase()), search_text: t.to_string() };
+    fields::set_value(conn, &strahd.id, &race.id, r#""Vampire""#, &text_index("Vampire"), true, 4700).unwrap();
+    let allies_value = serde_json::to_string(&[&barovia.id, &ireena.id]).unwrap();
+    fields::set_value(conn, &strahd.id, &allies.id, &allies_value, &ValueIndex::default(), false, 4710).unwrap();
+    fields::set_value(conn, &barovia.id, &status.id, r#""o1""#, &ValueIndex { sort_num: Some(0.0), sort_text: Some("alive".into()), search_text: "Alive".into() }, false, 4720).unwrap();
+    fields::set_value(conn, &ireena.id, &race.id, r#""Human""#, &text_index("Human"), false, 4730).unwrap();
+    fields::clear_value(conn, &ireena.id, &race.id, 4740).unwrap();
+
     camp.id
 }
 
@@ -220,6 +245,11 @@ struct Snapshot {
     table_entries: Vec<String>,
     table_entry_tags: Vec<String>,
     name_presets: Vec<String>,
+    field_definitions: Vec<String>,
+    field_sets: Vec<String>,
+    field_set_members: Vec<String>,
+    item_field_sets: Vec<String>,
+    field_values: Vec<String>,
 }
 
 fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
@@ -238,7 +268,11 @@ fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
              FROM item_tags it JOIN items i ON i.id = it.item_id JOIN tags t ON t.id = it.tag_id
              WHERE i.campaign_id = ?1", campaign_id),
         links: lines(conn,
-            "SELECT s.name, t.name, l.source_ref, l.created_at, l.updated_at, l.deleted_at
+            "SELECT s.name, t.name,
+                    CASE WHEN l.source_ref LIKE 'field:%'
+                         THEN 'field:' || (SELECT name FROM field_definitions WHERE id = substr(l.source_ref, 7))
+                         ELSE l.source_ref END,
+                    l.created_at, l.updated_at, l.deleted_at
              FROM links l JOIN items s ON s.id = l.source_item_id JOIN items t ON t.id = l.target_item_id
              WHERE s.campaign_id = ?1", campaign_id),
         documents: lines(conn,
@@ -286,6 +320,25 @@ fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
         name_presets: lines(conn,
             "SELECT i.name, i.library, p.setup_json, p.created_at, p.updated_at, i.deleted_at
              FROM name_presets p JOIN items i ON i.id = p.item_id WHERE i.campaign_id = ?1", campaign_id),
+        field_definitions: lines(conn,
+            "SELECT name, kind, description, config_json, created_at, updated_at, deleted_at
+             FROM field_definitions WHERE campaign_id = ?1", campaign_id),
+        field_sets: lines(conn,
+            "SELECT name, description, created_at, updated_at, deleted_at FROM field_sets WHERE campaign_id = ?1", campaign_id),
+        field_set_members: lines(conn,
+            "SELECT s.name, d.name, m.position, m.created_at, m.updated_at, m.deleted_at
+             FROM field_set_members m JOIN field_sets s ON s.id = m.set_id JOIN field_definitions d ON d.id = m.field_id
+             WHERE s.campaign_id = ?1", campaign_id),
+        item_field_sets: lines(conn,
+            "SELECT i.name, s.name, a.position, a.created_at, a.updated_at, a.deleted_at
+             FROM item_field_sets a JOIN items i ON i.id = a.item_id JOIN field_sets s ON s.id = a.set_id
+             WHERE i.campaign_id = ?1", campaign_id),
+        // A link field's value holds item ids, which differ between copies (its links are compared above).
+        field_values: lines(conn,
+            "SELECT i.name, d.name, CASE WHEN d.kind = 'link' THEN '' ELSE v.value_json END,
+                    v.sort_num, v.sort_text, v.search_text, v.secret, v.created_at, v.updated_at, v.deleted_at
+             FROM field_values v JOIN items i ON i.id = v.item_id JOIN field_definitions d ON d.id = v.field_id
+             WHERE i.campaign_id = ?1", campaign_id),
     }
 }
 
@@ -340,9 +393,12 @@ fn the_manifest_describes_the_pack() {
         // 2 formulas, 3 cards, a set, a deck, a pool, a saved draw, a deck in play, a spread, 2 tables and a name preset). 2 cards have details, 1 a picture, 7 membership rows.
         // 1 table has settings; the 2 tables have 4 entries in all (one deleted) and 2 entry tags (one removed).
         Counts {
-            folders: 3, items: 22, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 2, formulas: 2,
+            folders: 3, items: 22, tags: 4, item_tags: 4, links: 5, documents: 4, saved_rolls: 2, formulas: 2,
             card_details: 2, collection_members: 7, card_images: 1, saved_draws: 1, play_decks: 1, spreads: 1, spread_positions: 3,
             random_tables: 1, table_entries: 4, table_entry_tags: 2, name_presets: 1,
+            // 4 fields (one deleted), 2 sets (one deleted) with 3 member rows (one removed), 2 applied sets (one taken off),
+            // and 4 values (one cleared); the link field made 2 of the 5 links.
+            field_definitions: 4, field_sets: 2, field_set_members: 3, item_field_sets: 2, field_values: 4,
         }
     );
     assert_eq!(pack.counts(), m.counts);
@@ -454,9 +510,109 @@ fn the_imported_campaign_is_searchable_and_linked() {
     assert_eq!(find("mist"), ["Barovia"]); // text and tag
     let strahd = search::search(&conn, &imported, "strahd", None, 10).unwrap().remove(0);
     let linked: Vec<_> = links::outgoing(&conn, &strahd.id).unwrap().into_iter().map(|i| i.name).collect();
-    assert_eq!(linked, ["Barovia"]);
+    // Barovia by hand, and Barovia and Ireena through the "Allies" link field.
+    assert_eq!(linked, ["Barovia", "Ireena"]);
     let tagged: Vec<_> = tags::for_item(&conn, &strahd.id).unwrap().into_iter().map(|t| t.name).collect();
     assert_eq!(tagged, ["Faction"]); // the trashed tag "Gone" stays hidden
+}
+
+#[test]
+fn a_link_field_keeps_working_in_an_imported_campaign() {
+    let source = open_in_memory();
+    let original = populate(&source);
+    let bytes = export_campaign(&source, &original, 5000).unwrap();
+    let target = open_in_memory();
+    let imported = import_pack(&target, &bytes, 6000).unwrap().campaign.id;
+
+    let item = |name: &str| search::search(&target, &imported, name, None, 10).unwrap().into_iter().find(|i| i.name == name).unwrap();
+    let (strahd, barovia, ireena) = (item("Strahd"), item("Barovia"), item("Ireena"));
+    let allies = fields::list_definitions(&target, &imported).unwrap().into_iter().find(|d| d.name == "Allies").unwrap();
+
+    // The value points at the imported items, and the links are labelled with the imported field.
+    let value = &fields::get_item_fields(&target, &strahd.id).unwrap().values.into_iter().find(|v| v.field_id == allies.id).unwrap().value_json;
+    let ids: Vec<String> = serde_json::from_str(value).unwrap();
+    assert_eq!(ids, vec![barovia.id.clone(), ireena.id.clone()]);
+    let refs: Vec<String> = target
+        .prepare("SELECT DISTINCT source_ref FROM links WHERE source_ref LIKE 'field:%'")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    assert_eq!(refs, vec![fields::link_ref(&allies.id)]);
+
+    // Changing the value in the copy changes the copy's links, not the original's.
+    fields::set_value(&target, &strahd.id, &allies.id, "[]", &ValueIndex::default(), false, 7000).unwrap();
+    assert_eq!(links::outgoing(&target, &strahd.id).unwrap().into_iter().map(|i| i.name).collect::<Vec<_>>(), ["Barovia"]);
+    let original_strahd = search::search(&source, &original, "strahd", None, 10).unwrap().remove(0);
+    assert_eq!(links::outgoing(&source, &original_strahd.id).unwrap().len(), 2);
+}
+
+#[test]
+fn the_text_of_a_text_field_is_never_rewritten_even_if_it_looks_like_an_item_id() {
+    let source = open_in_memory();
+    let camp = campaigns::create(&source, "C", 1).unwrap();
+    let note = fields::create_definition(&source, &camp.id, "Note", "text", "", "{}", 2).unwrap();
+    let a = items::create(&source, &camp.id, "worldbuilding", "document", "A", None, 3).unwrap();
+    let value = format!("\"{}\"", a.id);
+    fields::set_value(&source, &a.id, &note.id, &value, &ValueIndex::default(), false, 4).unwrap();
+    let bytes = export_campaign(&source, &camp.id, 5000).unwrap();
+    let target = open_in_memory();
+    let imported = import_pack(&target, &bytes, 6000).unwrap().campaign.id;
+    let new_a = search::search(&target, &imported, "A", None, 10).unwrap().remove(0);
+    let stored = fields::get_item_fields(&target, &new_a.id).unwrap().values.remove(0).value_json;
+    assert_eq!(stored, value);
+}
+
+#[test]
+fn unreadable_or_orphaned_fields_are_skipped_or_renamed_with_a_warning() {
+    let bytes = pack_with(&[
+        ("data/items.json", json!([
+            { "id": "i1", "library": "worldbuilding", "itemType": "document", "name": "Doc", "icon": null, "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null }
+        ])),
+        ("data/field_definitions.json", json!([
+            { "id": "f1", "name": "Race", "kind": "text", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+            { "id": "f2", "name": "race", "kind": "text", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+            { "id": "f3", "name": "Date", "kind": "date", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+            { "id": "f4", "name": "Faction", "kind": "link", "configJson": "{}", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+            { "id": "f5", "name": "Bad settings", "kind": "text", "configJson": "[1]", "createdAt": 1, "updatedAt": 1, "deletedAt": null }
+        ])),
+        ("data/field_sets.json", json!([{ "id": "s1", "name": "NPC", "createdAt": 1, "updatedAt": 1, "deletedAt": null }])),
+        ("data/field_set_members.json", json!([
+            { "setId": "s1", "fieldId": "f1", "position": 0, "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+            { "setId": "s1", "fieldId": "nope", "position": 1, "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+            { "setId": "nope", "fieldId": "f1", "position": 2, "createdAt": 1, "updatedAt": 1, "deletedAt": null }
+        ])),
+        ("data/item_field_sets.json", json!([
+            { "itemId": "i1", "setId": "s1", "position": 0, "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+            { "itemId": "gone", "setId": "s1", "position": 0, "createdAt": 1, "updatedAt": 1, "deletedAt": null }
+        ])),
+        ("data/field_values.json", json!([
+            { "itemId": "i1", "fieldId": "f1", "valueJson": "\"Elf\"", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+            { "itemId": "i1", "fieldId": "f2", "valueJson": "not json", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+            { "itemId": "i1", "fieldId": "f4", "valueJson": "\"not a list\"", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+            { "itemId": "i1", "fieldId": "f3", "valueJson": "\"x\"", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+            { "itemId": "gone", "fieldId": "f1", "valueJson": "\"x\"", "createdAt": 1, "updatedAt": 1, "deletedAt": null }
+        ])),
+        ("data/links.json", json!([
+            { "sourceItemId": "i1", "targetItemId": "i1", "sourceRef": "field:f4", "createdAt": 1, "updatedAt": 1, "deletedAt": null }
+        ])),
+    ]);
+    let pack = read_pack(&bytes).unwrap();
+    // Race and race share a name (the second is renamed); the unknown kind and the unreadable settings are dropped.
+    let mut names: Vec<_> = pack.field_definitions.iter().map(|d| d.name.as_str()).collect();
+    names.sort();
+    assert_eq!(names, ["Faction", "Race", "race (2)"]);
+    assert_eq!(pack.field_set_members.len(), 1);
+    assert_eq!(pack.item_field_sets.len(), 1);
+    assert_eq!(pack.field_values.len(), 1); // only the good one
+    assert!(pack.warnings.iter().any(|w| w.contains("field(s) were unreadable")));
+    assert!(pack.warnings.iter().any(|w| w.contains("same name as another field")));
+    assert!(pack.warnings.iter().any(|w| w.contains("field value(s)")));
+
+    let conn = open_in_memory();
+    assert!(import_parsed(&conn, &pack, 9000).is_ok());
+    assert_eq!(count(&conn, "field_definitions"), 3);
 }
 
 #[test]
@@ -692,7 +848,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
     assert!(pack.warnings.iter().all(|w| w.chars().next().unwrap().is_ascii_digit()));
     assert_eq!(
         pack.counts(),
-        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0 }
+        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0 }
     );
 
     let conn = open_in_memory();
@@ -813,7 +969,7 @@ fn the_committed_version_1_pack_still_imports() {
     assert_eq!(result.campaign.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0 }
+        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0 }
     );
     let camp = result.campaign.id;
 
