@@ -1,8 +1,9 @@
 import { Extension, type Editor } from "@tiptap/core";
-import Suggestion, { type SuggestionProps } from "@tiptap/suggestion";
+import Suggestion from "@tiptap/suggestion";
 import { filterBlockCommands, type BlockCommand, type BlockCommandId } from "../../lib/documents/blockCommands";
 import { insertToggle, wrapInCallout, wrapInSecret } from "./containerNodes";
 import { insertColumns } from "./layoutNodes";
+import type { PickerBridge } from "./PickerMenu";
 
 /** Applies a block to the block the cursor is in. */
 export function runBlockCommand(editor: Editor, id: BlockCommandId): void {
@@ -56,16 +57,8 @@ export function runBlockCommand(editor: Editor, id: BlockCommandId): void {
   }
 }
 
-/** How the "/" menu (drawn by React) hears about the editor. */
-export interface SlashBridge {
-  show(props: SuggestionProps<BlockCommand, BlockCommand>): void;
-  hide(): void;
-  /** Returns true if the menu used the key. */
-  key(event: KeyboardEvent): boolean;
-}
-
 /** Typing "/" at the start of a line or after a space opens a menu of blocks. */
-export function slashCommands(bridge: SlashBridge) {
+export function slashCommands(bridge: PickerBridge<BlockCommand>) {
   return Extension.create({
     name: "slashCommands",
     addProseMirrorPlugins() {

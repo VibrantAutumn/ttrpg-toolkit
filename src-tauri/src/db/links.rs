@@ -8,6 +8,9 @@ use rusqlite::{params, Connection};
 /// `source_ref` for links made from an item's Links list.
 pub const MANUAL: &str = "manual";
 
+/// `source_ref` for links made by mentioning an item in a document's text.
+pub const BODY: &str = "body";
+
 fn get_live(conn: &Connection, id: &str) -> Result<Item, DbError> {
     let item = items::get(conn, id)?;
     if item.deleted_at.is_some() {
@@ -59,6 +62,51 @@ pub fn remove(
         params![source_id, target_id, source_ref, now],
     )?;
     Ok(())
+}
+
+/// Makes the live links from `source_id` with this `source_ref` exactly the ones to `targets`: links to
+/// anything not listed are removed, new ones are added (a removed link that is listed again comes
+/// back). A target that cannot be linked (gone, in the trash, in another campaign, or the source
+/// itself) is skipped, never an error: a document may mention an item that has since been deleted.
+/// Links with other `source_ref`s are left alone. Call it inside a transaction.
+pub fn sync_source(
+    conn: &Connection,
+    source_id: &str,
+    source_ref: &str,
+    targets: &[String],
+    now: i64,
+) -> Result<(), DbError> {
+    let wanted: std::collections::HashSet<&str> = targets.iter().map(String::as_str).filter(|t| *t != source_id).collect();
+    let current: Vec<String> = {
+        let mut stmt = conn.prepare(
+            "SELECT target_item_id FROM links
+             WHERE source_item_id = ?1 AND source_ref = ?2 AND deleted_at IS NULL",
+        )?;
+        let rows = stmt.query_map(params![source_id, source_ref], |r| r.get(0))?;
+        rows.collect::<Result<Vec<_>, _>>()?
+    };
+    for target in &current {
+        if !wanted.contains(target.as_str()) {
+            remove(conn, source_id, target, source_ref, now)?;
+        }
+    }
+    for target in &wanted {
+        match add(conn, source_id, target, source_ref, now) {
+            Ok(()) | Err(DbError::NotFound) | Err(DbError::Invalid(_)) => {}
+            Err(other) => return Err(other),
+        }
+    }
+    Ok(())
+}
+
+/// The items this item links to by hand (from its Links list), as opposed to by mentioning them.
+pub fn manual_target_ids(conn: &Connection, item_id: &str) -> Result<Vec<String>, DbError> {
+    let mut stmt = conn.prepare(
+        "SELECT target_item_id FROM links
+         WHERE source_item_id = ?1 AND source_ref = ?2 AND deleted_at IS NULL",
+    )?;
+    let rows = stmt.query_map(params![item_id, MANUAL], |r| r.get(0))?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
 fn query_items(conn: &Connection, sql: &str, item_id: &str) -> Result<Vec<Item>, DbError> {
@@ -187,6 +235,72 @@ mod tests {
         assert_eq!(names(backlinks(&conn, &b.id).unwrap()), ["A"]);
         remove(&conn, &a.id, &b.id, "body", 4).unwrap();
         assert!(backlinks(&conn, &b.id).unwrap().is_empty());
+    }
+
+    fn ids(items: &[Item]) -> Vec<String> {
+        items.iter().map(|i| i.id.clone()).collect()
+    }
+
+    #[test]
+    fn syncing_makes_the_links_exactly_the_listed_ones() {
+        let (conn, camp) = setup();
+        let a = doc(&conn, &camp, "A");
+        let b = doc(&conn, &camp, "B");
+        let c = doc(&conn, &camp, "C");
+        sync_source(&conn, &a.id, BODY, &[b.id.clone(), c.id.clone()], 2).unwrap();
+        assert_eq!(names(outgoing(&conn, &a.id).unwrap()), ["B", "C"]);
+
+        sync_source(&conn, &a.id, BODY, &[c.id.clone()], 3).unwrap();
+        assert_eq!(names(outgoing(&conn, &a.id).unwrap()), ["C"]);
+        assert!(backlinks(&conn, &b.id).unwrap().is_empty());
+
+        // A link taken away comes back when listed again, as the same row.
+        sync_source(&conn, &a.id, BODY, &[b.id.clone(), c.id.clone()], 4).unwrap();
+        assert_eq!(names(outgoing(&conn, &a.id).unwrap()), ["B", "C"]);
+        assert_eq!(link_rows(&conn), 2);
+
+        sync_source(&conn, &a.id, BODY, &[], 5).unwrap();
+        assert!(outgoing(&conn, &a.id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn syncing_leaves_other_kinds_of_link_alone() {
+        let (conn, camp) = setup();
+        let a = doc(&conn, &camp, "A");
+        let b = doc(&conn, &camp, "B");
+        let c = doc(&conn, &camp, "C");
+        add(&conn, &a.id, &b.id, MANUAL, 2).unwrap();
+        sync_source(&conn, &a.id, BODY, &[c.id.clone()], 3).unwrap();
+        sync_source(&conn, &a.id, BODY, &[], 4).unwrap();
+        assert_eq!(names(outgoing(&conn, &a.id).unwrap()), ["B"]);
+        assert_eq!(manual_target_ids(&conn, &a.id).unwrap(), vec![b.id.clone()]);
+
+        // A mention of an item that is also linked by hand keeps the hand link when the mention goes.
+        sync_source(&conn, &a.id, BODY, &[b.id.clone()], 5).unwrap();
+        sync_source(&conn, &a.id, BODY, &[], 6).unwrap();
+        assert_eq!(ids(&outgoing(&conn, &a.id).unwrap()), vec![b.id.clone()]);
+    }
+
+    #[test]
+    fn syncing_skips_what_cannot_be_linked_instead_of_failing() {
+        let (conn, camp) = setup();
+        let a = doc(&conn, &camp, "A");
+        let good = doc(&conn, &camp, "Good");
+        let trashed = doc(&conn, &camp, "Trashed");
+        items::soft_delete(&conn, &trashed.id, 2).unwrap();
+        let other = campaigns::create(&conn, "Other", 1).unwrap();
+        let foreign = doc(&conn, &other.id, "Foreign");
+        let targets = vec![
+            a.id.clone(),
+            "no-such-item".to_string(),
+            trashed.id.clone(),
+            foreign.id.clone(),
+            good.id.clone(),
+            good.id.clone(),
+        ];
+        sync_source(&conn, &a.id, BODY, &targets, 3).unwrap();
+        assert_eq!(names(outgoing(&conn, &a.id).unwrap()), ["Good"]);
+        assert_eq!(link_rows(&conn), 1);
     }
 
     #[test]

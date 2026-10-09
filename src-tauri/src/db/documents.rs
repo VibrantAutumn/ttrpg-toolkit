@@ -2,6 +2,7 @@
 
 use super::error::DbError;
 use super::items;
+use super::links;
 use rusqlite::{params, Connection, OptionalExtension};
 
 /// The item type this module stores text for.
@@ -35,8 +36,23 @@ pub fn get_body(conn: &Connection, item_id: &str) -> Result<String, DbError> {
     Ok(body.unwrap_or_default())
 }
 
-/// Replaces the document's text. Also marks the item as updated.
+/// Replaces the document's text. Also marks the item as updated. (The app saves through
+/// `set_body_with_links`; this plain form is what the tests use to set up a document.)
+#[cfg(test)]
 pub fn set_body(conn: &Connection, item_id: &str, body: &str, now: i64) -> Result<(), DbError> {
+    set_body_with_links(conn, item_id, body, None, now)
+}
+
+/// Replaces the document's text and, in the same transaction, makes the links made by mentioning
+/// items in the text (`source_ref` "body") exactly the ones to `mentions`. `None` leaves the
+/// links as they are. Mentions of items that cannot be linked are ignored (see `links::sync_source`).
+pub fn set_body_with_links(
+    conn: &Connection,
+    item_id: &str,
+    body: &str,
+    mentions: Option<&[String]>,
+    now: i64,
+) -> Result<(), DbError> {
     require_live_document(conn, item_id)?;
     if body.len() > MAX_BODY_BYTES {
         return Err(DbError::Invalid("That document is too long to save."));
@@ -49,6 +65,9 @@ pub fn set_body(conn: &Connection, item_id: &str, body: &str, now: i64) -> Resul
         params![item_id, body, now],
     )?;
     tx.execute("UPDATE items SET updated_at = ?2 WHERE id = ?1", params![item_id, now])?;
+    if let Some(targets) = mentions {
+        links::sync_source(&tx, item_id, links::BODY, targets, now)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -66,6 +85,36 @@ mod tests {
 
     fn doc(conn: &Connection, camp: &str, name: &str) -> items::Item {
         items::create(conn, camp, "worldbuilding", DOCUMENT_TYPE, name, None, 1).unwrap()
+    }
+
+    #[test]
+    fn saving_with_mentions_makes_the_links_and_saving_again_updates_them() {
+        let (conn, camp) = setup();
+        let a = doc(&conn, &camp, "A");
+        let b = doc(&conn, &camp, "B");
+        let c = doc(&conn, &camp, "C");
+        set_body_with_links(&conn, &a.id, "see B and C", Some(&[b.id.clone(), c.id.clone()]), 2).unwrap();
+        assert_eq!(get_body(&conn, &a.id).unwrap(), "see B and C");
+        let names = |v: Vec<items::Item>| v.into_iter().map(|i| i.name).collect::<Vec<_>>();
+        assert_eq!(names(links::outgoing(&conn, &a.id).unwrap()), ["B", "C"]);
+        assert_eq!(names(links::backlinks(&conn, &b.id).unwrap()), ["A"]);
+
+        set_body_with_links(&conn, &a.id, "see C", Some(&[c.id.clone()]), 3).unwrap();
+        assert_eq!(names(links::outgoing(&conn, &a.id).unwrap()), ["C"]);
+
+        // None leaves the links alone; the plain save does exactly that.
+        set_body(&conn, &a.id, "no mentions left", 4).unwrap();
+        assert_eq!(names(links::outgoing(&conn, &a.id).unwrap()), ["C"]);
+    }
+
+    #[test]
+    fn a_refused_save_makes_no_links() {
+        let (conn, camp) = setup();
+        let a = doc(&conn, &camp, "A");
+        let b = doc(&conn, &camp, "B");
+        let huge = "x".repeat(MAX_BODY_BYTES + 1);
+        assert!(set_body_with_links(&conn, &a.id, &huge, Some(&[b.id.clone()]), 2).is_err());
+        assert!(links::outgoing(&conn, &a.id).unwrap().is_empty());
     }
 
     #[test]

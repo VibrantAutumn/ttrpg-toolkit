@@ -344,6 +344,42 @@ button.link.name {
   color: #fff;
 }
 
+/* Mentions: a chip linking to another item */
+.rich-text .mention {
+  display: inline-block;
+  padding: 0 0.45em;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  line-height: 1.5;
+  cursor: pointer;
+  user-select: none;
+  white-space: normal;
+}
+
+.rich-text .mention.pending {
+  opacity: 0.7;
+}
+
+.rich-text .mention.mention-missing,
+.rich-text .mention.mention-trashed {
+  border-style: dashed;
+  border-color: var(--border);
+  background: transparent;
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+
+.rich-text .mention.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+}
+
+.slash-menu .picker-hint {
+  padding: 0.5rem;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
 /* Tables, columns, the bars that appear inside them, and the floating menu over a selection */
 .rich-text .tableWrapper {
   margin: 0 0 0.75rem;

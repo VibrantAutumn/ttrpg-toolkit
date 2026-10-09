@@ -39,8 +39,17 @@ function randomMarks(rng: Rng): DocMark[] {
 function randomInline(rng: Rng): DocNode[] {
   const nodes: DocNode[] = [];
   for (let n = rng.int(1, 6); n > 0; n--) {
-    const roll = rng.int(1, 10);
+    const roll = rng.int(1, 11);
     if (roll === 1) nodes.push({ type: "hardBreak" });
+    else if (roll === 11) {
+      // A mention: emphasis marks only (a link or code mark cannot sit on one).
+      const marks = randomMarks(rng).filter((m) => m.type !== "link");
+      nodes.push({
+        type: "mention",
+        attrs: { id: pick(rng, ["0a1b2c3d-1111-4222-8333-444455556666", "ffffffff-aaaa-4bbb-8ccc-000000000001"]), label: randomText(rng) },
+        ...(marks.length ? { marks } : {}),
+      });
+    }
     else if (roll === 2) {
       const marks = randomMarks(rng);
       marks.push({ type: "code" });

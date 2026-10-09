@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import { getDocumentBody, setDocumentBody } from "../../api/library";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getDocumentBody, getItem, getItems, searchItems, setDocumentBody } from "../../api/library";
 import { createAutosaver, type Autosaver, type SaveStatus } from "../../lib/autosave";
+import { markdownToDoc } from "../../lib/documents/markdown";
+import { mentionIds } from "../../lib/documents/mentions";
+import { bumpDataVersion } from "../../state/dataVersion";
 import { deviceStorage } from "../../state/deviceStorage";
+import { useNavigation } from "../../state/Navigation";
+import type { MentionSupport } from "./mentionNode";
 import { RichEditor, type RichEditorHandle } from "./RichEditor";
 
 const STATUS_LABEL: Record<SaveStatus, string> = {
@@ -47,11 +52,42 @@ export function DocumentEditor({ itemId }: { itemId: string }) {
   const saver = useRef<Autosaver | null>(null);
   const latest = useRef<string>(""); // the newest text from whichever view is showing
   const rich = useRef<RichEditorHandle | null>(null);
+  const { openItem } = useNavigation();
+  const campaignId = useRef<string | null>(null);
+
+  // What "@" needs: search the open campaign (never the document itself), look up names, open items.
+  const mentions = useMemo<MentionSupport>(
+    () => ({
+      search: async (query) => {
+        if (!campaignId.current) return [];
+        const found = await searchItems(campaignId.current, query, null, 8);
+        return found.filter((i) => i.id !== itemId);
+      },
+      lookup: (ids) => getItems(ids),
+      open: openItem,
+    }),
+    [itemId, openItem],
+  );
 
   useEffect(() => {
     let active = true;
+    let lastMentions = "";
+    getItem(itemId)
+      .then((item) => {
+        campaignId.current = item.campaignId;
+      })
+      .catch(() => {});
     const autosaver = createAutosaver({
-      save: (body) => setDocumentBody(itemId, body),
+      save: async (body) => {
+        // The items the text mentions go with the text, so the links always match what is written.
+        const mentioned = mentionIds(markdownToDoc(body));
+        await setDocumentBody(itemId, body, mentioned);
+        const key = mentioned.join(",");
+        if (key !== lastMentions) {
+          lastMentions = key;
+          bumpDataVersion(); // the item page's Links and "Linked from" lists change
+        }
+      },
       delayMs: 800,
       onStatus: (s, e) => {
         if (!active) return;
@@ -106,6 +142,7 @@ export function DocumentEditor({ itemId }: { itemId: string }) {
           key={richKey}
           ref={rich}
           initial={text}
+          mentions={mentions}
           onMarkdown={changeText}
           onFlush={() => void saver.current?.flush()}
         />

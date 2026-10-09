@@ -6,6 +6,7 @@ import {
   listBacklinks,
   listItemTags,
   listLinks,
+  listManualLinkIds,
   listTags,
   removeLink,
   restoreItem,
@@ -14,7 +15,7 @@ import {
 } from "../../api/library";
 import { registry } from "../../registry";
 import { useNavigation } from "../../state/Navigation";
-import { bumpDataVersion } from "../../state/dataVersion";
+import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useRenameItem } from "../../state/renameReview";
 import { ConfirmButton } from "../ConfirmButton";
 import { TagChips } from "../library/TagChips";
@@ -30,6 +31,9 @@ export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => voi
   const [tags, setTags] = useState<Tag[]>([]);
   const [outgoing, setOutgoing] = useState<Item[]>([]);
   const [backlinks, setBacklinks] = useState<Item[]>([]);
+  // Which of the outgoing links were made by hand (the rest come from mentions in the text).
+  const [manualIds, setManualIds] = useState<Set<string>>(new Set());
+  const dataVersion = useDataVersion();
   const [error, setError] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -39,16 +43,18 @@ export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => voi
 
   const reload = useCallback(async () => {
     try {
-      const [i, t, o, b] = await Promise.all([
+      const [i, t, o, b, manual] = await Promise.all([
         getItem(itemId),
         listItemTags(itemId),
         listLinks(itemId),
         listBacklinks(itemId),
+        listManualLinkIds(itemId),
       ]);
       setItem(i);
       setTags(t);
       setOutgoing(o);
       setBacklinks(b);
+      setManualIds(new Set(manual));
       setError(null);
     } catch (e) {
       setItem(null);
@@ -56,9 +62,10 @@ export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => voi
     }
   }, [itemId]);
 
+  // Also reload when something elsewhere changed (an edited document's mentions change its links).
   useEffect(() => {
     reload();
-  }, [reload]);
+  }, [reload, dataVersion]);
 
   /** Runs a change, then reloads. Shows any error from Rust. */
   async function run(action: () => Promise<unknown>) {
@@ -209,9 +216,15 @@ export function ItemView({ itemId, onBack }: { itemId: string; onBack: () => voi
             {outgoing.map((o) => (
               <li key={o.id} className="row wrap">
                 <span className="name">{itemButton(o)}</span>
-                <button onClick={() => run(() => removeLink(item.id, o.id))}>
-                  Remove
-                </button>
+                {manualIds.has(o.id) ? (
+                  <button onClick={() => run(() => removeLink(item.id, o.id))}>
+                    Remove
+                  </button>
+                ) : (
+                  <span className="meta" title="Mentioned in this item's text. Remove the mention to remove the link.">
+                    mentioned in text
+                  </span>
+                )}
               </li>
             ))}
           </ul>

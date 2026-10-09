@@ -1747,3 +1747,47 @@ fn a_failed_import_also_rolls_back_presets() {
         assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
     }
 }
+
+// ------------------------------------------------------------- mentions
+
+#[test]
+fn mentions_in_document_text_follow_their_items_into_an_imported_campaign() {
+    let source = open_in_memory();
+    let camp = campaigns::create(&source, "Mentions", 1000).unwrap();
+    let c = camp.id.as_str();
+    let strahd = items::create(&source, c, "worldbuilding", "document", "Strahd", None, 1100).unwrap();
+    let ireena = items::create(&source, c, "worldbuilding", "document", "Ireena", None, 1200).unwrap();
+    let body = format!("See [Ireena](item:{}) and [a stranger](item:{}).", ireena.id, "0a1b2c3d-1111-4222-8333-444455556666");
+    documents::set_body_with_links(&source, &strahd.id, &body, Some(&[ireena.id.clone()]), 1300).unwrap();
+
+    let bytes = export_campaign(&source, c, 5000).unwrap();
+    let target = open_in_memory();
+    let imported = import_pack(&target, &bytes, 6000).unwrap().campaign.id;
+
+    let found = |name: &str| search::search(&target, &imported, name, None, 10).unwrap().remove(0);
+    let (new_strahd, new_ireena) = (found("Strahd"), found("Ireena"));
+    let new_body = documents::get_body(&target, &new_strahd.id).unwrap();
+    assert!(new_body.contains(&format!("(item:{})", new_ireena.id)), "{new_body}");
+    assert!(!new_body.contains(&ireena.id));
+    // An item outside the pack is left as written, pointing at nothing.
+    assert!(new_body.contains("item:0a1b2c3d-1111-4222-8333-444455556666"));
+    // The link made by the mention came across and points at the new item.
+    let linked: Vec<_> = links::outgoing(&target, &new_strahd.id).unwrap().into_iter().map(|i| i.id).collect();
+    assert_eq!(linked, vec![new_ireena.id]);
+}
+
+#[test]
+fn remapped_body_replaces_only_known_item_addresses() {
+    use super::import::remapped_body;
+    use std::collections::HashMap;
+    let old = "0a1b2c3d-1111-4222-8333-444455556666";
+    let new = "99999999-9999-4999-8999-999999999999";
+    let map: HashMap<String, String> = [(old.to_string(), new.to_string())].into();
+    assert_eq!(remapped_body("no mentions here", &map), "no mentions here");
+    assert_eq!(remapped_body(&format!("[a](item:{old}) and [b](item:{old})"), &map), format!("[a](item:{new}) and [b](item:{new})"));
+    assert_eq!(remapped_body(&format!("[a](item:{})", old.to_uppercase()), &map), format!("[a](item:{new})"));
+    // Not an address, or not a known one: untouched. Short text and non-ASCII text are fine.
+    assert_eq!(remapped_body("item:short and item:", &map), "item:short and item:");
+    assert_eq!(remapped_body("item:ffffffff-ffff-4fff-8fff-ffffffffffff", &map), "item:ffffffff-ffff-4fff-8fff-ffffffffffff");
+    assert_eq!(remapped_body("héllo item:é wörld item:", &map), "héllo item:é wörld item:");
+}

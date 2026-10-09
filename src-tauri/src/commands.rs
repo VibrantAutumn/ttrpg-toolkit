@@ -648,9 +648,30 @@ pub fn get_document_body(db: Db, item_id: String) -> Result<String, String> {
     with_conn(&db, |c| documents::get_body(c, &item_id))
 }
 
+/// Saves a document's text. `mentions` is the ids of the items its text mentions; when given, the
+/// document's mention links are made to match them in the same transaction.
 #[tauri::command]
-pub fn set_document_body(db: Db, item_id: String, body: String) -> Result<(), String> {
-    with_conn(&db, |c| documents::set_body(c, &item_id, &body, db::now_ms()))
+pub fn set_document_body(
+    db: Db,
+    item_id: String,
+    body: String,
+    mentions: Option<Vec<String>>,
+) -> Result<(), String> {
+    with_conn(&db, |c| documents::set_body_with_links(c, &item_id, &body, mentions.as_deref(), db::now_ms()))
+}
+
+/// Items this item links to by hand (not by mentioning them in its text).
+#[tauri::command]
+pub fn list_manual_link_ids(db: Db, item_id: String) -> Result<Vec<String>, String> {
+    with_conn(&db, |c| links::manual_target_ids(c, &item_id))
+}
+
+/// Several items at once, in the trash or not (an id that no longer exists is left out).
+#[tauri::command]
+pub fn get_items(db: Db, ids: Vec<String>) -> Result<Vec<Item>, String> {
+    with_conn(&db, |c| {
+        Ok(ids.iter().filter_map(|id| items::get(c, id).ok()).collect())
+    })
 }
 
 // ---- Library: links ----

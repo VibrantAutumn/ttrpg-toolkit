@@ -726,6 +726,39 @@ fn remapped_json(text: &str, ids: &HashMap<String, String>) -> String {
     }
 }
 
+/// Document text with the item ids in its mentions (`item:<uuid>`) replaced by the new ids.
+/// An id that is not in the map (an item outside the pack) is left as it was, so the mention
+/// stays readable and simply points at nothing. Text without mentions comes back unchanged.
+pub(super) fn remapped_body(body: &str, ids: &HashMap<String, String>) -> String {
+    const PREFIX: &str = "item:";
+    let mut out = String::with_capacity(body.len());
+    let mut rest = body;
+    while let Some(at) = rest.find(PREFIX) {
+        let (before, after) = rest.split_at(at + PREFIX.len());
+        out.push_str(before);
+        match after.get(..36) {
+            Some(candidate) if looks_like_uuid(candidate) => {
+                match ids.get(&candidate.to_ascii_lowercase()) {
+                    Some(new_id) => out.push_str(new_id),
+                    None => out.push_str(candidate),
+                }
+                rest = &after[36..];
+            }
+            _ => rest = after,
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+fn looks_like_uuid(s: &str) -> bool {
+    s.len() == 36
+        && s.bytes().enumerate().all(|(i, b)| match i {
+            8 | 13 | 18 | 23 => b == b'-',
+            _ => b.is_ascii_hexdigit(),
+        })
+}
+
 /// Reads a pack and imports it as a new campaign called "<name> (imported)".
 pub fn import_pack(conn: &Connection, bytes: &[u8], now: i64) -> Result<ImportResult, PackError> {
     let pack = read_pack(bytes)?;
@@ -806,7 +839,7 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
     for d in &pack.documents {
         tx.execute(
             "INSERT INTO document_content (item_id, body, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
-            params![item_ids[&d.item_id], d.body, d.created_at, d.updated_at],
+            params![item_ids[&d.item_id], remapped_body(&d.body, &item_ids), d.created_at, d.updated_at],
         )
         .map_err(db_error)?;
     }

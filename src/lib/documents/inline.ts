@@ -1,3 +1,4 @@
+import { itemHref, itemIdFromHref } from "./mentions";
 import type { DocMark, DocNode } from "./types";
 
 /**
@@ -40,6 +41,13 @@ export function sortMarks(marks: DocMark[]): DocMark[] {
 export function textNode(text: string, marks: DocMark[] = []): DocNode {
   const sorted = sortMarks(marks);
   return sorted.length ? { type: "text", text, marks: sorted } : { type: "text", text };
+}
+
+/** A mention in its one form: a plain one-line label, an id in lower case, emphasis marks only. */
+function cleanMention(n: DocNode): DocNode {
+  const label = String(n.attrs?.label ?? "").replace(/\s+/g, " ").trim() || "Untitled";
+  const marks = sortMarks((n.marks ?? []).filter((m) => EMPHASIS.has(m.type)));
+  return { type: "mention", attrs: { id: String(n.attrs?.id ?? "").toLowerCase(), label }, ...(marks.length ? { marks } : {}) };
 }
 
 const hasMark = (n: DocNode, type: string) => (n.marks ?? []).some((m) => m.type === type);
@@ -302,13 +310,20 @@ function flatten(items: Atom[], marks: DocMark[], out: DocNode[]): void {
       case "delim":
         if (it.n > 0) out.push(textNode(it.ch.repeat(it.n), marks));
         break;
-      case "link":
+      case "link": {
+        const itemId = itemIdFromHref(it.href);
+        if (itemId) {
+          const label = it.children.map((c) => (c.type === "text" ? (c.text ?? "") : c.type === "mention" ? String(c.attrs?.label ?? "") : "")).join("");
+          out.push(cleanMention({ type: "mention", attrs: { id: itemId, label }, marks }));
+          break;
+        }
         for (const child of it.children) {
           if (child.type === "text") {
             out.push(textNode(child.text ?? "", [...marks, ...(child.marks ?? []), { type: "link", attrs: { href: it.href } }]));
           } else out.push(child);
         }
         break;
+      }
       case "tag":
         out.push(textNode(it.raw, marks)); // a tag with no partner is just text
         break;
@@ -386,6 +401,10 @@ function tidyOnce(input: DocNode[]): DocNode[] {
   // Marks in order; code made only of spaces is just spaces.
   let nodes: DocNode[] = [];
   for (const n of input) {
+    if (n.type === "mention") {
+      nodes.push(cleanMention(n));
+      continue;
+    }
     if (n.type !== "text") {
       nodes.push(n);
       continue;
@@ -607,7 +626,7 @@ function emitInline(nodes: DocNode[], inHeading: boolean, mode: EmitMode): strin
   /** How many of the following nodes (up to the next line break) carry this mark. */
   const run = (from: number, key: string) => {
     let len = 0;
-    for (let j = from; j < nodes.length && nodes[j].type === "text" && (nodes[j].marks ?? []).some((m) => markKey(m) === key); j++) len++;
+    for (let j = from; j < nodes.length && (nodes[j].type === "text" || nodes[j].type === "mention") && (nodes[j].marks ?? []).some((m) => markKey(m) === key); j++) len++;
     return len;
   };
 
@@ -635,7 +654,8 @@ function emitInline(nodes: DocNode[], inHeading: boolean, mode: EmitMode): strin
       opened = true;
     }
     const text = node.text ?? "";
-    if (hasMark(node, "code")) out.push(codeSpan(text));
+    if (node.type === "mention") out.push(`[${escapeText(String(node.attrs?.label ?? ""), false, false)}](${itemHref(String(node.attrs?.id ?? ""))})`);
+    else if (hasMark(node, "code")) out.push(codeSpan(text));
     else out.push(escapeText(text, lineStart && !opened && stack.length === 0 && !inHeading, inHeading));
     lineStart = false;
   });

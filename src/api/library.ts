@@ -88,14 +88,24 @@ export const getItem = (id: string) => invoke<Item>("get_item", { id });
 // Document text (Markdown)
 export const getDocumentBody = (itemId: string) =>
   invoke<string>("get_document_body", { itemId });
-export const setDocumentBody = (itemId: string, body: string) =>
-  invoke<void>("set_document_body", { itemId, body });
+/**
+ * `mentions` is the ids of the items the text mentions; when given, the document's mention links
+ * are made to match them in the same save.
+ */
+export const setDocumentBody = (itemId: string, body: string, mentions?: string[]) =>
+  invoke<void>("set_document_body", { itemId, body, mentions: mentions ?? null });
+
+/** Several items at once, in the trash or not; ids that no longer exist are left out. */
+export const getItems = (ids: string[]) => invoke<Item[]>("get_items", { ids });
 
 // Links (items this item links to) and backlinks (items that link to it)
 export const listLinks = (itemId: string) =>
   invoke<Item[]>("list_links", { itemId });
 export const listBacklinks = (itemId: string) =>
   invoke<Item[]>("list_backlinks", { itemId });
+/** Ids of the items linked from this one by hand (not just mentioned in its text). */
+export const listManualLinkIds = (itemId: string) =>
+  invoke<string[]>("list_manual_link_ids", { itemId });
 export const addLink = (sourceItemId: string, targetItemId: string) =>
   invoke<void>("add_link", { sourceItemId, targetItemId });
 export const removeLink = (sourceItemId: string, targetItemId: string) =>

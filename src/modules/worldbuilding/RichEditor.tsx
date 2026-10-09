@@ -4,28 +4,23 @@ import type { Node as ProseNode } from "@tiptap/pm/model";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
-import { exitSuggestion, type SuggestionProps } from "@tiptap/suggestion";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
+import type { Item } from "../../api/library";
+import { itemIcon, itemTypeLabel, libraryLabel } from "../../components/item/itemDisplay";
 import { BLOCK_COMMANDS, type BlockCommand, type BlockCommandId } from "../../lib/documents/blockCommands";
 import { canOpenExternally, normalizeLinkAddress } from "../../lib/documents/links";
 import { docToMarkdown, markdownToDoc } from "../../lib/documents/markdown";
 import type { DocNode } from "../../lib/documents/types";
 import { ancestorOf, CALLOUT_KINDS, Callout, Secret, Toggle, ToggleSummary, unwrapBlock } from "./containerNodes";
 import { addColumn, Column, Columns, columnsContext, deleteColumn, insertColumns, insideNode, MAX_COLUMNS, unwrapColumns } from "./layoutNodes";
+import { createMention, type MentionSupport } from "./mentionNode";
+import { PickerMenu, usePickerMenu } from "./PickerMenu";
 import { RawMarkdown } from "./rawMarkdownNode";
-import { runBlockCommand, slashCommands, type SlashBridge } from "./slashCommands";
+import { runBlockCommand, slashCommands } from "./slashCommands";
 
 export interface RichEditorHandle {
   /** Turns the newest edits into Markdown and reports them right now. */
   commit(): void;
-}
-
-/** The "/" menu: what is offered, which is highlighted, and where to draw it. */
-interface SlashView {
-  items: BlockCommand[];
-  index: number;
-  rect: DOMRect | null;
-  pick: (item: BlockCommand) => void;
 }
 
 /** What the toolbar's Insert menu offers (the rest are on the toolbar already). */
@@ -53,11 +48,14 @@ export function RichEditor({
   initial,
   onMarkdown,
   onFlush,
+  mentions,
   ref,
 }: {
   initial: string;
   onMarkdown: (markdown: string) => void;
   onFlush: () => void;
+  /** What "@" needs to find, show and open items; without it "@" does nothing. */
+  mentions?: MentionSupport;
   ref?: Ref<RichEditorHandle>;
 }) {
   const onMarkdownRef = useRef(onMarkdown);
@@ -71,12 +69,10 @@ export function RichEditor({
   const timer = useRef<number | undefined>(undefined);
   const editorRef = useRef<Editor | null>(null);
 
-  const [slash, setSlash] = useState<SlashView | null>(null);
-  const slashRef = useRef<SlashView | null>(null);
-  const showSlash = useCallback((view: SlashView | null) => {
-    slashRef.current = view;
-    setSlash(view);
-  }, []);
+  const mentionsRef = useRef(mentions);
+  mentionsRef.current = mentions;
+  const slashMenu = usePickerMenu<BlockCommand>(() => editorRef.current);
+  const mentionMenu = usePickerMenu<Item>(() => editorRef.current);
 
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
 
@@ -91,44 +87,6 @@ export function RichEditor({
   }, []);
 
   useImperativeHandle(ref, () => ({ commit }), [commit]);
-
-  const bridge = useMemo<SlashBridge>(
-    () => ({
-      show: (props: SuggestionProps<BlockCommand, BlockCommand>) => {
-        showSlash({
-          items: props.items,
-          index: 0,
-          rect: props.clientRect?.() ?? null,
-          pick: (item) => props.command(item),
-        });
-      },
-      hide: () => showSlash(null),
-      key: (event) => {
-        const current = slashRef.current;
-        if (!current || current.items.length === 0) return false;
-        const count = current.items.length;
-        if (event.key === "ArrowDown") {
-          showSlash({ ...current, index: (current.index + 1) % count });
-          return true;
-        }
-        if (event.key === "ArrowUp") {
-          showSlash({ ...current, index: (current.index + count - 1) % count });
-          return true;
-        }
-        if (event.key === "Enter" || event.key === "Tab") {
-          current.pick(current.items[current.index]);
-          return true;
-        }
-        if (event.key === "Escape") {
-          if (editorRef.current) exitSuggestion(editorRef.current.view);
-          showSlash(null);
-          return true;
-        }
-        return false;
-      },
-    }),
-    [showSlash],
-  );
 
   const extensions = useMemo(
     () => [
@@ -147,9 +105,10 @@ export function RichEditor({
       Secret,
       ToggleSummary,
       Toggle,
-      slashCommands(bridge),
+      createMention(() => mentionsRef.current, mentionMenu.bridge),
+      slashCommands(slashMenu.bridge),
     ],
-    [bridge],
+    [slashMenu.bridge, mentionMenu.bridge],
   );
 
   // Only the first value starts the editor; the wrapper remounts it to load a different text.
@@ -466,7 +425,37 @@ export function RichEditor({
       </BubbleMenu>
 
       <EditorContent editor={editor} />
-      {slash &&slash.items.length > 0 && <SlashMenu view={slash} />}
+      {slashMenu.view && (
+        <PickerMenu
+          view={slashMenu.view}
+          label="Insert a block"
+          itemKey={(c) => c.id}
+          row={(c) => (
+            <>
+              <strong>{c.label}</strong>
+              <span>{c.hint}</span>
+            </>
+          )}
+        />
+      )}
+      {mentionMenu.view && (
+        <PickerMenu
+          view={mentionMenu.view}
+          label="Mention an item"
+          itemKey={(i) => i.id}
+          hint={mentionMenu.view.query.trim() === "" ? "Type a name to link to it" : undefined}
+          row={(i) => (
+            <>
+              <strong>
+                {itemIcon(i)} {i.name}
+              </strong>
+              <span>
+                {itemTypeLabel(i)} · {libraryLabel(i)}
+              </span>
+            </>
+          )}
+        />
+      )}
     </div>
   );
 }
@@ -503,31 +492,5 @@ function ToolButton({
     >
       {children}
     </button>
-  );
-}
-
-function SlashMenu({ view }: { view: SlashView }) {
-  const rect = view.rect;
-  if (!rect) return null;
-  const MENU_HEIGHT = 280;
-  const above = rect.bottom + MENU_HEIGHT > window.innerHeight && rect.top > MENU_HEIGHT;
-  const left = Math.max(8, Math.min(rect.left, window.innerWidth - 268));
-  const style = above ? { left, bottom: window.innerHeight - rect.top + 4 } : { left, top: rect.bottom + 4 };
-  return (
-    <ul className="slash-menu" role="listbox" aria-label="Insert a block" style={style}>
-      {view.items.map((item, i) => (
-        <li key={item.id} role="option" aria-selected={i === view.index}>
-          <button
-            type="button"
-            className={i === view.index ? "on" : ""}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => view.pick(item)}
-          >
-            <strong>{item.label}</strong>
-            <span>{item.hint}</span>
-          </button>
-        </li>
-      ))}
-    </ul>
   );
 }
