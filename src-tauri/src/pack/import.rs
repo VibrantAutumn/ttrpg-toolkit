@@ -10,6 +10,7 @@ use super::format::*;
 use super::PackError;
 use crate::db::campaigns::{self, Campaign};
 use crate::db::fields;
+use crate::db::tabs;
 use crate::db::{
     cards, collections, documents, formulas, name_presets, play_decks, saved_draws, saved_rolls, settings, spreads, tables,
 };
@@ -67,6 +68,7 @@ pub struct ParsedPack {
     pub field_set_members: Vec<FieldSetMemberRecord>,
     pub item_field_sets: Vec<ItemFieldSetRecord>,
     pub field_values: Vec<FieldValueRecord>,
+    pub item_tabs: Vec<ItemTabRecord>,
     /// Plain-language notes about anything that had to be fixed or skipped.
     pub warnings: Vec<String>,
 }
@@ -99,6 +101,7 @@ impl ParsedPack {
             field_set_members: self.field_set_members.len() as u32,
             item_field_sets: self.item_field_sets.len() as u32,
             field_values: self.field_values.len() as u32,
+            item_tabs: self.item_tabs.len() as u32,
         }
     }
 }
@@ -200,6 +203,7 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         field_set_members: read_list(&mut archive, FIELD_SET_MEMBERS_FILE, limits, &mut total)?,
         item_field_sets: read_list(&mut archive, ITEM_FIELD_SETS_FILE, limits, &mut total)?,
         field_values: read_list(&mut archive, FIELD_VALUES_FILE, limits, &mut total)?,
+        item_tabs: read_list(&mut archive, ITEM_TABS_FILE, limits, &mut total)?,
         warnings: Vec::new(),
     };
     sanitize(&mut pack);
@@ -776,6 +780,48 @@ fn sanitize(pack: &mut ParsedPack) {
     });
     note(before - pack.field_values.len(), "field value(s) belonged to something missing or were unreadable and were skipped.");
 
+    // Tabs: on a page that holds text and is not itself a tab, one level deep, a document tab's
+    // child a document of the pack that is the tab of one page only, an embed that shows something
+    // in the pack (or is an empty slot with a name), and no more than 12 live tabs on a page.
+    let child_ids: HashSet<String> = pack.item_tabs.iter().filter(|t| t.kind == "document").filter_map(|t| t.child_id.clone()).collect();
+    let before = pack.item_tabs.len();
+    pack.item_tabs.sort_by_key(|t| t.position);
+    let mut seen_ids = HashSet::new();
+    let mut seen_children = HashSet::new();
+    let mut live_per_page: HashMap<String, usize> = HashMap::new();
+    let mut emptied = 0;
+    for t in &mut pack.item_tabs {
+        if t.kind == "embed" && t.target_id.as_ref().is_some_and(|x| !item_type.contains_key(x.as_str()) || *x == t.parent_id) {
+            t.target_id = None; // what it showed isn't here: it becomes an empty slot
+            emptied += 1;
+        }
+        t.title = t.title.trim().chars().take(tabs::MAX_TITLE_CHARS).collect();
+    }
+    note(emptied, "embed(s) showed something that isn't in the pack and were left as empty slots.");
+    pack.item_tabs.retain(|t| {
+        let page_ok = item_type.get(t.parent_id.as_str()).is_some_and(|ty| documents::holds_text(ty)) && !child_ids.contains(&t.parent_id);
+        let shape_ok = match t.kind.as_str() {
+            "document" => {
+                t.target_id.is_none()
+                    && t.child_id.as_deref().is_some_and(|c| {
+                        c != t.parent_id && item_type.get(c) == Some(&tabs::CHILD_TYPE) && seen_children.insert(c.to_string())
+                    })
+            }
+            "embed" => t.child_id.is_none() && (t.target_id.is_some() || !t.title.is_empty()),
+            _ => false,
+        };
+        if !(page_ok && shape_ok && !t.id.is_empty() && seen_ids.insert(t.id.clone())) {
+            return false;
+        }
+        if t.deleted_at.is_some() {
+            return true;
+        }
+        let n = live_per_page.entry(t.parent_id.clone()).or_insert(0);
+        *n += 1;
+        *n <= tabs::MAX_TABS
+    });
+    note(before - pack.item_tabs.len(), "tab(s) belonged to something missing or couldn't be used and were skipped.");
+
     pack.warnings = warnings;
 }
 
@@ -900,6 +946,7 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
     let folder_ids = new_ids(pack.folders.iter().map(|f| f.id.as_str()).collect());
     let item_ids = new_ids(pack.items.iter().map(|i| i.id.as_str()).collect());
     let tag_ids = new_ids(pack.tags.iter().map(|t| t.id.as_str()).collect());
+    let tab_ids = new_ids(pack.item_tabs.iter().map(|t| t.id.as_str()).collect());
     let field_ids = new_ids(pack.field_definitions.iter().map(|d| d.id.as_str()).collect());
     let field_set_ids = new_ids(pack.field_sets.iter().map(|s| s.id.as_str()).collect());
 
@@ -1146,6 +1193,19 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
             params![
                 item_ids[&v.item_id], field_ids[&v.field_id], value_json, v.sort_num, v.sort_text, v.search_text,
                 v.secret as i64, v.created_at, v.updated_at, v.deleted_at
+            ],
+        )
+        .map_err(db_error)?;
+    }
+
+    for t in &pack.item_tabs {
+        tx.execute(
+            "INSERT INTO item_tabs (id, parent_id, kind, position, child_id, target_id, title, created_at, updated_at, deleted_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                tab_ids[&t.id], item_ids[&t.parent_id], t.kind, t.position,
+                t.child_id.as_ref().map(|c| &item_ids[c]), t.target_id.as_ref().map(|x| &item_ids[x]),
+                t.title, t.created_at, t.updated_at, t.deleted_at
             ],
         )
         .map_err(db_error)?;

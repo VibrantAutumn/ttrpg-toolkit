@@ -109,6 +109,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "create_fields",
         sql: include_str!("../../migrations/0019_create_fields.sql"),
     },
+    Migration {
+        version: 20,
+        name: "create_item_tabs",
+        sql: include_str!("../../migrations/0020_create_item_tabs.sql"),
+    },
 ];
 
 #[derive(Debug)]

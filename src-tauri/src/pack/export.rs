@@ -40,6 +40,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     let field_set_members = read_field_set_members(conn, campaign_id)?;
     let item_field_sets = read_item_field_sets(conn, campaign_id)?;
     let field_values = read_field_values(conn, campaign_id)?;
+    let item_tabs = read_item_tabs(conn, campaign_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -74,6 +75,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
             field_set_members: field_set_members.len() as u32,
             item_field_sets: item_field_sets.len() as u32,
             field_values: field_values.len() as u32,
+            item_tabs: item_tabs.len() as u32,
         },
     };
 
@@ -102,6 +104,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     put(&mut zip, options, FIELD_SET_MEMBERS_FILE, &field_set_members, false)?;
     put(&mut zip, options, ITEM_FIELD_SETS_FILE, &item_field_sets, false)?;
     put(&mut zip, options, FIELD_VALUES_FILE, &field_values, false)?;
+    put(&mut zip, options, ITEM_TABS_FILE, &item_tabs, false)?;
     put(&mut zip, options, COLLECTION_MEMBERS_FILE, &collection_members, false)?;
     let image_records: Vec<CardImageRecord> = card_images.iter().map(|(r, _, _)| r.clone()).collect();
     put(&mut zip, options, CARD_IMAGES_FILE, &image_records, false)?;
@@ -506,6 +509,29 @@ fn read_table_entry_tags(conn: &Connection, campaign_id: &str) -> Result<Vec<Tab
             created_at: r.get(2)?,
             updated_at: r.get(3)?,
             deleted_at: r.get(4)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_item_tabs(conn: &Connection, campaign_id: &str) -> Result<Vec<ItemTabRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT t.id, t.parent_id, t.kind, t.position, t.child_id, t.target_id, t.title, t.created_at, t.updated_at, t.deleted_at
+         FROM item_tabs t JOIN items i ON i.id = t.parent_id
+         WHERE i.campaign_id = ?1 ORDER BY t.parent_id, t.position, t.id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(ItemTabRecord {
+            id: r.get(0)?,
+            parent_id: r.get(1)?,
+            kind: r.get(2)?,
+            position: r.get(3)?,
+            child_id: r.get(4)?,
+            target_id: r.get(5)?,
+            title: r.get(6)?,
+            created_at: r.get(7)?,
+            updated_at: r.get(8)?,
+            deleted_at: r.get(9)?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)

@@ -16,6 +16,7 @@
 //!   data/name_presets.json    (likewise; a saved name generator setup, with table and tag ids inside)
 //!   data/field_definitions.json, data/field_sets.json, data/field_set_members.json, data/item_field_sets.json,
 //!   data/field_values.json    (likewise; fields and their values. A link field's value holds item ids)
+//!   data/item_tabs.json    (likewise; a page's tabs: nested documents and embeds)
 //!   assets/cards/<id>.<ext>, assets/cards/<id>.thumb.<ext>   card pictures (one file each)
 //!   assets/                  reserved for future use (images, ...)
 //!
@@ -56,6 +57,7 @@ pub const FIELD_SETS_FILE: &str = "data/field_sets.json";
 pub const FIELD_SET_MEMBERS_FILE: &str = "data/field_set_members.json";
 pub const ITEM_FIELD_SETS_FILE: &str = "data/item_field_sets.json";
 pub const FIELD_VALUES_FILE: &str = "data/field_values.json";
+pub const ITEM_TABS_FILE: &str = "data/item_tabs.json";
 /// Card picture files live under this folder inside the zip.
 pub const CARD_ASSET_DIR: &str = "assets/cards/";
 
@@ -107,6 +109,7 @@ pub struct Counts {
     pub field_set_members: u32,
     pub item_field_sets: u32,
     pub field_values: u32,
+    pub item_tabs: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -395,6 +398,26 @@ pub struct FieldValueRecord {
     pub search_text: String,
     #[serde(default)]
     pub secret: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deleted_at: Option<i64>,
+}
+
+/// One tab of a page. A document tab's `child_id` is a document item of the pack; an embed tab's
+/// `target_id` is the item it shows (none for an empty slot, which has a title).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemTabRecord {
+    pub id: String,
+    pub parent_id: String,
+    pub kind: String,
+    pub position: i64,
+    #[serde(default)]
+    pub child_id: Option<String>,
+    #[serde(default)]
+    pub target_id: Option<String>,
+    #[serde(default)]
+    pub title: String,
     pub created_at: i64,
     pub updated_at: i64,
     pub deleted_at: Option<i64>,

@@ -5,6 +5,7 @@ use super::PackError;
 use crate::db::cards::{self, test_images};
 use crate::db::collections;
 use crate::db::fields::{self, ValueIndex};
+use crate::db::tabs;
 use crate::db::formulas;
 use crate::db::spreads::{self, PositionInput};
 use crate::db::name_presets;
@@ -201,6 +202,15 @@ mind the [Rumors]".into(), weight: 1 },
     fields::set_value(conn, &ireena.id, &race.id, r#""Human""#, &text_index("Human"), false, 4730).unwrap();
     fields::clear_value(conn, &ireena.id, &race.id, 4740).unwrap();
 
+    // Tabs on Strahd's page: a nested document, an embed showing Barovia, an empty slot, and a
+    // removed embed.
+    let relationships = tabs::add_document_tab(conn, &strahd.id, "Relationships", 4800).unwrap();
+    documents::set_body(conn, &relationships.item.as_ref().unwrap().id, "Ireena is his obsession.", 4810).unwrap();
+    tabs::add_embed_tab(conn, &strahd.id, "Homeland", Some(&barovia.id), 4820).unwrap();
+    tabs::add_embed_tab(conn, &strahd.id, "Crypt map", None, 4830).unwrap();
+    let removed = tabs::add_embed_tab(conn, &strahd.id, "Removed", None, 4840).unwrap();
+    tabs::remove_tab(conn, &removed.id, 4850).unwrap();
+
     camp.id
 }
 
@@ -250,6 +260,7 @@ struct Snapshot {
     field_set_members: Vec<String>,
     item_field_sets: Vec<String>,
     field_values: Vec<String>,
+    item_tabs: Vec<String>,
 }
 
 fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
@@ -339,6 +350,11 @@ fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
                     v.sort_num, v.sort_text, v.search_text, v.secret, v.created_at, v.updated_at, v.deleted_at
              FROM field_values v JOIN items i ON i.id = v.item_id JOIN field_definitions d ON d.id = v.field_id
              WHERE i.campaign_id = ?1", campaign_id),
+        item_tabs: lines(conn,
+            "SELECT p.name, t.kind, t.position, c.name, g.name, t.title, t.created_at, t.updated_at, t.deleted_at
+             FROM item_tabs t JOIN items p ON p.id = t.parent_id
+             LEFT JOIN items c ON c.id = t.child_id LEFT JOIN items g ON g.id = t.target_id
+             WHERE p.campaign_id = ?1", campaign_id),
     }
 }
 
@@ -393,12 +409,14 @@ fn the_manifest_describes_the_pack() {
         // 2 formulas, 3 cards, a set, a deck, a pool, a saved draw, a deck in play, a spread, 2 tables and a name preset). 2 cards have details, 1 a picture, 7 membership rows.
         // 1 table has settings; the 2 tables have 4 entries in all (one deleted) and 2 entry tags (one removed).
         Counts {
-            folders: 3, items: 22, tags: 4, item_tags: 4, links: 5, documents: 4, saved_rolls: 2, formulas: 2,
+            folders: 3, items: 23, tags: 4, item_tags: 4, links: 5, documents: 5, saved_rolls: 2, formulas: 2,
             card_details: 2, collection_members: 7, card_images: 1, saved_draws: 1, play_decks: 1, spreads: 1, spread_positions: 3,
             random_tables: 1, table_entries: 4, table_entry_tags: 2, name_presets: 1,
             // 4 fields (one deleted), 2 sets (one deleted) with 3 member rows (one removed), 2 applied sets (one taken off),
             // and 4 values (one cleared); the link field made 2 of the 5 links.
             field_definitions: 4, field_sets: 2, field_set_members: 3, item_field_sets: 2, field_values: 4,
+            // Strahd's 4 tabs (one removed): a nested document, an embed, an empty slot and the removed one.
+            item_tabs: 4,
         }
     );
     assert_eq!(pack.counts(), m.counts);
@@ -428,7 +446,7 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
         )
         .unwrap();
     assert_eq!(shared, 0);
-    assert_eq!(count(&conn, "items"), 44);
+    assert_eq!(count(&conn, "items"), 46);
 }
 
 #[test]
@@ -476,7 +494,7 @@ fn imported_items_remember_where_they_came_from() {
             .map(|r| r.unwrap())
             .collect()
     };
-    assert_eq!(rows.len(), 22);
+    assert_eq!(rows.len(), 23);
     for (name, origin_pack, origin_item) in rows {
         assert_eq!(origin_pack.as_deref(), Some(pack_id.as_str()), "{name}");
         // The origin id is the item's id in the ORIGINAL campaign.
@@ -848,7 +866,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
     assert!(pack.warnings.iter().all(|w| w.chars().next().unwrap().is_ascii_digit()));
     assert_eq!(
         pack.counts(),
-        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0 }
+        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0 }
     );
 
     let conn = open_in_memory();
@@ -969,7 +987,7 @@ fn the_committed_version_1_pack_still_imports() {
     assert_eq!(result.campaign.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0 }
+        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0 }
     );
     let camp = result.campaign.id;
 
@@ -1973,4 +1991,61 @@ fn a_templates_starter_text_and_setup_survive_a_pack_round_trip() {
     let made = templates::create_from(&target, &imported.id, "Ireena", None, 7000).unwrap();
     assert_eq!(documents::get_body(&target, &made.id).unwrap(), "## Motivation\n\n");
     assert_eq!(fields::list_item_sets(&target, &made.id).unwrap().len(), 1);
+}
+
+#[test]
+fn tabs_keep_working_in_an_imported_campaign() {
+    let source = open_in_memory();
+    let original = populate(&source);
+    let bytes = export_campaign(&source, &original, 5000).unwrap();
+    let target = open_in_memory();
+    let imported = import_pack(&target, &bytes, 6000).unwrap().campaign.id;
+
+    let find = |name: &str| search::search(&target, &imported, name, None, 10).unwrap().into_iter().find(|i| i.name == name).unwrap();
+    let (strahd, barovia, relationships) = (find("Strahd"), find("Barovia"), find("Relationships"));
+    let listed: Vec<_> = tabs::list_tabs(&target, &strahd.id).unwrap();
+    assert_eq!(listed.len(), 3); // the removed embed stays removed
+    assert_eq!(listed[0].item.as_ref().unwrap().id, relationships.id);
+    assert_eq!((listed[1].title.as_str(), listed[1].item.as_ref().unwrap().id.as_str()), ("Homeland", barovia.id.as_str()));
+    assert!(listed[2].item.is_none() && listed[2].title == "Crypt map"); // the empty slot
+    // The nested document is hidden from the folders, knows its page, and kept its text.
+    let top: Vec<String> = items::list(&target, &imported, "worldbuilding", None).unwrap().into_iter().map(|i| i.name).collect();
+    assert!(!top.contains(&"Relationships".to_string()));
+    assert_eq!(tabs::family_of(&target, &relationships.id).unwrap().unwrap().parent.id, strahd.id);
+    assert_eq!(documents::get_body(&target, &relationships.id).unwrap(), "Ireena is his obsession.");
+}
+
+#[test]
+fn unusable_tabs_are_repaired_or_skipped_with_a_warning() {
+    let item = |id: &str, ty: &str| json!({ "id": id, "library": "worldbuilding", "itemType": ty, "name": id, "icon": null, "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null });
+    let tab = |id: &str, parent: &str, kind: &str, pos: i64, child: serde_json::Value, target: serde_json::Value, title: &str| {
+        json!({ "id": id, "parentId": parent, "kind": kind, "position": pos, "childId": child, "targetId": target, "title": title, "createdAt": 1, "updatedAt": 1, "deletedAt": null })
+    };
+    let bytes = pack_with(&[
+        ("data/items.json", json!([item("page", "document"), item("kid", "document"), item("deeper", "document"), item("deck", "deck"), item("card", "card"), item("other", "document")])),
+        ("data/item_tabs.json", json!([
+            tab("t1", "page", "document", 0, json!("kid"), json!(null), ""),
+            tab("t2", "kid", "document", 0, json!("deeper"), json!(null), ""),              // a tab can't have tabs
+            tab("t3", "page", "document", 1, json!("kid"), json!(null), ""),                // a document is one tab only
+            tab("t4", "page", "document", 2, json!("deck"), json!(null), ""),               // not a document
+            tab("t5", "card", "embed", 0, json!(null), json!("deck"), "Deck"),              // a card can't have tabs
+            tab("t6", "page", "embed", 3, json!(null), json!("missing"), "Map"),            // shows nothing here: an empty slot
+            tab("t7", "page", "embed", 4, json!(null), json!(null), ""),                    // empty and unnamed
+            tab("t8", "page", "embed", 5, json!(null), json!("page"), "Itself"),            // can't show its own page
+            tab("t9", "page", "bogus", 6, json!(null), json!(null), "x"),
+            tab("t10", "other", "embed", 0, json!(null), json!("deck"), "Deck"),
+        ])),
+    ]);
+    let pack = read_pack(&bytes).unwrap();
+    let mut kept: Vec<_> = pack.item_tabs.iter().map(|t| t.id.as_str()).collect();
+    kept.sort();
+    assert_eq!(kept, ["t1", "t10", "t6", "t8"]); // t6 and t8 became empty slots
+    assert!(pack.item_tabs.iter().filter(|t| t.id == "t6" || t.id == "t8").all(|t| t.target_id.is_none()));
+    assert!(pack.warnings.iter().any(|w| w.contains("empty slots")));
+    assert!(pack.warnings.iter().any(|w| w.contains("tab(s)")));
+
+    let conn = open_in_memory();
+    let result = import_parsed(&conn, &pack, 9000).unwrap();
+    assert_eq!(count(&conn, "item_tabs"), 4);
+    assert_eq!(result.counts.item_tabs, 4);
 }

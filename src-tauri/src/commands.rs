@@ -25,6 +25,7 @@ use crate::db::saved_rolls::{self, NewSavedRoll, SavedRoll};
 use crate::db::tags::{self, Tag, TagLink};
 use crate::db::trash::{self, Trash};
 use crate::db::template_starters::{self, TemplateInstallResult};
+use crate::db::tabs::{self, Family, Tab};
 use crate::db::templates;
 use crate::db::{self, search, settings};
 use crate::pack::import::{ImportResult, PackPreview};
@@ -675,6 +676,45 @@ pub fn get_items(db: Db, ids: Vec<String>) -> Result<Vec<Item>, String> {
     with_conn(&db, |c| {
         Ok(ids.iter().filter_map(|id| items::get(c, id).ok()).collect())
     })
+}
+
+// ---- Tabs ----
+
+/// The tabs of a page, in order.
+#[tauri::command]
+pub fn list_tabs(db: Db, parent_id: String) -> Result<Vec<Tab>, String> {
+    with_conn(&db, |c| tabs::list_tabs(c, &parent_id))
+}
+
+/// The page an item is a document tab of, if it is one.
+#[tauri::command]
+pub fn get_tab_family(db: Db, item_id: String) -> Result<Option<Family>, String> {
+    with_conn(&db, |c| tabs::family_of(c, &item_id))
+}
+
+#[tauri::command]
+pub fn add_document_tab(db: Db, parent_id: String, name: String) -> Result<Tab, String> {
+    with_conn(&db, |c| tabs::add_document_tab(c, &parent_id, &name, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn add_embed_tab(db: Db, parent_id: String, title: String, target_id: Option<String>) -> Result<Tab, String> {
+    with_conn(&db, |c| tabs::add_embed_tab(c, &parent_id, &title, target_id.as_deref(), db::now_ms()))
+}
+
+#[tauri::command]
+pub fn update_embed_tab(db: Db, tab_id: String, title: String, target_id: Option<String>) -> Result<Tab, String> {
+    with_conn(&db, |c| tabs::update_embed_tab(c, &tab_id, &title, target_id.as_deref(), db::now_ms()))
+}
+
+#[tauri::command]
+pub fn remove_tab(db: Db, tab_id: String) -> Result<(), String> {
+    with_conn(&db, |c| tabs::remove_tab(c, &tab_id, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn move_tab(db: Db, tab_id: String, delta: i64) -> Result<(), String> {
+    with_conn(&db, |c| tabs::move_tab(c, &tab_id, delta, db::now_ms()))
 }
 
 // ---- Templates ----

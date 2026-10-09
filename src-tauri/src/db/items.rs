@@ -135,6 +135,7 @@ pub fn list(
     let mut stmt = conn.prepare(&format!(
         "SELECT {COLUMNS} FROM items
          WHERE campaign_id = ?1 AND library = ?2 AND folder_id IS ?3 AND deleted_at IS NULL
+           AND id NOT IN (SELECT child_id FROM item_tabs WHERE child_id IS NOT NULL)
          ORDER BY name COLLATE NOCASE, created_at"
     ))?;
     let rows = stmt.query_map(params![campaign_id, library, folder_id], from_row)?;
@@ -147,6 +148,7 @@ pub fn list_of_type(conn: &Connection, campaign_id: &str, library: &str, item_ty
     let mut stmt = conn.prepare(&format!(
         "SELECT {COLUMNS} FROM items
          WHERE campaign_id = ?1 AND library = ?2 AND item_type = ?3 AND deleted_at IS NULL
+           AND id NOT IN (SELECT child_id FROM item_tabs WHERE child_id IS NOT NULL)
          ORDER BY name COLLATE NOCASE, created_at"
     ))?;
     let rows = stmt.query_map(params![campaign_id, library, item_type], from_row)?;

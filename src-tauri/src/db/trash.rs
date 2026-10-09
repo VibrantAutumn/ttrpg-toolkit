@@ -32,6 +32,8 @@ pub fn list(conn: &Connection, campaign_id: &str, library: &str) -> Result<Trash
         "SELECT {} FROM items i
          WHERE campaign_id = ?1 AND library = ?2 AND deleted_at IS NOT NULL
            AND NOT EXISTS (SELECT 1 FROM folders p WHERE p.id = i.folder_id AND p.deleted_at = i.deleted_at)
+           AND NOT EXISTS (SELECT 1 FROM item_tabs t JOIN items p ON p.id = t.parent_id
+                           WHERE t.child_id = i.id AND p.deleted_at = i.deleted_at)
          ORDER BY deleted_at DESC, name COLLATE NOCASE",
         items::COLUMNS
     );
