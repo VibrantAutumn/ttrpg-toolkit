@@ -6,5 +6,6 @@ export const documentType: ItemTypeDefinition = {
   label: "Document",
   icon: "📄",
   toolId: "worldbuilding",
+  tabs: true,
   editor: DocumentEditor,
 };

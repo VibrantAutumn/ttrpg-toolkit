@@ -326,6 +326,13 @@
       ],
       "tags": [
         "NPC"
+      ],
+      "tabs": [
+        {
+          "kind": "document",
+          "title": "Relationships",
+          "body": "## Allies\n\n## Enemies\n\n## Family"
+        }
       ]
     },
     {
@@ -338,6 +345,13 @@
       ],
       "tags": [
         "Location"
+      ],
+      "tabs": [
+        {
+          "kind": "slot",
+          "title": "Map",
+          "body": ""
+        }
       ]
     },
     {
@@ -350,7 +364,8 @@
       ],
       "tags": [
         "Faction"
-      ]
+      ],
+      "tabs": []
     },
     {
       "key": "item",
@@ -362,7 +377,8 @@
       ],
       "tags": [
         "Item"
-      ]
+      ],
+      "tabs": []
     },
     {
       "key": "quest",
@@ -374,7 +390,8 @@
       ],
       "tags": [
         "Quest"
-      ]
+      ],
+      "tabs": []
     },
     {
       "key": "session",
@@ -386,7 +403,8 @@
       ],
       "tags": [
         "Session"
-      ]
+      ],
+      "tabs": []
     }
   ]
 }

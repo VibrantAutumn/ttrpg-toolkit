@@ -11,7 +11,7 @@ const several = { many: true, library: null, itemTypes: [] };
 export const coreTemplates: TemplateStarterDef = {
   id: "starter:templates",
   name: "Templates",
-  description: "NPC, Location, Faction, Item, Quest and Session, each with a field set and starter headings.",
+  description: "NPC, Location, Faction, Item, Quest and Session, each with a field set and starter headings. NPC comes with a Relationships tab, Location with an empty Map slot.",
   tags: [{ name: "NPC" }, { name: "Location" }, { name: "Faction" }, { name: "Item" }, { name: "Quest" }, { name: "Session" }],
 
   fields: [
@@ -71,6 +71,7 @@ export const coreTemplates: TemplateStarterDef = {
       body: "## Appearance\n\n## Personality\n\n## Background\n\n:::secret\n## Secrets\n:::",
       sets: ["NPC"],
       tags: ["NPC"],
+      tabs: [{ kind: "document", name: "Relationships", body: "## Allies\n\n## Enemies\n\n## Family" }],
     },
     {
       key: "location",
@@ -79,6 +80,7 @@ export const coreTemplates: TemplateStarterDef = {
       body: "## Description\n\n## Who lives here\n\n## Adventure hooks",
       sets: ["Location"],
       tags: ["Location"],
+      tabs: [{ kind: "slot", name: "Map" }],
     },
     {
       key: "faction",

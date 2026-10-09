@@ -132,15 +132,33 @@ pub fn add_document_tab(conn: &Connection, parent_id: &str, name: &str, now: i64
     let parent = require_page(conn, parent_id)?;
     require_room(conn, parent_id)?;
     let tx = conn.unchecked_transaction()?;
-    let child = items::create(&tx, &parent.campaign_id, &parent.library, CHILD_TYPE, name, None, now)?;
-    let id = Uuid::now_v7().to_string();
-    tx.execute(
-        "INSERT INTO item_tabs (id, parent_id, kind, position, child_id, created_at, updated_at)
-         VALUES (?1, ?2, 'document', ?3, ?4, ?5, ?5)",
-        params![id, parent_id, next_position(&tx, parent_id)?, child.id, now],
-    )?;
+    let (id, _) = insert_document_tab(&tx, &parent, name, now)?;
     tx.commit()?;
     tab_by_id(conn, &id)
+}
+
+/// Makes a nested document and its tab, with no checks and no transaction of its own (for callers
+/// that have done their checks and are already in one). Returns the tab's id and the new document.
+pub(super) fn insert_document_tab(conn: &Connection, parent: &Item, name: &str, now: i64) -> Result<(String, Item), DbError> {
+    let child = items::create(conn, &parent.campaign_id, &parent.library, CHILD_TYPE, name, None, now)?;
+    let id = Uuid::now_v7().to_string();
+    conn.execute(
+        "INSERT INTO item_tabs (id, parent_id, kind, position, child_id, created_at, updated_at)
+         VALUES (?1, ?2, 'document', ?3, ?4, ?5, ?5)",
+        params![id, parent.id, next_position(conn, &parent.id)?, child.id, now],
+    )?;
+    Ok((id, child))
+}
+
+/// Adds an embed tab with no checks and no transaction of its own (see `insert_document_tab`).
+pub(super) fn insert_embed_tab(conn: &Connection, parent_id: &str, title: &str, target_id: Option<&str>, now: i64) -> Result<String, DbError> {
+    let id = Uuid::now_v7().to_string();
+    conn.execute(
+        "INSERT INTO item_tabs (id, parent_id, kind, position, target_id, title, created_at, updated_at)
+         VALUES (?1, ?2, 'embed', ?3, ?4, ?5, ?6, ?6)",
+        params![id, parent_id, next_position(conn, parent_id)?, target_id, title, now],
+    )?;
+    Ok(id)
 }
 
 /// Checks an embed's target: a live item of the page's campaign, and not the page itself.
@@ -174,12 +192,7 @@ pub fn add_embed_tab(conn: &Connection, parent_id: &str, title: &str, target_id:
     if title.is_empty() && target_id.is_none() {
         return Err(DbError::Invalid("Give the empty slot a name, so you know what to put in it."));
     }
-    let id = Uuid::now_v7().to_string();
-    conn.execute(
-        "INSERT INTO item_tabs (id, parent_id, kind, position, target_id, title, created_at, updated_at)
-         VALUES (?1, ?2, 'embed', ?3, ?4, ?5, ?6, ?6)",
-        params![id, parent_id, next_position(conn, parent_id)?, target_id, title, now],
-    )?;
+    let id = insert_embed_tab(conn, parent_id, &title, target_id, now)?;
     tab_by_id(conn, &id)
 }
 

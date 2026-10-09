@@ -12,6 +12,7 @@ use super::error::DbError;
 use super::fields;
 use super::items::{self, Item};
 use super::links;
+use super::tabs;
 use rusqlite::{params, Connection};
 
 pub const TEMPLATE_TYPE: &str = "template";
@@ -20,9 +21,74 @@ pub const LIBRARY: &str = "worldbuilding";
 /// The type of item a template makes.
 pub const MADE_TYPE: &str = "document";
 
-/// Makes a new document from a template: the same starter text (and the links its mentions
-/// make), tags, applied field sets and field values, with the field values' GM-only marks. All
-/// or nothing. `name` is the new document's name; `folder_id` is where it goes (or none).
+/// Copies what one item holds into another that was just made: the icon, the text (and the links
+/// its mentions make), the tags, the field sets (in order), and the field values (a link field's
+/// value makes its links). Anything deleted is not copied. Runs inside the caller's transaction.
+fn copy_content(conn: &Connection, from: &Item, to_id: &str, now: i64) -> Result<(), DbError> {
+    if from.icon.is_some() {
+        conn.execute("UPDATE items SET icon = ?2 WHERE id = ?1", params![to_id, from.icon])?;
+    }
+
+    // The text, and the links its mentions make.
+    conn.execute(
+        "INSERT INTO document_content (item_id, body, created_at, updated_at)
+         SELECT ?2, body, ?3, ?3 FROM document_content WHERE item_id = ?1",
+        params![from.id, to_id, now],
+    )?;
+    let mentions: Vec<String> = {
+        let mut stmt = conn.prepare(
+            "SELECT l.target_item_id FROM links l JOIN items t ON t.id = l.target_item_id
+             WHERE l.source_item_id = ?1 AND l.source_ref = ?2 AND l.deleted_at IS NULL AND t.deleted_at IS NULL",
+        )?;
+        let rows = stmt.query_map(params![from.id, links::BODY], |r| r.get(0))?;
+        rows.collect::<Result<_, _>>()?
+    };
+    links::sync_source(conn, to_id, links::BODY, &mentions, now)?;
+
+    // The tags that still exist.
+    conn.execute(
+        "INSERT INTO item_tags (item_id, tag_id, created_at, updated_at)
+         SELECT ?2, it.tag_id, ?3, ?3 FROM item_tags it JOIN tags t ON t.id = it.tag_id
+         WHERE it.item_id = ?1 AND it.deleted_at IS NULL AND t.deleted_at IS NULL",
+        params![from.id, to_id, now],
+    )?;
+
+    // The field sets that still exist, in the order they were applied.
+    conn.execute(
+        "INSERT INTO item_field_sets (item_id, set_id, position, created_at, updated_at)
+         SELECT ?2, a.set_id, a.position, ?3, ?3 FROM item_field_sets a JOIN field_sets s ON s.id = a.set_id
+         WHERE a.item_id = ?1 AND a.deleted_at IS NULL AND s.deleted_at IS NULL",
+        params![from.id, to_id, now],
+    )?;
+
+    // The values of fields that still exist (a link field's value makes its links).
+    conn.execute(
+        "INSERT INTO field_values (item_id, field_id, value_json, sort_num, sort_text, search_text, secret, created_at, updated_at)
+         SELECT ?2, v.field_id, v.value_json, v.sort_num, v.sort_text, v.search_text, v.secret, ?3, ?3
+         FROM field_values v JOIN field_definitions d ON d.id = v.field_id
+         WHERE v.item_id = ?1 AND v.deleted_at IS NULL AND d.deleted_at IS NULL",
+        params![from.id, to_id, now],
+    )?;
+    let link_values: Vec<(String, String)> = {
+        let mut stmt = conn.prepare(
+            "SELECT v.field_id, v.value_json FROM field_values v JOIN field_definitions d ON d.id = v.field_id
+             WHERE v.item_id = ?1 AND v.deleted_at IS NULL AND d.deleted_at IS NULL AND d.kind = 'link'",
+        )?;
+        let rows = stmt.query_map([to_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect::<Result<_, _>>()?
+    };
+    for (field_id, value_json) in link_values {
+        let targets: Vec<String> = serde_json::from_str(&value_json).unwrap_or_default();
+        links::sync_source(conn, to_id, &fields::link_ref(&field_id), &targets, now)?;
+    }
+    Ok(())
+}
+
+/// Makes a new document from a template: the template's starter text (and the links its mentions
+/// make), tags, applied field sets and default values (with their GM-only marks), and its tabs: each
+/// nested document tab becomes a new document of its own with the same content, and each embed tab
+/// is copied (what it shows, or an empty slot). All or nothing. `name` is the new document's name;
+/// `folder_id` is where it goes (or none).
 pub fn create_from(
     conn: &Connection,
     template_id: &str,
@@ -40,61 +106,23 @@ pub fn create_from(
 
     let tx = conn.unchecked_transaction()?;
     let made = items::create(&tx, &template.campaign_id, LIBRARY, MADE_TYPE, name, folder_id, now)?;
-    if template.icon.is_some() {
-        tx.execute("UPDATE items SET icon = ?2 WHERE id = ?1", params![made.id, template.icon])?;
-    }
+    copy_content(&tx, &template, &made.id, now)?;
 
-    // The starter text, and the links its mentions make.
-    tx.execute(
-        "INSERT INTO document_content (item_id, body, created_at, updated_at)
-         SELECT ?2, body, ?3, ?3 FROM document_content WHERE item_id = ?1",
-        params![template_id, made.id, now],
-    )?;
-    let mentions: Vec<String> = {
-        let mut stmt = tx.prepare(
-            "SELECT l.target_item_id FROM links l JOIN items t ON t.id = l.target_item_id
-             WHERE l.source_item_id = ?1 AND l.source_ref = ?2 AND l.deleted_at IS NULL AND t.deleted_at IS NULL",
-        )?;
-        let rows = stmt.query_map(params![template_id, links::BODY], |r| r.get(0))?;
-        rows.collect::<Result<_, _>>()?
-    };
-    links::sync_source(&tx, &made.id, links::BODY, &mentions, now)?;
-
-    // The tags that still exist.
-    tx.execute(
-        "INSERT INTO item_tags (item_id, tag_id, created_at, updated_at)
-         SELECT ?2, it.tag_id, ?3, ?3 FROM item_tags it JOIN tags t ON t.id = it.tag_id
-         WHERE it.item_id = ?1 AND it.deleted_at IS NULL AND t.deleted_at IS NULL",
-        params![template_id, made.id, now],
-    )?;
-
-    // The field sets that still exist, in the order they were applied.
-    tx.execute(
-        "INSERT INTO item_field_sets (item_id, set_id, position, created_at, updated_at)
-         SELECT ?2, a.set_id, a.position, ?3, ?3 FROM item_field_sets a JOIN field_sets s ON s.id = a.set_id
-         WHERE a.item_id = ?1 AND a.deleted_at IS NULL AND s.deleted_at IS NULL",
-        params![template_id, made.id, now],
-    )?;
-
-    // The default values of fields that still exist (a link field's value makes its links).
-    tx.execute(
-        "INSERT INTO field_values (item_id, field_id, value_json, sort_num, sort_text, search_text, secret, created_at, updated_at)
-         SELECT ?2, v.field_id, v.value_json, v.sort_num, v.sort_text, v.search_text, v.secret, ?3, ?3
-         FROM field_values v JOIN field_definitions d ON d.id = v.field_id
-         WHERE v.item_id = ?1 AND v.deleted_at IS NULL AND d.deleted_at IS NULL",
-        params![template_id, made.id, now],
-    )?;
-    let link_values: Vec<(String, String)> = {
-        let mut stmt = tx.prepare(
-            "SELECT v.field_id, v.value_json FROM field_values v JOIN field_definitions d ON d.id = v.field_id
-             WHERE v.item_id = ?1 AND v.deleted_at IS NULL AND d.deleted_at IS NULL AND d.kind = 'link'",
-        )?;
-        let rows = stmt.query_map([&made.id], |r| Ok((r.get(0)?, r.get(1)?)))?;
-        rows.collect::<Result<_, _>>()?
-    };
-    for (field_id, value_json) in link_values {
-        let targets: Vec<String> = serde_json::from_str(&value_json).unwrap_or_default();
-        links::sync_source(&tx, &made.id, &fields::link_ref(&field_id), &targets, now)?;
+    for tab in tabs::list_tabs(&tx, template_id)? {
+        match (tab.kind.as_str(), tab.item) {
+            ("document", Some(child)) => {
+                let (_, copy) = tabs::insert_document_tab(&tx, &made, &child.name, now)?;
+                copy_content(&tx, &child, &copy.id, now)?;
+            }
+            ("embed", target) => {
+                // What it showed, if that still exists; otherwise an empty slot (named, so it can be filled).
+                let shown_name = target.as_ref().map(|t| t.name.clone());
+                let live = target.filter(|t| t.deleted_at.is_none());
+                let title = if tab.title.is_empty() { shown_name.unwrap_or_else(|| "Empty slot".to_string()) } else { tab.title };
+                tabs::insert_embed_tab(&tx, &made.id, &title, live.as_ref().map(|t| t.id.as_str()), now)?;
+            }
+            _ => {}
+        }
     }
 
     tx.commit()?;
@@ -268,6 +296,77 @@ mod tests {
         assert_eq!(count(&conn, "SELECT COUNT(*) FROM items WHERE campaign_id = ?1", &camp), items_before);
         let bodies: i64 = conn.query_row("SELECT COUNT(*) FROM document_content", [], |r| r.get(0)).unwrap();
         assert_eq!(bodies, 1); // only the template's own
+    }
+
+    #[test]
+    fn a_new_document_gets_its_own_copies_of_the_templates_tabs() {
+        let (conn, camp) = setup();
+        let t = template(&conn, &camp, "NPC");
+        let deck = items::create(&conn, &camp, "cards", "deck", "Tarokka", None, 2).unwrap();
+        let role = fields::create_definition(&conn, &camp, "Role", "text", "", "{}", 2).unwrap();
+        let people = fields::create_set(&conn, &camp, "People", "", 2).unwrap();
+        let tag = tags::create(&conn, &camp, None, "Relation", None, 2).unwrap();
+
+        let rel = tabs::add_document_tab(&conn, &t.id, "Relationships", 3).unwrap().item.unwrap();
+        documents::set_body(&conn, &rel.id, "## Allies", 3).unwrap();
+        fields::apply_set(&conn, &rel.id, &people.id, 4).unwrap();
+        fields::set_value(&conn, &rel.id, &role.id, r#""Friend""#, &text_index("Friend"), true, 4).unwrap();
+        tags::add_to_item(&conn, &rel.id, &tag.id, 4).unwrap();
+        tabs::add_embed_tab(&conn, &t.id, "Cards", Some(&deck.id), 5).unwrap();
+        tabs::add_embed_tab(&conn, &t.id, "Hometown map", None, 6).unwrap();
+
+        let made = create_from(&conn, &t.id, "Ireena", None, 10).unwrap();
+        let copied = tabs::list_tabs(&conn, &made.id).unwrap();
+        assert_eq!(copied.len(), 3);
+        // A nested document: a new one, with the same content.
+        let child = copied[0].item.as_ref().unwrap();
+        assert_eq!((copied[0].kind.as_str(), child.name.as_str()), ("document", "Relationships"));
+        assert_ne!(child.id, rel.id);
+        assert_eq!(documents::get_body(&conn, &child.id).unwrap(), "## Allies");
+        assert_eq!(fields::list_item_sets(&conn, &child.id).unwrap(), vec![people.id.clone()]);
+        let value = fields::get_item_fields(&conn, &child.id).unwrap().values.remove(0);
+        assert_eq!((value.value_json.as_str(), value.secret), ("\"Friend\"", true));
+        let tag_names: Vec<String> = tags::for_item(&conn, &child.id).unwrap().into_iter().map(|t| t.name).collect();
+        assert_eq!(tag_names, ["Relation"]);
+        // The embeds: the same item, and the empty slot with its name.
+        assert_eq!(copied[1].item.as_ref().unwrap().id, deck.id);
+        assert_eq!((copied[1].title.as_str(), copied[2].title.as_str(), copied[2].item.is_none()), ("Cards", "Hometown map", true));
+
+        // The copies are independent of the template's, and hidden from the folders like any tab.
+        documents::set_body(&conn, &child.id, "changed", 11).unwrap();
+        assert_eq!(documents::get_body(&conn, &rel.id).unwrap(), "## Allies");
+        assert_eq!(tabs::list_tabs(&conn, &t.id).unwrap().len(), 3);
+        let top: Vec<String> = items::list(&conn, &camp, LIBRARY, None).unwrap().into_iter().map(|i| i.name).collect();
+        assert_eq!(top, ["Ireena", "NPC"]);
+    }
+
+    #[test]
+    fn removed_tabs_are_not_copied_and_a_gone_embed_becomes_an_empty_slot() {
+        let (conn, camp) = setup();
+        let t = template(&conn, &camp, "Place");
+        let gone = tabs::add_document_tab(&conn, &t.id, "Removed", 3).unwrap();
+        tabs::remove_tab(&conn, &gone.id, 4).unwrap();
+        let deck = items::create(&conn, &camp, "cards", "deck", "Tarokka", None, 2).unwrap();
+        tabs::add_embed_tab(&conn, &t.id, "", Some(&deck.id), 5).unwrap(); // unnamed: shows the deck's name
+        items::soft_delete(&conn, &deck.id, 6).unwrap();
+
+        let made = create_from(&conn, &t.id, "Barovia", None, 10).unwrap();
+        let copied = tabs::list_tabs(&conn, &made.id).unwrap();
+        assert_eq!(copied.len(), 1);
+        assert!(copied[0].item.is_none());
+        assert_eq!(copied[0].title, "Tarokka"); // named after what it used to show, so it can be filled again
+    }
+
+    #[test]
+    fn a_failed_copy_leaves_no_child_documents_behind() {
+        let (conn, camp) = setup();
+        let t = template(&conn, &camp, "NPC");
+        tabs::add_document_tab(&conn, &t.id, "Relationships", 3).unwrap();
+        let before: i64 = conn.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).unwrap();
+        assert!(create_from(&conn, &t.id, " ", None, 10).is_err());
+        assert!(create_from(&conn, &t.id, "A", Some("no-folder"), 10).is_err());
+        let after: i64 = conn.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).unwrap();
+        assert_eq!(before, after);
     }
 
     #[test]

@@ -15,6 +15,7 @@ use super::documents::MAX_BODY_BYTES;
 use super::error::{clean_name, DbError};
 use super::fields::{self, FieldDefinition};
 use super::starters::{installed, BundleTag, ID_PREFIX};
+use super::tabs;
 use super::templates::{LIBRARY, TEMPLATE_TYPE};
 use super::{campaigns, folders, items, tags};
 use rusqlite::{params, Connection};
@@ -86,6 +87,22 @@ pub struct BundleTemplate {
     /// Names of the bundle's `tags`.
     #[serde(default)]
     pub tags: Vec<String>,
+    /// The template's tabs, in order.
+    #[serde(default)]
+    pub tabs: Vec<BundleTab>,
+}
+
+/// A tab of a starter template: a nested document with starter text, or an empty embed slot.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BundleTab {
+    /// `document` or `slot`.
+    pub kind: String,
+    /// The tab's name.
+    pub title: String,
+    /// A document tab's starter text (Markdown).
+    #[serde(default)]
+    pub body: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -172,6 +189,18 @@ fn validate(bundle: &TemplateBundle) -> Result<(), DbError> {
         }
         if template.tags.iter().any(|t| !tag_names.contains(&t.trim().to_lowercase())) {
             return Err(DbError::Invalid("A starter template uses a tag the starter doesn't define."));
+        }
+        if template.tabs.len() > tabs::MAX_TABS {
+            return Err(DbError::Invalid("A starter template has too many tabs."));
+        }
+        for tab in &template.tabs {
+            clean_name(&tab.title)?;
+            if tab.title.trim().chars().count() > tabs::MAX_TITLE_CHARS || tab.body.len() > MAX_BODY_BYTES {
+                return Err(DbError::Invalid("A starter template's tab is too long."));
+            }
+            if tab.kind != "document" && tab.kind != "slot" {
+                return Err(DbError::Invalid("A starter template has a tab of a kind that isn't known."));
+            }
         }
     }
     Ok(())
@@ -287,6 +316,19 @@ pub fn install(conn: &Connection, campaign_id: &str, bundle: &TemplateBundle, no
                 params![item.id, set_ids[&set.trim().to_lowercase()], position as i64, now],
             )?;
         }
+        for tab in &template.tabs {
+            if tab.kind == "document" {
+                let (_, child) = tabs::insert_document_tab(&tx, &item, tab.title.trim(), now)?;
+                if !tab.body.is_empty() {
+                    tx.execute(
+                        "INSERT INTO document_content (item_id, body, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+                        params![child.id, tab.body, now],
+                    )?;
+                }
+            } else {
+                tabs::insert_embed_tab(&tx, &item.id, tab.title.trim(), None, now)?;
+            }
+        }
     }
 
     tx.commit()?;
@@ -327,8 +369,12 @@ mod tests {
                     body: "## Appearance\n\n## Motivation".into(),
                     sets: vec!["NPC".into()],
                     tags: vec!["NPC".into()],
+                    tabs: vec![
+                        BundleTab { kind: "document".into(), title: "Relationships".into(), body: "## Allies".into() },
+                        BundleTab { kind: "slot".into(), title: "Map".into(), body: String::new() },
+                    ],
                 },
-                BundleTemplate { key: "blank".into(), name: "Blank".into(), icon: None, body: String::new(), sets: vec![], tags: vec![] },
+                BundleTemplate { key: "blank".into(), name: "Blank".into(), icon: None, body: String::new(), sets: vec![], tags: vec![], tabs: vec![] },
             ],
         }
     }
@@ -366,6 +412,26 @@ mod tests {
         assert_eq!(fields::list_item_sets(&conn, &npc.id).unwrap(), vec![sets[0].id.clone()]);
         // Found by search like any template.
         assert_eq!(search::search(&conn, &camp, "motivation", None, 10).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_starter_templates_tabs_come_with_it_and_into_documents_made_from_it() {
+        let (conn, camp) = setup();
+        let result = install(&conn, &camp, &bundle(), 10).unwrap();
+        let npc = items::list(&conn, &camp, "worldbuilding", Some(&result.folder_id)).unwrap().into_iter().find(|i| i.name == "NPC").unwrap();
+        let on_template = tabs::list_tabs(&conn, &npc.id).unwrap();
+        assert_eq!(on_template.iter().map(|t| t.kind.as_str()).collect::<Vec<_>>(), ["document", "embed"]);
+        assert_eq!(documents::get_body(&conn, &on_template[0].item.as_ref().unwrap().id).unwrap(), "## Allies");
+        assert!(on_template[1].item.is_none());
+        // The nested document is not listed beside the templates in their folder.
+        let listed: Vec<String> = items::list(&conn, &camp, "worldbuilding", Some(&result.folder_id)).unwrap().into_iter().map(|i| i.name).collect();
+        assert_eq!(listed, ["Blank", "NPC"]);
+
+        let made = templates::create_from(&conn, &npc.id, "Ireena", None, 20).unwrap();
+        let tabs_made = tabs::list_tabs(&conn, &made.id).unwrap();
+        assert_eq!(tabs_made.len(), 2);
+        assert_eq!(tabs_made[0].item.as_ref().unwrap().name, "Relationships");
+        assert_eq!((tabs_made[1].title.as_str(), tabs_made[1].item.is_none()), ("Map", true));
     }
 
     #[test]
@@ -488,6 +554,15 @@ mod tests {
         assert!(documents::get_body(&conn, &doc.id).unwrap().starts_with("## Appearance"));
         let tag_names: Vec<String> = tags::for_item(&conn, &doc.id).unwrap().into_iter().map(|t| t.name).collect();
         assert_eq!(tag_names, ["NPC"]);
+
+        // NPC comes with a Relationships document tab and Location with an empty Map slot, and a new NPC gets its own.
+        let on_npc = tabs::list_tabs(&conn, &npc.id).unwrap();
+        assert_eq!(on_npc.iter().map(|t| t.kind.as_str()).collect::<Vec<_>>(), ["document"]);
+        assert_eq!(on_npc[0].item.as_ref().unwrap().name, "Relationships");
+        let location = made.iter().find(|i| i.name == "Location").unwrap();
+        let slots = tabs::list_tabs(&conn, &location.id).unwrap();
+        assert_eq!((slots.len(), slots[0].title.as_str(), slots[0].item.is_none()), (1, "Map", true));
+        assert_eq!(tabs::list_tabs(&conn, &doc.id).unwrap().len(), 1);
 
         // Adding them twice is refused, and nothing changes.
         assert!(matches!(install(&conn, &camp, &bundle, 11), Err(DbError::Invalid(_))));

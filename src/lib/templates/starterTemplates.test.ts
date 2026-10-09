@@ -83,6 +83,23 @@ describe("every starter set of templates", () => {
         }
       });
 
+      it("has tabs with names, no more than the page allows, and starter text the editor would write as it is", () => {
+        for (const t of starter.templates) {
+          const tabs = t.tabs ?? [];
+          expect(tabs.length, t.name).toBeLessThanOrEqual(12);
+          const names = tabs.map((tab) => lower(tab.name));
+          expect(new Set(names).size, `${t.name}'s tabs`).toBe(names.length);
+          for (const tab of tabs) {
+            expect(tab.name.trim(), t.name).not.toBe("");
+            expect(tab.name.length, tab.name).toBeLessThanOrEqual(60);
+            if (tab.kind === "document") {
+              expect(tab.body.trim(), `${t.name} / ${tab.name}`).not.toBe("");
+              expect(docToMarkdown(markdownToDoc(tab.body)), `${t.name} / ${tab.name}`).toBe(tab.body);
+            }
+          }
+        }
+      });
+
       it("becomes a bundle the database accepts", () => {
         const bundle = toTemplateBundle(starter);
         expect(bundle.id).toBe(starter.id);
@@ -106,6 +123,14 @@ describe("every starter set of templates", () => {
       expect(t.sets).toEqual([t.name]);
       expect(t.tags).toEqual([t.name]);
     }
+  });
+
+  it("gives NPC a Relationships tab and Location an empty Map slot", () => {
+    const core = STARTER_TEMPLATES.find((s) => s.id === "starter:templates")!;
+    expect(core.templates.find((t) => t.name === "NPC")?.tabs).toEqual([
+      { kind: "document", name: "Relationships", body: "## Allies\n\n## Enemies\n\n## Family" },
+    ]);
+    expect(core.templates.find((t) => t.name === "Location")?.tabs).toEqual([{ kind: "slot", name: "Map" }]);
   });
 });
 

@@ -28,6 +28,9 @@ export interface StarterFieldSet {
   fields: string[];
 }
 
+/** A tab of a starter template: a nested document with starter text, or an empty embed slot to fill in later. */
+export type StarterTab = { kind: "document"; name: string; body: string } | { kind: "slot"; name: string };
+
 export interface StarterTemplate {
   /** Unique inside the starter. */
   key: string;
@@ -39,6 +42,8 @@ export interface StarterTemplate {
   sets: string[];
   /** Names of the starter's `tags`. */
   tags: string[];
+  /** The template's tabs, in order. */
+  tabs?: StarterTab[];
 }
 
 export interface TemplateStarterDef {
@@ -60,7 +65,15 @@ export interface TemplateBundleJson {
   tags: { name: string; color: string | null }[];
   fields: { key: string; name: string; kind: string; description: string; configJson: string }[];
   sets: { name: string; description: string; fieldKeys: string[] }[];
-  templates: { key: string; name: string; icon: string | null; body: string; sets: string[]; tags: string[] }[];
+  templates: {
+    key: string;
+    name: string;
+    icon: string | null;
+    body: string;
+    sets: string[];
+    tags: string[];
+    tabs: { kind: "document" | "slot"; title: string; body: string }[];
+  }[];
 }
 
 /** A choice's id from its name: stable, so every starter that has "Alive" gives it the same id. */
@@ -81,6 +94,14 @@ export function toTemplateBundle(def: TemplateStarterDef): TemplateBundleJson {
       return { key: f.key, name: checked.name, kind: checked.kind, description: checked.description, configJson: JSON.stringify(checked.config) };
     }),
     sets: def.sets.map((s) => ({ name: s.name, description: s.description ?? "", fieldKeys: s.fields })),
-    templates: def.templates.map((t) => ({ key: t.key, name: t.name, icon: t.icon, body: t.body, sets: t.sets, tags: t.tags })),
+    templates: def.templates.map((t) => ({
+      key: t.key,
+      name: t.name,
+      icon: t.icon,
+      body: t.body,
+      sets: t.sets,
+      tags: t.tags,
+      tabs: (t.tabs ?? []).map((tab) => ({ kind: tab.kind, title: tab.name, body: tab.kind === "document" ? tab.body : "" })),
+    })),
   };
 }

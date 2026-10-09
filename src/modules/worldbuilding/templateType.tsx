@@ -23,5 +23,6 @@ export const templateType: ItemTypeDefinition = {
   label: "Template",
   icon: "📋",
   toolId: "worldbuilding",
+  tabs: true,
   editor: TemplateEditor,
 };
