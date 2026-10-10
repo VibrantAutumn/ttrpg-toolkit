@@ -5,6 +5,7 @@ import { useCurrentCampaign } from "../../state/CurrentCampaign";
 import { useDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
 import { rollTableById } from "../../state/tableActions";
+import { RollContextBar } from "./RollContextBar";
 
 /** Every table in the campaign with a Roll button, and the log of table rolls below. */
 export function TableList() {
@@ -40,6 +41,7 @@ export function TableList() {
   return (
     <div>
       <h2>Your tables</h2>
+      <RollContextBar />
       {tables.length === 0 ? (
         <p className="empty">No tables yet. Make one in the Library tab.</p>
       ) : (

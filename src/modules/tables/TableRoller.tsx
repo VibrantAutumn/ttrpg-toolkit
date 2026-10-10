@@ -3,6 +3,7 @@ import { listTables, type TableSummary } from "../../api/tables";
 import { useCurrentCampaign } from "../../state/CurrentCampaign";
 import { useDataVersion } from "../../state/dataVersion";
 import { rollTableById } from "../../state/tableActions";
+import { RollContextBar } from "./RollContextBar";
 
 const LAST_TABLE_KEY = "ttrpg.quickTable";
 
@@ -60,6 +61,7 @@ export function TableRoller() {
 
   return (
     <div>
+      <RollContextBar />
       <div className="row wrap">
         <select
           value={selected.itemId}

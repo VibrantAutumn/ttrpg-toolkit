@@ -8,11 +8,14 @@
  *   dice     [dice:2d4]            [2d4]             (shorthand: must contain a die)
  *   table    [table:Rumors]        [Rumors]
  *            [table:3 unique Rumors]   [3 Rumors]   [3 unique Rumors]
+ *   entity   [entity:Person]  [entity:2 unique Person]   (documents or other items, from a smart
+ *            collection or a tag of that name; there is no shorthand, but a table slot whose
+ *            table doesn't exist is tried as an entity when it is rolled, so [Person] works too)
  *   draw     [draw:1 from Tarot]   [draw 1 from Tarot]
  *   ref      [ref:A]  [ref:A.Faction]   [A]  [A.Faction]   (shorthand: only if A was
  *            set earlier in the same entry, otherwise it is a table name)
  * Any slot can end with ` as Label` to name its result for later reuse.
- * A type this version does not know (`[entity:Person]`) is kept as an "unknown"
+ * A type this version does not know (`[mood:Calm]`) is kept as an "unknown"
  * slot, not an error, so newer data survives in an older app.
  *
  * Escapes: `\[`, `\]` and `\\` give a literal character; a backslash before
@@ -31,6 +34,7 @@ export const MAX_PICKS = 20;
 
 export type Slot =
   | { type: "table"; name: string; count: number; unique: boolean }
+  | { type: "entity"; name: string; count: number; unique: boolean }
   | { type: "dice"; notation: string }
   | { type: "draw"; count: number; source: string }
   | { type: "ref"; label: string; field?: string }
@@ -214,6 +218,10 @@ function explicitSlot(kind: string, args: string, at: number, labels: Map<string
   switch (kind) {
     case "table":
       return tableSlot(args, at);
+    case "entity": {
+      const picked = tableSlot(args, at, "An entity slot needs the name of a smart collection or a tag");
+      return picked.type === "table" ? { type: "entity", name: picked.name, count: picked.count, unique: picked.unique } : picked;
+    }
     case "dice": {
       if (args === "") throw new SlotError("Dice slot needs a formula, like [dice:2d4]", at);
       const result = parseDice(args);
@@ -239,8 +247,8 @@ function refSlot(ref: RegExpExecArray, labels: Map<string, string>): Slot {
   return ref[2] !== undefined ? { type: "ref", label, field: ref[2].trim() } : { type: "ref", label };
 }
 
-function tableSlot(args: string, at: number): Slot {
-  if (args === "") throw new SlotError("A table slot needs a table name", at);
+function tableSlot(args: string, at: number, emptyMessage = "A table slot needs a table name"): Slot {
+  if (args === "") throw new SlotError(emptyMessage, at);
   if (/^unique\s+\S/i.test(args)) {
     throw new SlotError("Say how many to pick: [3 unique Rumors]", at);
   }
@@ -276,6 +284,9 @@ export function slotCanonical(part: SlotPart): string {
     case "table":
       body = `table:${slot.count !== 1 || slot.unique ? `${slot.count} ${slot.unique ? "unique " : ""}` : ""}${escapeText(slot.name)}`;
       break;
+    case "entity":
+      body = `entity:${slot.count !== 1 || slot.unique ? `${slot.count} ${slot.unique ? "unique " : ""}` : ""}${escapeText(slot.name)}`;
+      break;
     case "dice":
       body = `dice:${slot.notation}`;
       break;
@@ -297,6 +308,9 @@ export function slotDisplay(part: SlotPart): string {
   let body: string;
   switch (slot.type) {
     case "table":
+      body = `${slot.count !== 1 || slot.unique ? `${slot.count} ${slot.unique ? "unique " : ""}` : ""}${slot.name}`;
+      break;
+    case "entity":
       body = `${slot.count !== 1 || slot.unique ? `${slot.count} ${slot.unique ? "unique " : ""}` : ""}${slot.name}`;
       break;
     case "dice":

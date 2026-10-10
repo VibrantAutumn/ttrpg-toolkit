@@ -906,3 +906,23 @@ fn the_sql_agrees_with_the_slow_evaluator_on_thousands_of_random_questions() {
     assert_eq!(checked, 3200);
     assert!(non_empty > 1500, "the random questions should find something often enough to mean something: {non_empty}");
 }
+
+#[test]
+fn the_table_view_is_kept_with_the_query_but_never_changes_what_it_finds() {
+    let mut fx = Fx::new();
+    fx.doc("A");
+    let plain = q(json!([]));
+    let mut with_view = plain.clone();
+    with_view["view"] = json!({"mode": "table", "columns": [{"by": "type"}, {"by": "field", "fieldId": "f"}]});
+    assert_eq!(fx.run(with_view.clone()), fx.run(plain));
+    let kept = from_value(with_view.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&kept).unwrap()["view"], with_view["view"]);
+
+    let columns: Vec<Json> = (0..=MAX_COLUMNS).map(|i| json!({"by": "field", "fieldId": i.to_string()})).collect();
+    let mut too_many = q(json!([]));
+    too_many["view"] = json!({"mode": "table", "columns": columns});
+    assert!(from_value(too_many).is_err());
+    let mut not_an_object = q(json!([]));
+    not_an_object["view"] = json!(5);
+    assert!(from_value(not_an_object).is_err());
+}

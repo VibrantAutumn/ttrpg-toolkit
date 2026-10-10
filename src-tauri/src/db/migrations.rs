@@ -124,6 +124,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "search_field_values",
         sql: include_str!("../../migrations/0022_search_field_values.sql"),
     },
+    Migration {
+        version: 23,
+        name: "create_generators",
+        sql: include_str!("../../migrations/0023_create_generators.sql"),
+    },
 ];
 
 #[derive(Debug)]

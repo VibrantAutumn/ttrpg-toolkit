@@ -3,7 +3,7 @@ import { buildSlotSource, checkSlotChoice, type SlotChoice } from "../../lib/tab
 import { SLOT_ICONS } from "./slotIcons";
 import { useSlotChoices } from "./SlotChoices";
 
-type Kind = "dice" | "table" | "draw" | "ref";
+type Kind = "dice" | "table" | "entity" | "draw" | "ref";
 
 /**
  * The "Insert slot" menu: pick a kind of slot, fill in a few boxes, and it hands
@@ -19,7 +19,7 @@ export function InsertSlotMenu({
   onInsert: (source: string) => void;
   onClose: () => void;
 }) {
-  const { tables, collections } = useSlotChoices();
+  const { tables, collections, tags, smart, fieldNames } = useSlotChoices();
   const listId = useId();
   const [kind, setKind] = useState<Kind | null>(null);
   const [notation, setNotation] = useState("");
@@ -28,6 +28,7 @@ export function InsertSlotMenu({
   const [unique, setUnique] = useState(false);
   const [label, setLabel] = useState(labels[0] ?? "");
   const [resultName, setResultName] = useState("");
+  const [fieldName, setFieldName] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
 
   function submit() {
@@ -39,9 +40,11 @@ export function InsertSlotMenu({
         ? { type: "dice", notation, ...named }
         : kind === "table"
           ? { type: "table", name, count, unique: unique && count > 1, ...named }
-          : kind === "draw"
-            ? { type: "draw", source: name, count, ...named }
-            : { type: "ref", label };
+          : kind === "entity"
+            ? { type: "entity", name, count, unique: unique && count > 1, ...named }
+            : kind === "draw"
+              ? { type: "draw", source: name, count, ...named }
+              : { type: "ref", label, ...(fieldName.trim() === "" ? {} : { field: fieldName.trim() }) };
     const why = checkSlotChoice(choice);
     if (why) {
       setProblem(why);
@@ -56,6 +59,7 @@ export function InsertSlotMenu({
         <div className="row wrap">
           <button onClick={() => setKind("dice")}>{SLOT_ICONS.dice} Dice…</button>
           <button onClick={() => setKind("table")}>{SLOT_ICONS.table} Table…</button>
+          <button onClick={() => setKind("entity")}>{SLOT_ICONS.entity} Document…</button>
           <button onClick={() => setKind("draw")}>{SLOT_ICONS.draw} Card draw…</button>
           <button onClick={() => setKind("ref")} disabled={labels.length === 0} title={labels.length === 0 ? "Name a result first (“Name this result” on another slot)" : undefined}>
             {SLOT_ICONS.ref} Reuse a result…
@@ -66,7 +70,8 @@ export function InsertSlotMenu({
     );
   }
 
-  const options = kind === "draw" ? collections.map((c) => c.name) : tables.map((t) => t.name);
+  const options =
+    kind === "draw" ? collections.map((c) => c.name) : kind === "entity" ? [...smart.map((s) => s.name), ...tags.map((t) => t.name)] : tables.map((t) => t.name);
 
   return (
     <form
@@ -90,15 +95,15 @@ export function InsertSlotMenu({
           />
         </label>
       )}
-      {(kind === "table" || kind === "draw") && (
+      {(kind === "table" || kind === "entity" || kind === "draw") && (
         <>
           <label className="field">
-            <span>{kind === "table" ? "Table" : "Deck, set or pool"}</span>
+            <span>{kind === "table" ? "Table" : kind === "entity" ? "Smart collection or tag" : "Deck, set or pool"}</span>
             <input
               value={name}
               onChange={(e) => setName(e.currentTarget.value)}
               list={listId}
-              placeholder={kind === "table" ? "Choose or type a table name" : "Choose or type a name"}
+              placeholder={kind === "table" ? "Choose or type a table name" : kind === "entity" ? "Documents from a smart collection or tag" : "Choose or type a name"}
               autoFocus
             />
             <datalist id={listId}>
@@ -109,7 +114,7 @@ export function InsertSlotMenu({
           </label>
           <div className="row wrap">
             <label>
-              {kind === "table" ? "Roll it" : "Draw"}{" "}
+              {kind === "table" ? "Roll it" : kind === "entity" ? "Pick" : "Draw"}{" "}
               <input
                 type="number"
                 inputMode="numeric"
@@ -118,9 +123,9 @@ export function InsertSlotMenu({
                 onChange={(e) => setCountText(e.currentTarget.value)}
                 className="narrow"
               />{" "}
-              {kind === "table" ? "time(s)" : "card(s)"}
+              {kind === "table" ? "time(s)" : kind === "entity" ? "item(s)" : "card(s)"}
             </label>
-            {kind === "table" && Number(countText) > 1 && (
+            {(kind === "table" || kind === "entity") && Number(countText) > 1 && (
               <label>
                 <input type="checkbox" checked={unique} onChange={(e) => setUnique(e.currentTarget.checked)} /> No repeats
               </label>
@@ -129,16 +134,35 @@ export function InsertSlotMenu({
         </>
       )}
       {kind === "ref" && (
-        <label className="field">
-          <span>Reuse the result named</span>
-          <select value={label} onChange={(e) => setLabel(e.currentTarget.value)}>
-            {labels.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </label>
+        <>
+          <label className="field">
+            <span>Reuse the result named</span>
+            <select value={label} onChange={(e) => setLabel(e.currentTarget.value)}>
+              {labels.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>A field of it (optional, when it is a document)</span>
+            <input
+              value={fieldName}
+              onChange={(e) => setFieldName(e.currentTarget.value)}
+              list={listId}
+              placeholder="Faction"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            <datalist id={listId}>
+              {fieldNames.map((f) => (
+                <option key={f} value={f} />
+              ))}
+            </datalist>
+          </label>
+        </>
       )}
       {kind !== "ref" && (
         <details>

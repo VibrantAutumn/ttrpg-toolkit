@@ -74,10 +74,23 @@ export type Node = Rule | Group;
 
 export type SortKey = { by: "name" | "created" | "updated" | "type"; dir: "asc" | "desc" } | { by: "field"; fieldId: string; dir: "asc" | "desc" };
 
+/** A column of the table view, after the always-present name column. */
+export type Column = { by: "type" | "created" | "updated" } | { by: "field"; fieldId: string };
+
+/** How a smart collection is shown. The engine ignores it; it is saved with the query. */
+export interface View {
+  mode: "list" | "table";
+  columns: Column[];
+}
+
+export const MAX_COLUMNS = 12;
+
 export interface Query {
   version: number;
   where: Group;
   sort: SortKey[];
+  /** Left out until someone chooses a view (then the list is used). */
+  view?: View;
 }
 
 export const isGroup = (node: Node): node is Group => "op" in node;
@@ -278,6 +291,34 @@ function readSort(raw: unknown): SortKey[] {
   return keys.length > 0 ? keys : DEFAULT_SORT.map((k) => ({ ...k }));
 }
 
+function readView(raw: unknown): View | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!isObject(raw)) return bad("The view has to be an object.");
+  const list = raw.columns === undefined || raw.columns === null ? [] : raw.columns;
+  if (!Array.isArray(list)) return bad("The columns have to be a list.");
+  const columns: Column[] = [];
+  const seen = new Set<string>();
+  for (const entry of list) {
+    if (!isObject(entry)) return bad("A column has to be an object.");
+    let column: Column;
+    if (entry.by === "type" || entry.by === "created" || entry.by === "updated") {
+      column = { by: entry.by };
+    } else if (entry.by === "field") {
+      const fieldId = text(entry.fieldId, "The column's field", true);
+      if (fieldId === "") return bad("A field column needs a field.");
+      column = { by: "field", fieldId };
+    } else {
+      return bad(`I don't know a column called “${String(entry.by)}”.`);
+    }
+    const id = column.by === "field" ? `field:${column.fieldId}` : column.by;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    columns.push(column);
+  }
+  if (columns.length > MAX_COLUMNS) return bad(`A table can have at most ${MAX_COLUMNS} columns.`);
+  return { mode: raw.mode === "table" ? "table" : "list", columns };
+}
+
 /**
  * The one gate every query goes through (built in the editor, read back from the database or
  * arriving in a content pack). Returns the query in its one proper form, or says in a sentence
@@ -292,7 +333,10 @@ export function normalizeQuery(raw: unknown): NormalizeResult {
     }
     if (raw.version !== QUERY_VERSION) return { ok: false, error: "This isn't a query." };
     const where = readGroup(raw.where, 1, { n: 0 });
-    return { ok: true, query: { version: QUERY_VERSION, where, sort: readSort(raw.sort) } };
+    const view = readView(raw.view);
+    const query: Query = { version: QUERY_VERSION, where, sort: readSort(raw.sort) };
+    if (view) query.view = view;
+    return { ok: true, query };
   } catch (e) {
     if (e instanceof Bad) return { ok: false, error: e.message };
     return { ok: false, error: "This isn't a query." };

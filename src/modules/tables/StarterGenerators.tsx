@@ -1,0 +1,91 @@
+import { useEffect, useState } from "react";
+import { listFieldDefinitions } from "../../api/fields";
+import { setGeneratorDefinition } from "../../api/generators";
+import { createItem, deleteItem, listItemsOfType } from "../../api/library";
+import { toDefinition, type StarterGeneratorDef } from "../../lib/generators/starterGenerators";
+import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
+import { STARTER_GENERATORS } from "../../starter/generators";
+
+const key = (text: string) => text.trim().toLowerCase();
+
+async function install(campaignId: string, starter: StarterGeneratorDef): Promise<void> {
+  const [templates, fields] = await Promise.all([listItemsOfType(campaignId, "worldbuilding", "template"), listFieldDefinitions(campaignId)]);
+  const def = toDefinition(starter, {
+    templateIdByName: (n) => templates.find((t) => key(t.name) === key(n))?.id ?? null,
+    fieldIdByName: (n) => fields.find((f) => key(f.name) === key(n))?.id ?? null,
+  });
+  const item = await createItem(campaignId, "tables", "generator", starter.name, null);
+  try {
+    await setGeneratorDefinition(item.id, def);
+  } catch (e) {
+    await deleteItem(item.id).catch(() => undefined); // don't leave an empty generator behind
+    throw e;
+  }
+}
+
+/** "Add starter generators": a Quick NPC and an Adventure hook that roll the starter tables. They become ordinary generators. */
+export function StarterGenerators() {
+  const { campaign } = useCurrentCampaign();
+  const dataVersion = useDataVersion();
+  const campaignId = campaign?.id ?? null;
+  const [existing, setExisting] = useState<ReadonlySet<string>>(new Set());
+  const [working, setWorking] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!campaignId) {
+      setExisting(new Set());
+      return;
+    }
+    let active = true;
+    listItemsOfType(campaignId, "tables", "generator")
+      .then((list) => active && setExisting(new Set(list.map((g) => key(g.name)))))
+      .catch((e) => active && setError(String(e)));
+    return () => {
+      active = false;
+    };
+  }, [campaignId, dataVersion]);
+
+  if (!campaignId) return null;
+
+  async function add(starter: StarterGeneratorDef) {
+    if (!campaignId) return;
+    setWorking(starter.name);
+    try {
+      await install(campaignId, starter);
+      setMessage(`Added “${starter.name}”. It rolls the starter tables, so add those too if you haven't.`);
+      setError(null);
+      bumpDataVersion();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  return (
+    <details className="starter-generators">
+      <summary>Add starter generators</summary>
+      <p className="meta">Ready-made generators that fill in a new document. They roll the starter tables (Fantasy names, NPC quirks and rumors).</p>
+      {error && <p className="error">{error}</p>}
+      {message && <p className="meta">{message}</p>}
+      <ul className="list">
+        {STARTER_GENERATORS.map((g) => {
+          const have = existing.has(key(g.name));
+          return (
+            <li key={g.name} className="row wrap">
+              <span className="name">
+                <strong>{g.name}</strong> <small className="meta">{g.description}</small>
+              </span>
+              <button type="button" disabled={have || working !== null} onClick={() => void add(g)}>
+                {have ? "Already added" : working === g.name ? "Adding..." : "Add"}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </details>
+  );
+}

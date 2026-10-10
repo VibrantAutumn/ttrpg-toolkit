@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_PICKS } from "./parse";
+import { MAX_PICKS, parseEntry } from "./parse";
 import { describeSlots, entryToModel, modelToEntry } from "./editorModel";
 import { buildSlotSource, checkSlotChoice } from "./slotSource";
 import type { SlotChoice } from "./slotSource";
@@ -109,5 +109,19 @@ describe("checkSlotChoice", () => {
     expect(checkSlotChoice({ type: "dice", notation: "d6", label: "2nd" })).toMatch(/label/i);
     expect(checkSlotChoice({ type: "dice", notation: "d6", label: "has space" })).toMatch(/label/i);
     expect(checkSlotChoice({ type: "dice", notation: "d6", label: "" })).toBeNull(); // empty = no label
+  });
+});
+
+describe("entity slot choices", () => {
+  it("build the explicit form and read back as an entity slot", () => {
+    expect(buildSlotSource({ type: "entity", name: "Person", count: 1, unique: false })).toBe("entity:Person");
+    expect(buildSlotSource({ type: "entity", name: " Town folk ", count: 3, unique: true, label: "F" })).toBe("entity:3 unique Town folk as F");
+    const parsed = parseEntry(`[${buildSlotSource({ type: "entity", name: "Person", count: 2, unique: false })}]`);
+    expect(parsed.ok && parsed.parts[0]).toMatchObject({ slot: { type: "entity", name: "Person", count: 2, unique: false } });
+  });
+  it("are checked", () => {
+    expect(checkSlotChoice({ type: "entity", name: "Person", count: 1, unique: false })).toBeNull();
+    expect(checkSlotChoice({ type: "entity", name: "  ", count: 1, unique: false })).toMatch(/smart collection or a tag/);
+    expect(checkSlotChoice({ type: "entity", name: "P", count: 0, unique: false })).not.toBeNull();
   });
 });

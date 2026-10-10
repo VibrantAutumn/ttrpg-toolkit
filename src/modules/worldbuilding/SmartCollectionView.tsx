@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getSmartCollection, setSmartCollectionQuery } from "../../api/queries";
 import { getItem } from "../../api/library";
+import { FieldTable } from "../../components/queries/FieldTable";
 import { QueryBuilder } from "../../components/queries/QueryBuilder";
 import { QueryResults } from "../../components/queries/QueryResults";
 import { useQueryCatalog } from "../../components/queries/useQueryCatalog";
@@ -77,6 +78,7 @@ export function SmartCollectionView({ itemId }: { itemId: string }) {
 
 function SmartCollectionBody({ campaignId, query, status, problem, onChange }: { campaignId: string; query: Query; status: SaveStatus; problem: string | null; onChange: (q: Query) => void }) {
   const catalog = useQueryCatalog(campaignId, query);
+  const mode = query.view?.mode ?? "list";
   return (
     <div className="smart-collection">
       <p className="meta">
@@ -89,7 +91,19 @@ function SmartCollectionBody({ campaignId, query, status, problem, onChange }: {
         </p>
       )}
       <QueryBuilder campaignId={campaignId} query={query} catalog={catalog} onChange={onChange} />
-      <QueryResults campaignId={campaignId} query={query} catalog={catalog} />
+      <div className="row" role="group" aria-label="How to show the results">
+        <button type="button" className={mode === "list" ? "chip on" : "chip"} aria-pressed={mode === "list"} onClick={() => onChange({ ...query, view: { mode: "list", columns: query.view?.columns ?? [] } })}>
+          List
+        </button>
+        <button type="button" className={mode === "table" ? "chip on" : "chip"} aria-pressed={mode === "table"} onClick={() => onChange({ ...query, view: { mode: "table", columns: query.view?.columns ?? [] } })}>
+          Table
+        </button>
+      </div>
+      {mode === "table" ? (
+        <FieldTable campaignId={campaignId} query={query} catalog={catalog} onChange={onChange} />
+      ) : (
+        <QueryResults campaignId={campaignId} query={query} catalog={catalog} />
+      )}
     </div>
   );
 }

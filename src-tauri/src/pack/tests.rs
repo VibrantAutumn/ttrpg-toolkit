@@ -9,6 +9,7 @@ use crate::db::tabs;
 use crate::db::formulas;
 use crate::db::spreads::{self, PositionInput};
 use crate::db::name_presets;
+use crate::db::generators;
 use crate::db::smart_collections;
 use crate::db::tables::{self, EntryInput, Pick};
 use crate::db::play_decks::{self, NewPlayDeck};
@@ -218,6 +219,11 @@ mind the [Rumors]".into(), weight: 1 },
     let query = r#"{"version":1,"where":{"op":"all","not":false,"rules":[{"kind":"name","text":"elf","not":false}]},"sort":[{"by":"name","dir":"asc"}]}"#;
     smart_collections::set_query(conn, &elves.id, query, 4910).unwrap();
 
+    // A generator (its template and fields are made-up ids here; a test of its own checks real ones).
+    let maker = items::create(conn, c, "tables", "generator", "NPC maker", None, 4920).unwrap();
+    let definition = r#"{"version":1,"templateId":null,"rows":[{"id":"r1","label":"Name","target":{"kind":"name"},"source":"[Names]","fallback":""}]}"#;
+    generators::set_definition(conn, &maker.id, definition, 4930).unwrap();
+
     camp.id
 }
 
@@ -269,6 +275,7 @@ struct Snapshot {
     field_values: Vec<String>,
     item_tabs: Vec<String>,
     smart_collections: Vec<String>,
+    generators: Vec<String>,
 }
 
 fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
@@ -366,6 +373,9 @@ fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
         smart_collections: lines(conn,
             "SELECT i.name, i.library, s.query_json, s.created_at, s.updated_at, i.deleted_at
              FROM smart_collections s JOIN items i ON i.id = s.item_id WHERE i.campaign_id = ?1", campaign_id),
+        generators: lines(conn,
+            "SELECT i.name, i.library, g.definition_json, g.created_at, g.updated_at, i.deleted_at
+             FROM generators g JOIN items i ON i.id = g.item_id WHERE i.campaign_id = ?1", campaign_id),
     }
 }
 
@@ -420,7 +430,7 @@ fn the_manifest_describes_the_pack() {
         // 2 formulas, 3 cards, a set, a deck, a pool, a saved draw, a deck in play, a spread, 2 tables and a name preset). 2 cards have details, 1 a picture, 7 membership rows.
         // 1 table has settings; the 2 tables have 4 entries in all (one deleted) and 2 entry tags (one removed).
         Counts {
-            folders: 3, items: 24, tags: 4, item_tags: 4, links: 5, documents: 5, saved_rolls: 2, formulas: 2,
+            folders: 3, items: 25, tags: 4, item_tags: 4, links: 5, documents: 5, saved_rolls: 2, formulas: 2,
             card_details: 2, collection_members: 7, card_images: 1, saved_draws: 1, play_decks: 1, spreads: 1, spread_positions: 3,
             random_tables: 1, table_entries: 4, table_entry_tags: 2, name_presets: 1,
             // 4 fields (one deleted), 2 sets (one deleted) with 3 member rows (one removed), 2 applied sets (one taken off),
@@ -430,6 +440,8 @@ fn the_manifest_describes_the_pack() {
             item_tabs: 4,
             // The "Elves" smart collection.
             smart_collections: 1,
+            // The "NPC maker" generator.
+            generators: 1,
         }
     );
     assert_eq!(pack.counts(), m.counts);
@@ -459,7 +471,7 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
         )
         .unwrap();
     assert_eq!(shared, 0);
-    assert_eq!(count(&conn, "items"), 48);
+    assert_eq!(count(&conn, "items"), 50);
 }
 
 #[test]
@@ -507,7 +519,7 @@ fn imported_items_remember_where_they_came_from() {
             .map(|r| r.unwrap())
             .collect()
     };
-    assert_eq!(rows.len(), 24);
+    assert_eq!(rows.len(), 25);
     for (name, origin_pack, origin_item) in rows {
         assert_eq!(origin_pack.as_deref(), Some(pack_id.as_str()), "{name}");
         // The origin id is the item's id in the ORIGINAL campaign.
@@ -879,7 +891,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
     assert!(pack.warnings.iter().all(|w| w.chars().next().unwrap().is_ascii_digit()));
     assert_eq!(
         pack.counts(),
-        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0 }
+        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0 }
     );
 
     let conn = open_in_memory();
@@ -1000,7 +1012,7 @@ fn the_committed_version_1_pack_still_imports() {
     assert_eq!(result.campaign.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0 }
+        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0 }
     );
     let camp = result.campaign.id;
 
@@ -1914,6 +1926,66 @@ fn a_smart_collections_query_follows_its_tags_folders_fields_and_items_to_the_im
     assert_eq!(original, query);
     // And the imported one runs.
     assert!(smart_collections::run(&conn, &new_collection.id, 7000, None).is_ok());
+}
+
+#[test]
+fn a_generators_template_and_fields_follow_it_to_the_imported_copies() {
+    let conn = open_in_memory();
+    let camp = campaigns::create(&conn, "Generators", 1).unwrap().id;
+    let template = items::create(&conn, &camp, "worldbuilding", "template", "NPC", None, 2).unwrap();
+    let race = fields::create_definition(&conn, &camp, "Race", "text", "", "{}", 3).unwrap();
+    let definition = json!({
+        "version": 1,
+        "templateId": template.id,
+        "rows": [
+            { "id": "r1", "label": "Name", "target": { "kind": "name" }, "source": "[Names]", "fallback": "" },
+            { "id": "r2", "label": "Race", "target": { "kind": "field", "fieldId": race.id }, "source": "[Races]", "fallback": "Plain races" },
+            { "id": "r3", "label": "Gone", "target": { "kind": "field", "fieldId": "a-field-that-is-not-in-the-pack" }, "source": "x", "fallback": "" }
+        ]
+    });
+    let maker = items::create(&conn, &camp, "tables", "generator", "NPC maker", None, 4).unwrap();
+    generators::set_definition(&conn, &maker.id, &definition.to_string(), 5).unwrap();
+
+    let imported = import_pack(&conn, &export_campaign(&conn, &camp, 5000).unwrap(), 6000).unwrap().campaign.id;
+    let new_maker = items::list(&conn, &imported, "tables", None).unwrap().into_iter().find(|i| i.name == "NPC maker").unwrap();
+    assert_ne!(new_maker.id, maker.id);
+    let got: serde_json::Value = serde_json::from_str(&generators::get(&conn, &new_maker.id).unwrap().definition_json).unwrap();
+    let new_template = items::list(&conn, &imported, "worldbuilding", None).unwrap().into_iter().find(|i| i.name == "NPC").unwrap();
+    let new_race = fields::list_definitions(&conn, &imported).unwrap().into_iter().find(|d| d.name == "Race").unwrap();
+    assert_eq!(got["templateId"], json!(new_template.id));
+    assert_eq!(got["rows"][1]["target"]["fieldId"], json!(new_race.id));
+    assert_eq!(got["rows"][2]["target"]["fieldId"], json!("a-field-that-is-not-in-the-pack"));
+    assert_eq!(got["rows"][0]["source"], json!("[Names]"));
+    // The original is untouched.
+    let original: serde_json::Value = serde_json::from_str(&generators::get(&conn, &maker.id).unwrap().definition_json).unwrap();
+    assert_eq!(original, definition);
+}
+
+#[test]
+fn bad_generator_data_in_a_pack_is_skipped_with_warnings() {
+    let item = |id: &str, kind: &str| json!({
+        "id": id, "library": "tables", "itemType": kind, "name": id, "icon": null,
+        "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null
+    });
+    let record = |id: &str, def: &str| json!({ "itemId": id, "definitionJson": def, "createdAt": 1, "updatedAt": 1 });
+    let good = generators::EMPTY_DEFINITION;
+    let bytes = pack_with(&[
+        (ITEMS_FILE, json!([item("g", "generator"), item("t", "table"), item("g2", "generator")])),
+        (GENERATORS_FILE, json!([
+            record("g", good),
+            record("g", good),        // twice
+            record("t", good),        // not a generator
+            record("ghost", good),    // nothing there
+            record("g2", "[1, 2]"),   // not an object
+        ])),
+    ]);
+    let pack = read_pack(&bytes).unwrap();
+    assert_eq!(pack.generators.len(), 1);
+    assert!(pack.warnings.iter().any(|w| w.contains("generator")), "{:?}", pack.warnings);
+    let conn = open_in_memory();
+    let result = import_parsed(&conn, &pack, 10).unwrap();
+    let g2 = items::list(&conn, &result.campaign.id, "tables", None).unwrap().into_iter().find(|i| i.name == "g2").unwrap();
+    assert_eq!(generators::get(&conn, &g2.id).unwrap().definition_json, generators::EMPTY_DEFINITION);
 }
 
 #[test]

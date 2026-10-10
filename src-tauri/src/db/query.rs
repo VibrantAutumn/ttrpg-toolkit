@@ -28,6 +28,8 @@ pub const MAX_TEXT_CHARS: usize = 200;
 pub const MAX_IDS: usize = 50;
 pub const MAX_DAYS: i64 = 3650;
 pub const MAX_SORT_KEYS: usize = 3;
+pub const MAX_COLUMNS: usize = 12;
+const MAX_VIEW_BYTES: usize = 20_000;
 /// The most items one answer holds; `truncated` says when there were more.
 pub const MAX_RESULTS: usize = 5000;
 
@@ -42,6 +44,10 @@ pub struct Query {
     pub where_: Group,
     #[serde(default)]
     pub sort: Vec<SortKey>,
+    /// How a smart collection is shown (list or table, and the table's columns). The engine ignores
+    /// it; it travels with the query so it is saved, packed and remapped with it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -231,6 +237,12 @@ pub fn validate(query: &Query) -> Result<(), DbError> {
     for key in &query.sort {
         if let SortKey::Field { field_id, .. } = key {
             check_text(field_id)?;
+        }
+    }
+    if let Some(view) = &query.view {
+        let columns_ok = view.get("columns").is_none_or(|c| c.as_array().is_some_and(|a| a.len() <= MAX_COLUMNS));
+        if !view.is_object() || !columns_ok || view.to_string().len() > MAX_VIEW_BYTES {
+            return Err(DbError::Invalid("This query's table settings can't be used."));
         }
     }
     let mut count = 0;

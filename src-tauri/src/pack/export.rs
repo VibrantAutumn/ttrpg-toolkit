@@ -42,6 +42,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     let field_values = read_field_values(conn, campaign_id)?;
     let item_tabs = read_item_tabs(conn, campaign_id)?;
     let smart_collections = read_smart_collections(conn, campaign_id)?;
+    let generators = read_generators(conn, campaign_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -78,6 +79,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
             field_values: field_values.len() as u32,
             item_tabs: item_tabs.len() as u32,
             smart_collections: smart_collections.len() as u32,
+            generators: generators.len() as u32,
         },
     };
 
@@ -108,6 +110,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
     put(&mut zip, options, FIELD_VALUES_FILE, &field_values, false)?;
     put(&mut zip, options, ITEM_TABS_FILE, &item_tabs, false)?;
     put(&mut zip, options, SMART_COLLECTIONS_FILE, &smart_collections, false)?;
+    put(&mut zip, options, GENERATORS_FILE, &generators, false)?;
     put(&mut zip, options, COLLECTION_MEMBERS_FILE, &collection_members, false)?;
     let image_records: Vec<CardImageRecord> = card_images.iter().map(|(r, _, _)| r.clone()).collect();
     put(&mut zip, options, CARD_IMAGES_FILE, &image_records, false)?;
@@ -636,6 +639,18 @@ fn read_field_values(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldVa
             updated_at: r.get(8)?,
             deleted_at: r.get(9)?,
         })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_generators(conn: &Connection, campaign_id: &str) -> Result<Vec<GeneratorRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT g.item_id, g.definition_json, g.created_at, g.updated_at
+         FROM generators g JOIN items i ON i.id = g.item_id
+         WHERE i.campaign_id = ?1 ORDER BY g.created_at, g.item_id",
+    )?;
+    let rows = stmt.query_map([campaign_id], |r| {
+        Ok(GeneratorRecord { item_id: r.get(0)?, definition_json: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)? })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
 }

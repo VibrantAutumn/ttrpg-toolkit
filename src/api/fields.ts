@@ -168,3 +168,18 @@ export async function refreshFieldValues(def: FieldDefinition): Promise<void> {
   }
   if (updates.length > 0) await invoke<void>("update_field_indexes", { fieldId: def.id, updates });
 }
+
+/** Every item's value for one field, each checked against the field (a value that doesn't fit is left out). */
+export async function listFieldValues(def: FieldDefinition): Promise<Map<string, FieldValue>> {
+  const stored = await invoke<ValueRecord[]>("list_field_values", { fieldId: def.id });
+  const out = new Map<string, FieldValue>();
+  for (const v of stored) {
+    try {
+      const checked = coerceValue(def, JSON.parse(v.valueJson));
+      if (checked.ok) out.set(v.itemId, checked.value);
+    } catch {
+      // unreadable: treated as not there
+    }
+  }
+  return out;
+}

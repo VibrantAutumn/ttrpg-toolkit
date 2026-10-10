@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createRng } from "../dice/rng";
 import { scripted } from "../dice/testing";
 import { MAX_DEPTH, MAX_EVALUATIONS, rerollTable, rollTable } from "./roll";
-import type { RollableDeck, RollableEntry, RollableTable, SlotOutcome, TableRoll, TableWorld } from "./roll";
+import type { EntitySource, RollableDeck, RollableEntry, RollableTable, SlotOutcome, TableRoll, TableWorld } from "./roll";
 
 const entry = (id: string, text: string, weight = 1): RollableEntry => ({ id, text, weight });
 
@@ -278,9 +278,9 @@ describe("rollTable: labels and references", () => {
 
 describe("rollTable: unknown slots and bad entries", () => {
   it("shows a warning for a slot type this version doesn't know", () => {
-    const w = world([table("T", [entry("t", "Meet [entity:Person]")])]);
+    const w = world([table("T", [entry("t", "Meet [mood:Calm]")])]);
     const r = roll(w, "T", scripted(1));
-    expect(r.text).toContain("entity:Person");
+    expect(r.text).toContain("mood:Calm");
     expect(r.warnings).toHaveLength(1);
     expect(outcomeAt(r, 1)).toMatchObject({ type: "unknown" });
   });
@@ -413,5 +413,101 @@ describe("rerollTable", () => {
     const third = rerollTable(second.roll, new Set([0]), w, scripted(3));
     if (!third.ok) throw new Error(third.message);
     expect(third.roll.text).toBe("Ann met Cy");
+  });
+});
+
+describe("rollTable: entity slots and field references", () => {
+  const people: EntitySource = {
+    name: "Person",
+    kind: "collection",
+    items: [
+      { id: "ann", name: "Ann" },
+      { id: "bob", name: "Bob" },
+      { id: "cy", name: "Cy" },
+    ],
+  };
+  const fieldsOf: Record<string, Record<string, string>> = {
+    ann: { faction: "Red Hand" },
+    bob: { faction: "Blue Cloak" },
+    cy: {},
+  };
+  const withEntities = (tables: RollableTable[], sources: EntitySource[] = [people]): TableWorld => ({
+    ...world(tables),
+    findEntities: (name) => sources.find((s) => s.name.toLowerCase() === name.toLowerCase()) ?? null,
+    entityField: (itemId, field) => {
+      const value = fieldsOf[itemId]?.[field.toLowerCase()];
+      return value === undefined ? { ok: false, message: `${field} has no value here` } : { ok: true, text: value };
+    },
+  });
+
+  it("picks one item with one roll and writes its name", () => {
+    const w = withEntities([table("T", [entry("t", "Meet [entity:Person]")])]);
+    const r = roll(w, "T", scripted(1, 2));
+    expect(r.text).toBe("Meet Bob");
+    expect(outcomeAt(r, 1)).toMatchObject({ type: "entity", sourceName: "Person", kind: "collection", picks: [{ id: "bob" }] });
+  });
+
+  it("takes several picks, unique ones never repeating", () => {
+    const w = withEntities([table("T", [entry("t", "[entity:3 unique Person]")])]);
+    // 3 left -> picks the 3rd (Cy); 2 left -> picks the 2nd of [Ann, Bob] (Bob); 1 left -> Ann
+    expect(roll(w, "T", scripted(1, 3, 2, 1)).text).toBe("Cy, Bob, Ann");
+    const repeating = withEntities([table("T", [entry("t", "[entity:2 Person]")])]);
+    expect(roll(repeating, "T", scripted(1, 2, 2)).text).toBe("Bob, Bob");
+  });
+
+  it("warns when asked for more unique items than there are, and keeps what it has", () => {
+    const w = withEntities([table("T", [entry("t", "[entity:5 unique Person]")])]);
+    const r = roll(w, "T", scripted(1, 1, 1, 1));
+    expect(r.text).toBe("Ann, Bob, Cy");
+    expect(r.warnings.join(" ")).toContain("only has 3 items");
+  });
+
+  it("tries [Person] as an entity only when no table has that name", () => {
+    const entityWorld = withEntities([table("T", [entry("t", "[Person]")])]);
+    expect(roll(entityWorld, "T", scripted(1, 3)).text).toBe("Cy");
+    const tableWins = withEntities([table("T", [entry("t", "[Person]")]), table("Person", [entry("x", "A table person")])]);
+    expect(roll(tableWins, "T", scripted(1, 1)).text).toBe("A table person");
+  });
+
+  it("shows a warning, never failing the roll, when nothing is found or the source is empty", () => {
+    const missing = withEntities([table("T", [entry("t", "[entity:Nobody] and [Nobody2]")])]);
+    const r = roll(missing, "T", scripted(1));
+    expect(r.text).toBe("⚠ Nobody and ⚠ Nobody2");
+    expect(outcomeAt(r, 0)).toMatchObject({ type: "missing", kind: "entity" });
+    expect(r.warnings).toHaveLength(2);
+    const empty = withEntities([table("T", [entry("t", "[entity:Person]")])], [{ ...people, items: [] }]);
+    const e = roll(empty, "T", scripted(1));
+    expect(e.text).toContain("⚠");
+    expect(e.warnings[0]).toContain("Nothing in");
+  });
+
+  it("shows a warning in a world that has no documents", () => {
+    const w = world([table("T", [entry("t", "[entity:Person]")])]);
+    expect(roll(w, "T", scripted(1)).warnings).toHaveLength(1);
+  });
+
+  it("reads a field of an earlier pick: [A.Faction]", () => {
+    const w = withEntities([table("T", [entry("t", "[entity:Person as A] of [A.Faction]")])]);
+    expect(roll(w, "T", scripted(1, 2)).text).toBe("Bob of Blue Cloak");
+    const gap = roll(w, "T", scripted(1, 3));
+    expect(gap.text).toContain("Cy of ⚠");
+    expect(gap.warnings).toEqual(["Faction has no value here"]);
+  });
+
+  it("explains a field of something that isn't an item, or in a world without fields", () => {
+    const w = withEntities([table("T", [entry("t", "[2d4 as A] [A.Faction]"), entry("u", "[entity:Person as A] [A.Faction]")]), table("Plain", [entry("p", "x")])]);
+    const r = roll(w, "T", scripted(1, 2, 3));
+    expect(r.warnings[0]).toContain("isn't a document or item");
+    const noFields: TableWorld = { ...withEntities([table("T", [entry("u", "[entity:Person as A] [A.Faction]")])]), entityField: undefined };
+    expect(roll(noFields, "T", scripted(1, 1)).warnings[0]).toContain("fields aren't available");
+  });
+
+  it("keeps a locked pick when rerolling, and a field reference follows it", () => {
+    const w = withEntities([table("T", [entry("t", "[entity:Person as A] / [Person] / [A.Faction]")])]);
+    const first = roll(w, "T", scripted(1, 1, 3));
+    expect(first.text).toBe("Ann / Cy / Red Hand");
+    const again = rerollTable(first, new Set([0]), w, scripted(2));
+    if (!again.ok) throw new Error(again.message);
+    expect(again.roll.text).toBe("Ann / Bob / Red Hand");
   });
 });

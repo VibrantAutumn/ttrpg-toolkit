@@ -184,13 +184,30 @@ function lockableSlots(entry: TableLogEntry) {
     .filter(({ part }) => part.kind === "slot" && part.slot.type !== "ref");
 }
 
+/** The documents an entity slot picked, as buttons that open them. */
+function PickedItems({ items }: { items: { id: string; name: string }[] }) {
+  const { openItem } = useNavigation();
+  return (
+    <div className="row wrap">
+      <small className="meta">Open:</small>
+      {items.map((i, index) => (
+        <button key={`${i.id}-${index}`} type="button" className="link" onClick={() => openItem(i.id)}>
+          {i.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** What a table result adds to its text: the cards drawn, warnings, and which slots a reroll keeps. */
 function TableDetails({ entry }: { entry: TableLogEntry }) {
   const slots = lockableSlots(entry);
   const cards = entry.roll.parts.flatMap((p) => (p.kind === "slot" && p.outcome.type === "draw" ? p.outcome.cards : []));
+  const picked = entry.roll.parts.flatMap((p) => (p.kind === "slot" && p.outcome.type === "entity" ? p.outcome.picks : []));
   return (
     <>
       {cards.length > 0 && <DrawnCards cards={cards} />}
+      {picked.length > 0 && <PickedItems items={picked} />}
       {entry.roll.warnings.length > 0 && (
         <ul className="meta">
           {entry.roll.warnings.map((w) => (

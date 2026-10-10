@@ -295,14 +295,38 @@ describe("parseEntry: labels and references", () => {
   });
 });
 
+describe("parseEntry: entity slots", () => {
+  it("reads an explicit entity slot, with a count and unique like a table slot", () => {
+    expect(oneSlot("[entity:Person]").slot).toEqual({ type: "entity", name: "Person", count: 1, unique: false });
+    expect(oneSlot("[entity:3 unique Person]").slot).toEqual({ type: "entity", name: "Person", count: 3, unique: true });
+    expect(oneSlot("[entity:2 Town folk as F]")).toMatchObject({ slot: { type: "entity", name: "Town folk", count: 2, unique: false }, label: "F" });
+  });
+  it("has no shorthand: [Person] is still a table slot until it is rolled", () => {
+    expect(oneSlot("[Person]").slot).toEqual({ type: "table", name: "Person", count: 1, unique: false });
+  });
+  it("refuses an entity slot with no name or a bad count", () => {
+    for (const text of ["[entity:]", "[entity:0 Person]", "[entity:99 Person]"]) {
+      expect(parseEntry(text).ok, text).toBe(false);
+    }
+  });
+  it("writes itself back in the explicit form and shows a short name", () => {
+    expect(slotCanonical(oneSlot("[entity:Person]"))).toBe("entity:Person");
+    expect(slotCanonical(oneSlot("[entity:2 unique Person as P]"))).toBe("entity:2 unique Person as P");
+    expect(slotDisplay(oneSlot("[entity:2 unique Person]"))).toBe("2 unique Person");
+    for (const text of ["[entity:Person]", "[entity:3 unique Town folk as F]"]) {
+      expect(oneSlot(`[${slotCanonical(oneSlot(text))}]`).slot).toEqual(oneSlot(text).slot);
+    }
+  });
+});
+
 describe("parseEntry: unknown slot types", () => {
   it("keeps an unknown explicit type instead of failing", () => {
-    expect(oneSlot("[entity:Person]").slot).toEqual({ type: "unknown", kind: "entity", args: "Person" });
+    expect(oneSlot("[mood:Calm]").slot).toEqual({ type: "unknown", kind: "mood", args: "Calm" });
   });
 
   it("still allows a label on an unknown type", () => {
-    expect(oneSlot("[entity:Person as P]")).toMatchObject({
-      slot: { type: "unknown", kind: "entity", args: "Person" },
+    expect(oneSlot("[mood:Calm as P]")).toMatchObject({
+      slot: { type: "unknown", kind: "mood", args: "Calm" },
       label: "P",
     });
   });
@@ -373,7 +397,7 @@ describe("slotCanonical and slotDisplay", () => {
     expect(slotCanonical(first("[3 unique Rumors]"))).toBe("table:3 unique Rumors");
     expect(slotCanonical(first("[3 Rumors]"))).toBe("table:3 Rumors");
     expect(slotCanonical(first("[draw 1 from Tarot]"))).toBe("draw:1 from Tarot");
-    expect(slotCanonical(first("[entity:Person]"))).toBe("entity:Person");
+    expect(slotCanonical(first("[mood:Calm]"))).toBe("mood:Calm");
   });
 
   it("includes the label", () => {
@@ -387,7 +411,7 @@ describe("slotCanonical and slotDisplay", () => {
   });
 
   it("round-trips: the explicit form parses back to the same slot", () => {
-    for (const text of ["[2d4]", "[Rumors]", "[3 unique Rumors]", "[draw 2 from Tarot]", "[Person as A]", "[table:d6]", "[entity:Person]"]) {
+    for (const text of ["[2d4]", "[Rumors]", "[3 unique Rumors]", "[draw 2 from Tarot]", "[Person as A]", "[table:d6]", "[mood:Calm]"]) {
       const slot = oneSlot(text);
       const again = oneSlot(`[${slotCanonical(slot)}]`);
       expect(again.slot).toEqual(slot.slot);
@@ -408,7 +432,7 @@ describe("slotCanonical and slotDisplay", () => {
     expect(slotDisplay(first("[3 unique Rumors]"))).toBe("3 unique Rumors");
     expect(slotDisplay(first("[draw 1 from Tarot]"))).toBe("draw 1 from Tarot");
     expect(slotDisplay(first("[Person as A]"))).toBe("Person as A");
-    expect(slotDisplay(first("[entity:Person]"))).toBe("entity: Person");
+    expect(slotDisplay(first("[mood:Calm]"))).toBe("mood: Calm");
   });
 
   it("shows references by label (and field)", () => {

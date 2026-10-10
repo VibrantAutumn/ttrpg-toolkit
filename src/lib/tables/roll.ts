@@ -12,6 +12,9 @@
  *      pick, fill in that entry, pick, fill in, and so on.
  *   3. A dice slot rolls its formula; a draw slot is exactly `drawCards`.
  *
+ *   4. An entity slot (documents or other items from a smart collection or a tag) picks with
+ *      `rng.int(1, items left)` per pick, over the source's items in the order the world lists them.
+ *
  * Problems never stop a roll: a missing table, a bad draw or a nesting loop
  * shows a "⚠" in place of that slot and adds a warning to the result.
  */
@@ -50,12 +53,33 @@ export interface RollableDeck {
   cards: readonly DrawCard[];
 }
 
-/** Everything a roll needs to look up. Tables and decks are found by name, ignoring case. */
+/** A document or other item an entity slot can pick. */
+export interface EntityItem {
+  id: string;
+  name: string;
+}
+
+/** Where an entity slot picks from: a smart collection or a tag, already narrowed by the roll context. */
+export interface EntitySource {
+  name: string;
+  kind: "collection" | "tag";
+  items: readonly EntityItem[];
+}
+
+/** What `[A.Field]` finds: the field's value as text, or a sentence saying why not. */
+export type FieldLookup = { ok: true; text: string } | { ok: false; message: string };
+
+/**
+ * Everything a roll needs to look up. Tables, decks and entity sources are found by name, ignoring case.
+ * A world without documents leaves `findEntities` and `entityField` out; entity slots then show a warning.
+ */
 export interface TableWorld {
   findTable(name: string): RollableTable | null;
   findDeck(name: string): RollableDeck | null;
   /** Entry ids recently rolled from a table, newest first. */
   recent(tableId: string): readonly string[];
+  findEntities?(name: string): EntitySource | null;
+  entityField?(itemId: string, field: string): FieldLookup;
 }
 
 /** One entry picked from a table slot, with its filled-in text. */
@@ -69,8 +93,9 @@ export type SlotOutcome =
   | { type: "table"; tableId: string; tableName: string; picks: TablePick[] }
   | { type: "dice"; result: DiceResult }
   | { type: "draw"; sourceId: string; sourceName: string; cards: DrawnCard[] }
+  | { type: "entity"; sourceName: string; kind: "collection" | "tag"; picks: EntityItem[] }
   | { type: "ref"; text: string }
-  | { type: "missing"; kind: "table" | "deck"; name: string }
+  | { type: "missing"; kind: "table" | "deck" | "entity"; name: string }
   | { type: "unknown"; kind: string; args: string }
   | { type: "error"; message: string };
 
@@ -105,6 +130,19 @@ interface Context {
   warnings: string[];
   picked: PickedEntry[];
   evaluations: number;
+}
+
+/** What a label stands for: its text, and the item behind it when it was an entity pick. */
+interface LabelValue {
+  text: string;
+  itemId?: string;
+}
+
+function labelValueOf(part: ResultPart): LabelValue {
+  if (part.kind === "slot" && part.outcome.type === "entity" && part.outcome.picks.length > 0) {
+    return { text: part.text, itemId: part.outcome.picks[0].id };
+  }
+  return { text: part.text };
 }
 
 function warn(ctx: Context, message: string): void {
@@ -198,19 +236,19 @@ function fillEntry(
     warn(ctx, `An entry couldn't be read (${parsed.error.message}), so it is shown as plain text.`);
     return { parts: [{ kind: "text", text }], text };
   }
-  const labels = new Map<string, string>();
+  const labels = new Map<string, LabelValue>();
   const parts: ResultPart[] = parsed.parts.map((part, i) => {
     if (part.kind === "text") return part;
     const kept = keep.get(i);
     const result: ResultPart =
       kept && kept.kind === "slot" && kept.source === part.source ? kept : fillSlot(part, depth, ctx, labels);
-    if (result.kind === "slot" && part.label !== undefined) labels.set(part.label.toLowerCase(), result.text);
+    if (result.kind === "slot" && part.label !== undefined) labels.set(part.label.toLowerCase(), labelValueOf(result));
     return result;
   });
   return { parts, text: parts.map((p) => p.text).join("") };
 }
 
-function fillSlot(part: SlotPart, depth: number, ctx: Context, labels: ReadonlyMap<string, string>): ResultPart {
+function fillSlot(part: SlotPart, depth: number, ctx: Context, labels: ReadonlyMap<string, LabelValue>): ResultPart {
   const { outcome, text } = evaluateSlot(part.slot, depth, ctx, labels);
   return {
     kind: "slot",
@@ -232,7 +270,7 @@ function problem(ctx: Context, message: string, shown: string): Evaluated {
   return { outcome: { type: "error", message }, text: `⚠ ${shown}` };
 }
 
-function evaluateSlot(slot: Slot, depth: number, ctx: Context, labels: ReadonlyMap<string, string>): Evaluated {
+function evaluateSlot(slot: Slot, depth: number, ctx: Context, labels: ReadonlyMap<string, LabelValue>): Evaluated {
   switch (slot.type) {
     case "dice": {
       const rolled = rollNotation(slot.notation, ctx.rng);
@@ -253,17 +291,20 @@ function evaluateSlot(slot: Slot, depth: number, ctx: Context, labels: ReadonlyM
       };
     }
     case "ref": {
-      if (slot.field !== undefined) {
-        return problem(
-          ctx,
-          `${slot.label}.${slot.field}: fields aren't available yet.`,
-          `${slot.label}.${slot.field} (fields not available yet)`,
-        );
+      const value = labels.get(slot.label.toLowerCase());
+      if (value === undefined) return problem(ctx, `The label ${slot.label} has no result yet.`, `${slot.label} (no result)`);
+      if (slot.field === undefined) return { outcome: { type: "ref", text: value.text }, text: value.text };
+      const shown = `${slot.label}.${slot.field}`;
+      if (value.itemId === undefined) {
+        return problem(ctx, `${slot.label} isn't a document or item, so it has no field “${slot.field}”.`, `${shown} (no fields here)`);
       }
-      const text = labels.get(slot.label.toLowerCase());
-      if (text === undefined) return problem(ctx, `The label ${slot.label} has no result yet.`, `${slot.label} (no result)`);
-      return { outcome: { type: "ref", text }, text };
+      if (!ctx.world.entityField) return problem(ctx, `${shown}: fields aren't available here.`, `${shown} (fields not available)`);
+      const found = ctx.world.entityField(value.itemId, slot.field);
+      if (!found.ok) return problem(ctx, found.message, `${shown} (${found.message})`);
+      return { outcome: { type: "ref", text: found.text }, text: found.text };
     }
+    case "entity":
+      return evaluateEntitySlot(slot.name, slot.count, slot.unique, true, ctx);
     case "unknown": {
       warn(ctx, `This version doesn't know the slot type "${slot.kind}", so [${slot.kind}:${slot.args}] was skipped.`);
       return {
@@ -276,6 +317,32 @@ function evaluateSlot(slot: Slot, depth: number, ctx: Context, labels: ReadonlyM
   }
 }
 
+function evaluateEntitySlot(name: string, count: number, unique: boolean, explicit: boolean, ctx: Context): Evaluated {
+  const source = ctx.world.findEntities?.(name);
+  if (!source) {
+    warn(ctx, explicit ? `No smart collection or tag called "${name}" was found.` : `The table "${name}" was not found.`);
+    return { outcome: { type: "missing", kind: "entity", name }, text: `⚠ ${name}` };
+  }
+  const left = source.items.slice();
+  if (left.length === 0) {
+    return problem(ctx, `Nothing in "${source.name}" can be picked (it is empty, or the roll context leaves nothing).`, `${source.name} (nothing to pick)`);
+  }
+  const picks: EntityItem[] = [];
+  for (let i = 0; i < count; i++) {
+    if (left.length === 0) {
+      warn(ctx, `"${source.name}" only has ${picks.length} item${picks.length === 1 ? "" : "s"} to pick, not ${count}.`);
+      break;
+    }
+    const at = ctx.rng.int(1, left.length) - 1;
+    picks.push(left[at]);
+    if (unique) left.splice(at, 1);
+  }
+  return {
+    outcome: { type: "entity", sourceName: source.name, kind: source.kind, picks },
+    text: picks.map((p) => p.name).join(", "),
+  };
+}
+
 function evaluateTableSlot(
   slot: Extract<Slot, { type: "table" }>,
   depth: number,
@@ -283,6 +350,8 @@ function evaluateTableSlot(
 ): Evaluated {
   const table = ctx.world.findTable(slot.name);
   if (!table) {
+    // [Person] with no table of that name: a smart collection or tag of that name, if there is one.
+    if (ctx.world.findEntities?.(slot.name)) return evaluateEntitySlot(slot.name, slot.count, slot.unique, false, ctx);
     warn(ctx, `The table "${slot.name}" was not found.`);
     return { outcome: { type: "missing", kind: "table", name: slot.name }, text: `⚠ ${slot.name}` };
   }

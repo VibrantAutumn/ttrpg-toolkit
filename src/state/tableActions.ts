@@ -3,6 +3,7 @@ import { getItem } from "../api/library";
 import { loadRollableTables, recordTableRecent } from "../api/tables";
 import type { TableWorld, RollableDeck } from "../lib/tables/roll";
 import { buildWorld, neededDeckNames } from "../lib/tables/world";
+import { loadEntityData } from "./entityWorld";
 import type { TableLogOutcome } from "../lib/results/rollLog";
 import { rollLog } from "./rollLog";
 
@@ -10,8 +11,9 @@ const key = (name: string) => name.trim().toLowerCase();
 
 /**
  * Loads what a roll needs, fresh from the database: every table in the campaign
- * with its recent picks, and the cards of the decks, sets and pools that any
- * entry draws from (only those, so a big card library isn't loaded for nothing).
+ * with its recent picks, the cards of the decks, sets and pools that any
+ * entry draws from (only those, so a big card library isn't loaded for nothing), and the
+ * documents that entity slots may pick (narrowed by the roll context).
  */
 export async function loadTableWorld(campaignId: string) {
   const tables = await loadRollableTables(campaignId);
@@ -28,7 +30,7 @@ export async function loadTableWorld(campaignId: string) {
       })),
     );
   }
-  const world: TableWorld = buildWorld(tables, decks);
+  const world: TableWorld = buildWorld(tables, decks, await loadEntityData(campaignId, tables));
   return { tables, world };
 }
 

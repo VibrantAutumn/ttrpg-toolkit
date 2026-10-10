@@ -191,6 +191,10 @@ describe("the file both sides read", () => {
         { by: "type", dir: "asc" },
       ],
     },
+    {
+      ...emptyQuery(),
+      view: { mode: "table", columns: [{ by: "type" }, { by: "updated" }, { by: "field", fieldId: "c" }] },
+    },
   ];
 
   it("holds queries that are already in their proper form", () => {

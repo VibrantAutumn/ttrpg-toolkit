@@ -135,6 +135,8 @@ pub fn run() {
             commands::get_smart_collection,
             commands::set_smart_collection_query,
             commands::run_smart_collection,
+            commands::get_generator,
+            commands::set_generator_definition,
             commands::list_links,
             commands::list_backlinks,
             commands::add_link,

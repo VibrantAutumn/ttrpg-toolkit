@@ -6,6 +6,7 @@ pub mod error;
 pub mod fields;
 pub mod folders;
 pub mod formulas;
+pub mod generators;
 pub mod items;
 pub mod links;
 pub mod migrations;

@@ -264,5 +264,34 @@
         "dir": "asc"
       }
     ]
+  },
+  {
+    "version": 1,
+    "where": {
+      "op": "all",
+      "not": false,
+      "rules": []
+    },
+    "sort": [
+      {
+        "by": "name",
+        "dir": "asc"
+      }
+    ],
+    "view": {
+      "mode": "table",
+      "columns": [
+        {
+          "by": "type"
+        },
+        {
+          "by": "updated"
+        },
+        {
+          "by": "field",
+          "fieldId": "c"
+        }
+      ]
+    }
   }
 ]

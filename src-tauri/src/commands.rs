@@ -15,6 +15,7 @@ use crate::db::items::{self, Item};
 use crate::db::formulas::{self, Formula, FormulaEntry};
 use crate::db::links;
 use crate::db::name_presets::{self, NamePreset, PresetEntry};
+use crate::db::generators::{self, Generator};
 use crate::db::query::{self, QueryResult};
 use crate::db::smart_collections::{self, SmartCollection};
 use crate::db::spreads::{self, PositionInput, Spread, SpreadEntry};
@@ -549,6 +550,19 @@ pub fn set_smart_collection_query(db: Db, item_id: String, query_json: String) -
 #[tauri::command]
 pub fn run_smart_collection(db: Db, item_id: String, only_type: Option<String>) -> Result<QueryResult, String> {
     with_conn(&db, |c| smart_collections::run(c, &item_id, db::now_ms(), only_type.as_deref()))
+}
+
+// ---- Generators ----
+
+/// A generator's saved definition (JSON text; an empty one if none is saved yet).
+#[tauri::command]
+pub fn get_generator(db: Db, item_id: String) -> Result<Generator, String> {
+    with_conn(&db, |c| generators::get(c, &item_id))
+}
+
+#[tauri::command]
+pub fn set_generator_definition(db: Db, item_id: String, definition_json: String) -> Result<(), String> {
+    with_conn(&db, |c| generators::set_definition(c, &item_id, &definition_json, db::now_ms()))
 }
 
 // ---- Content packs ----

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { listCollections } from "../../api/cards";
-import { listTags, type Item, type Tag } from "../../api/library";
+import { listFieldDefinitions } from "../../api/fields";
+import { listItemsOfType, listTags, type Item, type Tag } from "../../api/library";
 import { listTables, type TableSummary } from "../../api/tables";
 import { useCurrentCampaign } from "../../state/CurrentCampaign";
 import { useDataVersion } from "../../state/dataVersion";
@@ -14,9 +15,13 @@ interface Choices {
   tables: TableSummary[];
   collections: Item[];
   tags: Tag[];
+  /** Smart collections (entity slots can pick from them). */
+  smart: Item[];
+  /** Names of the campaign's fields (`[A.Field]` can read them). */
+  fieldNames: string[];
 }
 
-const EMPTY: Choices = { tables: [], collections: [], tags: [] };
+const EMPTY: Choices = { tables: [], collections: [], tags: [], smart: [], fieldNames: [] };
 
 const SlotChoicesContext = createContext<Choices>(EMPTY);
 
@@ -33,8 +38,14 @@ export function SlotChoicesProvider({ children }: { children: ReactNode }) {
       return;
     }
     let active = true;
-    Promise.all([listTables(campaignId), listCollections(campaignId), listTags(campaignId)])
-      .then(([tables, collections, tags]) => active && setChoices({ tables, collections, tags }))
+    Promise.all([
+      listTables(campaignId),
+      listCollections(campaignId),
+      listTags(campaignId),
+      listItemsOfType(campaignId, "worldbuilding", "smart_collection"),
+      listFieldDefinitions(campaignId),
+    ])
+      .then(([tables, collections, tags, smart, defs]) => active && setChoices({ tables, collections, tags, smart, fieldNames: defs.map((d) => d.name) }))
       .catch(() => active && setChoices(EMPTY)); // the menus just offer nothing
     return () => {
       active = false;

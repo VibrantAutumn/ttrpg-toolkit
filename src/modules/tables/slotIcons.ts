@@ -3,6 +3,7 @@ import type { SlotDescription } from "../../lib/tables/editorModel";
 /** One emoji per kind of slot, shown on its chip (may become real icons later). */
 export const SLOT_ICONS: Record<string, string> = {
   table: "📋",
+  entity: "🧑",
   dice: "🎲",
   draw: "🃏",
   ref: "↩",

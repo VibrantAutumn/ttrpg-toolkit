@@ -1617,3 +1617,36 @@ input.narrow {
   flex-direction: column;
   gap: 0.4rem;
 }
+
+/* Table view of a smart collection */
+.field-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.field-table table {
+  border-collapse: collapse;
+  min-width: 100%;
+}
+
+.field-table th,
+.field-table td {
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.field-table td {
+  max-width: 18rem;
+  overflow-wrap: anywhere;
+}
+
+.slot-chip.slot-entity {
+  border-color: var(--accent);
+}

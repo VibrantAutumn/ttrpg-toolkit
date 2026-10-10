@@ -1,3 +1,5 @@
+import type { EntityData } from "./entities";
+import { buildEntityLookups } from "./entities";
 import { parseEntry } from "./parse";
 import type { RollableDeck, RollableEntry, RollableTable, TableWorld } from "./roll";
 
@@ -14,7 +16,7 @@ const key = (name: string) => name.trim().toLowerCase();
  * matched ignoring case; when two tables share a name the first in the list
  * wins (the database lists the oldest first).
  */
-export function buildWorld(tables: readonly WorldTable[], decks: readonly RollableDeck[]): TableWorld {
+export function buildWorld(tables: readonly WorldTable[], decks: readonly RollableDeck[], entities?: EntityData): TableWorld {
   const byName = new Map<string, WorldTable>();
   const byId = new Map<string, WorldTable>();
   for (const t of tables) {
@@ -28,6 +30,7 @@ export function buildWorld(tables: readonly WorldTable[], decks: readonly Rollab
     findTable: (name) => byName.get(key(name)) ?? null,
     findDeck: (name) => decksByName.get(key(name)) ?? null,
     recent: (tableId) => byId.get(tableId)?.recent ?? [],
+    ...(entities ? buildEntityLookups(entities) : {}),
   };
 }
 

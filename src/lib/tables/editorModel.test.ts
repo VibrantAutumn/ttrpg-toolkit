@@ -96,7 +96,7 @@ describe("converting there and back", () => {
     "[Person as A] meets [A], who has [A.Faction]",
     "[3 unique Rumors] and [draw 2 from Tarot]",
     "[table:d6][dice:1d6]",
-    "[entity:Person as P]",
+    "[mood:Calm as P]",
     "a \\[b\\] c \\\\ d",
     "path\\n here",
     "end\\",
@@ -156,13 +156,13 @@ describe("describeSlots", () => {
       slot("Goblins"),
       slot("3 unique Rumors"),
       slot("draw 1 from Tarokka"),
-      slot("entity:Person"),
+      slot("mood:Calm"),
       slot("table:d6"),
     );
     expect(table).toMatchObject({ ok: true, type: "table", display: "Goblins" });
     expect(count).toMatchObject({ ok: true, type: "table", display: "3 unique Rumors" });
     expect(draw).toMatchObject({ ok: true, type: "draw", display: "draw 1 from Tarokka" });
-    expect(unknown).toMatchObject({ ok: true, type: "unknown", display: "entity: Person" });
+    expect(unknown).toMatchObject({ ok: true, type: "unknown", display: "mood: Calm" });
     expect(explicit).toMatchObject({ ok: true, type: "table", display: "d6" });
   });
 

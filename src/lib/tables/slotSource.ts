@@ -11,6 +11,7 @@ import { MAX_PICKS } from "./parse";
 export type SlotChoice =
   | { type: "dice"; notation: string; label?: string }
   | { type: "table"; name: string; count: number; unique: boolean; label?: string }
+  | { type: "entity"; name: string; count: number; unique: boolean; label?: string }
   | { type: "draw"; source: string; count: number; label?: string }
   | { type: "ref"; label: string; field?: string };
 
@@ -24,6 +25,11 @@ export function buildSlotSource(choice: SlotChoice): string {
     case "table": {
       const count = choice.count !== 1 || choice.unique ? `${choice.count} ${choice.unique ? "unique " : ""}` : "";
       body = `table:${count}${choice.name.trim()}`;
+      break;
+    }
+    case "entity": {
+      const count = choice.count !== 1 || choice.unique ? `${choice.count} ${choice.unique ? "unique " : ""}` : "";
+      body = `entity:${count}${choice.name.trim()}`;
       break;
     }
     case "draw":
@@ -61,6 +67,9 @@ export function checkSlotChoice(choice: SlotChoice): string | null {
     }
     case "table":
       if (choice.name.trim() === "") return "Choose a table.";
+      return checkCount(choice.count, MAX_PICKS, "pick");
+    case "entity":
+      if (choice.name.trim() === "") return "Choose a smart collection or a tag.";
       return checkCount(choice.count, MAX_PICKS, "pick");
     case "draw":
       if (choice.source.trim() === "") return "Choose a deck, set or pool.";

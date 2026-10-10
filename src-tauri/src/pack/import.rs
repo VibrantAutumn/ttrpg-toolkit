@@ -12,7 +12,7 @@ use crate::db::campaigns::{self, Campaign};
 use crate::db::fields;
 use crate::db::tabs;
 use crate::db::{
-    cards, collections, documents, formulas, name_presets, play_decks, saved_draws, saved_rolls, settings, smart_collections, spreads, tables,
+    cards, collections, documents, formulas, generators, name_presets, play_decks, saved_draws, saved_rolls, settings, smart_collections, spreads, tables,
 };
 use rusqlite::{params, Connection, ErrorCode};
 use serde::de::DeserializeOwned;
@@ -70,6 +70,7 @@ pub struct ParsedPack {
     pub field_values: Vec<FieldValueRecord>,
     pub item_tabs: Vec<ItemTabRecord>,
     pub smart_collections: Vec<SmartCollectionRecord>,
+    pub generators: Vec<GeneratorRecord>,
     /// Plain-language notes about anything that had to be fixed or skipped.
     pub warnings: Vec<String>,
 }
@@ -104,6 +105,7 @@ impl ParsedPack {
             field_values: self.field_values.len() as u32,
             item_tabs: self.item_tabs.len() as u32,
             smart_collections: self.smart_collections.len() as u32,
+            generators: self.generators.len() as u32,
         }
     }
 }
@@ -207,6 +209,7 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         field_values: read_list(&mut archive, FIELD_VALUES_FILE, limits, &mut total)?,
         item_tabs: read_list(&mut archive, ITEM_TABS_FILE, limits, &mut total)?,
         smart_collections: read_list(&mut archive, SMART_COLLECTIONS_FILE, limits, &mut total)?,
+        generators: read_list(&mut archive, GENERATORS_FILE, limits, &mut total)?,
         warnings: Vec::new(),
     };
     sanitize(&mut pack);
@@ -763,6 +766,15 @@ fn sanitize(pack: &mut ParsedPack) {
     });
     note(before - pack.smart_collections.len(), "smart collection(s) belonged to something missing or were unreadable and were skipped.");
 
+    let before = pack.generators.len();
+    let mut seen = HashSet::new();
+    pack.generators.retain(|g| {
+        item_type.get(g.item_id.as_str()) == Some(&generators::GENERATOR_TYPE)
+            && generators::validate(&g.definition_json).is_ok()
+            && seen.insert(g.item_id.clone())
+    });
+    note(before - pack.generators.len(), "generator(s) belonged to something missing or were unreadable and were skipped.");
+
     let before = pack.item_field_sets.len();
     let mut seen = HashSet::new();
     pack.item_field_sets.retain(|a| {
@@ -1156,6 +1168,17 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
         tx.execute(
             "INSERT INTO smart_collections (item_id, query_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
             params![item_ids[&s.item_id], query_json, s.created_at, s.updated_at],
+        )
+        .map_err(db_error)?;
+    }
+    // A generator names a template (an item) and fields by id: point them at the imported copies.
+    let mut generator_ids = item_ids.clone();
+    generator_ids.extend(field_ids.iter().map(|(old, new)| (old.clone(), new.clone())));
+    for g in &pack.generators {
+        let definition_json = remapped_json(&g.definition_json, &generator_ids);
+        tx.execute(
+            "INSERT INTO generators (item_id, definition_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            params![item_ids[&g.item_id], definition_json, g.created_at, g.updated_at],
         )
         .map_err(db_error)?;
     }
