@@ -45,6 +45,8 @@ export interface DrawLogEntry extends EntryBase {
   /** What was drawn from: a set, deck or pool, or the deck in play itself (it may be deleted later). */
   sourceId: string;
   sourceName: string;
+  /** For a custom pool: the sets, decks, pools and filter sets it was made of; null for any other draw. */
+  sourceIds: string[] | null;
   /** The deck in play this came from, or null for a plain draw from a set, deck or pool. */
   playId: string | null;
   /** The spread this reading came from (it may be deleted later), or null for any other draw. */
@@ -96,7 +98,7 @@ export interface RollLog {
   roll(notation: string, seed?: number, label?: string): RollOutcome;
   /** Draws from `candidates` (a set, deck or pool's distinct cards) and logs the result. */
   drawFrom(
-    source: { id: string; name: string },
+    source: { id: string; name: string; sourceIds?: readonly string[] | null },
     candidates: readonly DrawCard[],
     options: DrawOptions,
     seed?: number,
@@ -105,6 +107,7 @@ export interface RollLog {
   logDraw(input: {
     sourceId: string;
     sourceName: string;
+    sourceIds?: readonly string[] | null;
     playId: string | null;
     /** For a spread reading: which spread, and each card's position name (same order as `cards`). */
     spreadId?: string | null;
@@ -244,6 +247,7 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
   function makeDrawEntry(input: {
     sourceId: string;
     sourceName: string;
+    sourceIds?: readonly string[] | null;
     playId: string | null;
     spreadId?: string | null;
     positions?: readonly string[] | null;
@@ -266,6 +270,7 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
       savedItemId: null,
       sourceId: input.sourceId,
       sourceName: input.sourceName,
+      sourceIds: input.sourceIds && input.sourceIds.length > 0 ? [...input.sourceIds] : null,
       playId: input.playId,
       spreadId: positions ? (input.spreadId ?? null) : null,
       positions,
@@ -292,6 +297,7 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
       const entry = makeDrawEntry({
         sourceId: source.id,
         sourceName: source.name,
+        sourceIds: source.sourceIds,
         playId: null,
         options: drawOptions,
         cards: drawn.cards,

@@ -59,6 +59,11 @@ export function installMockBackend(): void {
   add("worldbuilding", "document", "Castle Ravenloft");
   add("worldbuilding", "template", "NPC");
   add("worldbuilding", "smart_collection", "Living NPCs");
+  const mockCards = ["The Fool", "The Magician", "Two of Cups", "The Tower", "Ace of Swords"].map((n) => add("cards", "card", n));
+  add("cards", "deck", "Tarot");
+  add("cards", "set", "Major Arcana");
+  add("cards", "pool", "Omens");
+  add("cards", "spread", "Three-card reading");
 
   const folders: { id: string; projectId: string; library: string; parentId: string | null; name: string; createdAt: number; updatedAt: number; deletedAt: null }[] = [];
   const addFolder = (library: string, name: string) => {
@@ -96,6 +101,10 @@ export function installMockBackend(): void {
       createdAt: now,
       updatedAt: now,
     }),
+    list_collections: () => [...items.values()].filter((i) => i.library === "cards" && ["deck", "set", "pool"].includes(i.itemType)),
+    resolve_collection_cards: () => mockCards,
+    list_spreads: () =>
+      [...items.values()].filter((i) => i.itemType === "spread").map((i) => ({ itemId: i.id, name: i.name, positions: 3, ready: true })),
     list_items_of_type: (a) => live(String(a.library), String(a.itemType)),
     list_items: (a) => live(String(a.library)).filter((i) => i.folderId === (a.folderId ?? null)),
     get_item_fields: () => ({ setIds: [], values: [] }),

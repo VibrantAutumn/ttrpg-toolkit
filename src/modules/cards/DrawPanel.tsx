@@ -15,16 +15,25 @@ export function DrawPanel({
   sourceName,
   showResult = true,
   showHeading = true,
+  defaultCount = DEFAULT_DRAW_OPTIONS.count,
+  sourceIds,
+  loadCards,
 }: {
   sourceId: string;
   sourceName: string;
   showResult?: boolean;
   showHeading?: boolean;
+  /** How many cards the count box starts with. */
+  defaultCount?: number;
+  /** A custom pool: the sets, decks, pools and filter sets it is made of (kept in the log so "Draw again" works). */
+  sourceIds?: readonly string[];
+  /** Finds the cards in some other way than `resolveCollectionCards(sourceId)` (a custom pool). */
+  loadCards?: () => Promise<DrawCard[]>;
 }) {
   const dataVersion = useDataVersion();
   const log = useRollLog();
   const [cards, setCards] = useState<DrawCard[] | null>(null); // null while loading
-  const [countText, setCountText] = useState(String(DEFAULT_DRAW_OPTIONS.count));
+  const [countText, setCountText] = useState(String(defaultCount));
   const [repeats, setRepeats] = useState(DEFAULT_DRAW_OPTIONS.repeats);
   const [reversals, setReversals] = useState(DEFAULT_DRAW_OPTIONS.reversals);
   const [percentText, setPercentText] = useState(String(DEFAULT_DRAW_OPTIONS.reversalPercent));
@@ -32,13 +41,16 @@ export function DrawPanel({
 
   useEffect(() => {
     let active = true;
-    resolveCollectionCards(sourceId)
-      .then((list) => active && setCards(list.map((c) => ({ id: c.id, name: c.name }))))
-      .catch((e) => active && setError(String(e)));
+    const found = loadCards
+      ? loadCards()
+      : resolveCollectionCards(sourceId).then((list) => list.map((c) => ({ id: c.id, name: c.name })));
+    found.then((list) => active && setCards(list)).catch((e) => active && setError(String(e)));
     return () => {
       active = false;
     };
-  }, [sourceId, dataVersion]);
+    // `loadCards` is a new function every render; the ids say when the pool really changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceId, sourceIds?.join(","), dataVersion]);
 
   const latest = useMemo(
     () => log.find((e) => e.kind === "draw" && e.sourceId === sourceId),
@@ -47,7 +59,7 @@ export function DrawPanel({
 
   function draw() {
     if (!cards) return;
-    const outcome = rollLog.drawFrom({ id: sourceId, name: sourceName }, cards, {
+    const outcome = rollLog.drawFrom({ id: sourceId, name: sourceName, sourceIds }, cards, {
       // Empty or odd text becomes NaN, which the draw rejects with a clear message.
       count: countText.trim() === "" ? NaN : Number(countText),
       repeats,

@@ -7,6 +7,7 @@ import type { DiceLogEntry, DrawLogEntry, NameLogEntry, RollLogEntry, TableLogEn
 import { useCurrentProject } from "../../state/CurrentProject";
 import { bumpDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
+import { resolveCustomPool } from "../../state/customPool";
 import { drawFromPlayDeck } from "../../state/playActions";
 import { drawSpreadById } from "../../state/spreadActions";
 import { rollLog } from "../../state/rollLog";
@@ -87,9 +88,9 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
       return;
     }
     try {
-      const cards = await resolveCollectionCards(e.sourceId);
+      const cards = e.sourceIds ? await resolveCustomPool(e.sourceIds) : await resolveCollectionCards(e.sourceId);
       const outcome = rollLog.drawFrom(
-        { id: e.sourceId, name: e.sourceName },
+        { id: e.sourceId, name: e.sourceName, sourceIds: e.sourceIds },
         cards.map((c) => ({ id: c.id, name: c.name })),
         e.options,
       );

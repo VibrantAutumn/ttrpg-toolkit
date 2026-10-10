@@ -6,16 +6,16 @@ import { StarterDecks } from "./StarterDecks";
 
 /** The Cards tool: the library of cards, sets, decks, pools and saved draws, and a place to draw. */
 export function CardsScreen() {
-  const [tab, setTab] = useState<"library" | "draw">("library");
+  const [tab, setTab] = useState<"library" | "draw">("draw");
   return (
     <section>
       <h1>Cards</h1>
       <div className="row" role="tablist" aria-label="Cards sections">
-        <button role="tab" aria-selected={tab === "library"} className={tab === "library" ? "active" : undefined} onClick={() => setTab("library")}>
-          Library
-        </button>
         <button role="tab" aria-selected={tab === "draw"} className={tab === "draw" ? "active" : undefined} onClick={() => setTab("draw")}>
           Draw
+        </button>
+        <button role="tab" aria-selected={tab === "library"} className={tab === "library" ? "active" : undefined} onClick={() => setTab("library")}>
+          Library
         </button>
       </div>
       {/* Both stay mounted (just hidden) so the library keeps its folder and search. */}
