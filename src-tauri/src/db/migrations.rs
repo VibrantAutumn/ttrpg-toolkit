@@ -114,6 +114,16 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "create_item_tabs",
         sql: include_str!("../../migrations/0020_create_item_tabs.sql"),
     },
+    Migration {
+        version: 21,
+        name: "create_smart_collections",
+        sql: include_str!("../../migrations/0021_create_smart_collections.sql"),
+    },
+    Migration {
+        version: 22,
+        name: "search_field_values",
+        sql: include_str!("../../migrations/0022_search_field_values.sql"),
+    },
 ];
 
 #[derive(Debug)]

@@ -1,5 +1,6 @@
 import type { ModuleDefinition } from "../../registry/types";
 import { documentType } from "./documentType";
+import { smartCollectionType } from "./smartCollectionType";
 import { templateType } from "./templateType";
 import { WorldbuildingScreen } from "./WorldbuildingScreen";
 
@@ -15,7 +16,7 @@ export const worldbuildingModule: ModuleDefinition = {
       component: WorldbuildingScreen,
     },
   ],
-  itemTypes: [documentType, templateType],
+  itemTypes: [documentType, templateType, smartCollectionType],
   commands: [
     {
       id: "worldbuilding.open",

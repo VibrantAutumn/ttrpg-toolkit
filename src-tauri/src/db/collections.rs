@@ -4,11 +4,12 @@
 //! ladder, so a collection can never end up inside itself:
 //!   set  holds cards
 //!   deck holds cards and sets
-//!   pool holds cards, sets and decks
+//!   pool holds cards, sets, decks and smart collections (a saved query: the cards it finds)
 //! A card can be in any number of sets, decks and pools. Removal is soft (the row
 //! is kept with `deleted_at`, so it can sync later) and adding again revives it.
 
 use super::cards::{CARD_TYPE, DECK_TYPE, LIBRARY, POOL_TYPE, SET_TYPE};
+use super::smart_collections::{self, SMART_TYPE};
 use super::error::DbError;
 use super::items::{self, Item};
 use rusqlite::{params, Connection};
@@ -19,7 +20,7 @@ pub fn allowed_members(collection_type: &str) -> &'static [&'static str] {
     match collection_type {
         SET_TYPE => &[CARD_TYPE],
         DECK_TYPE => &[CARD_TYPE, SET_TYPE],
-        POOL_TYPE => &[CARD_TYPE, SET_TYPE, DECK_TYPE],
+        POOL_TYPE => &[CARD_TYPE, SET_TYPE, DECK_TYPE, SMART_TYPE],
         _ => &[],
     }
 }
@@ -60,7 +61,7 @@ pub fn add_member(conn: &Connection, collection_id: &str, member_id: &str, now: 
         return Err(DbError::Invalid(match collection.item_type.as_str() {
             SET_TYPE => "A set can only hold cards.",
             DECK_TYPE => "A deck can only hold cards and sets.",
-            _ => "A pool can only hold cards, sets and decks.",
+            _ => "A pool can only hold cards, sets, decks and smart collections.",
         }));
     }
 
@@ -180,6 +181,13 @@ fn collect_cards(
             if seen_cards.insert(member.id.clone()) {
                 cards.push(member);
             }
+        } else if member.item_type == SMART_TYPE {
+            // The cards its query finds right now, in the query's own order.
+            for card in smart_collections::run(conn, &member.id, super::now_ms(), Some(CARD_TYPE))?.items {
+                if seen_cards.insert(card.id.clone()) {
+                    cards.push(card);
+                }
+            }
         } else {
             collect_cards(conn, &member.id, seen_collections, seen_cards, cards)?;
         }
@@ -212,11 +220,11 @@ pub fn candidates(conn: &Connection, collection_id: &str) -> Result<Vec<Item>, D
     let placeholders = vec!["?"; allowed.len()].join(", ");
     let sql = format!(
         "SELECT {} FROM items i
-         WHERE i.campaign_id = ? AND i.library = ? AND i.deleted_at IS NULL AND i.id <> ?
+         WHERE i.campaign_id = ? AND (i.library = ? OR i.item_type = 'smart_collection') AND i.deleted_at IS NULL AND i.id <> ?
            AND i.item_type IN ({placeholders})
            AND NOT EXISTS (SELECT 1 FROM collection_members m
                            WHERE m.collection_id = ? AND m.member_id = i.id AND m.deleted_at IS NULL)
-         ORDER BY CASE i.item_type WHEN 'card' THEN 0 WHEN 'set' THEN 1 ELSE 2 END,
+         ORDER BY CASE i.item_type WHEN 'card' THEN 0 WHEN 'set' THEN 1 WHEN 'deck' THEN 2 ELSE 3 END,
                   i.name COLLATE NOCASE, i.created_at
          LIMIT 500",
         items::qualified_columns("i")

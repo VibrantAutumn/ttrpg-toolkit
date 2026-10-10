@@ -9,6 +9,7 @@ use crate::db::tabs;
 use crate::db::formulas;
 use crate::db::spreads::{self, PositionInput};
 use crate::db::name_presets;
+use crate::db::smart_collections;
 use crate::db::tables::{self, EntryInput, Pick};
 use crate::db::play_decks::{self, NewPlayDeck};
 use crate::db::saved_draws::{self, NewSavedDraw};
@@ -211,6 +212,12 @@ mind the [Rumors]".into(), weight: 1 },
     let removed = tabs::add_embed_tab(conn, &strahd.id, "Removed", None, 4840).unwrap();
     tabs::remove_tab(conn, &removed.id, 4850).unwrap();
 
+    // A smart collection (its query holds no ids here, so the whole campaign can be compared by
+    // content; a test of its own checks that real ids follow the import).
+    let elves = items::create(conn, c, "worldbuilding", "smart_collection", "Elves", None, 4900).unwrap();
+    let query = r#"{"version":1,"where":{"op":"all","not":false,"rules":[{"kind":"name","text":"elf","not":false}]},"sort":[{"by":"name","dir":"asc"}]}"#;
+    smart_collections::set_query(conn, &elves.id, query, 4910).unwrap();
+
     camp.id
 }
 
@@ -261,6 +268,7 @@ struct Snapshot {
     item_field_sets: Vec<String>,
     field_values: Vec<String>,
     item_tabs: Vec<String>,
+    smart_collections: Vec<String>,
 }
 
 fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
@@ -355,6 +363,9 @@ fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
              FROM item_tabs t JOIN items p ON p.id = t.parent_id
              LEFT JOIN items c ON c.id = t.child_id LEFT JOIN items g ON g.id = t.target_id
              WHERE p.campaign_id = ?1", campaign_id),
+        smart_collections: lines(conn,
+            "SELECT i.name, i.library, s.query_json, s.created_at, s.updated_at, i.deleted_at
+             FROM smart_collections s JOIN items i ON i.id = s.item_id WHERE i.campaign_id = ?1", campaign_id),
     }
 }
 
@@ -409,7 +420,7 @@ fn the_manifest_describes_the_pack() {
         // 2 formulas, 3 cards, a set, a deck, a pool, a saved draw, a deck in play, a spread, 2 tables and a name preset). 2 cards have details, 1 a picture, 7 membership rows.
         // 1 table has settings; the 2 tables have 4 entries in all (one deleted) and 2 entry tags (one removed).
         Counts {
-            folders: 3, items: 23, tags: 4, item_tags: 4, links: 5, documents: 5, saved_rolls: 2, formulas: 2,
+            folders: 3, items: 24, tags: 4, item_tags: 4, links: 5, documents: 5, saved_rolls: 2, formulas: 2,
             card_details: 2, collection_members: 7, card_images: 1, saved_draws: 1, play_decks: 1, spreads: 1, spread_positions: 3,
             random_tables: 1, table_entries: 4, table_entry_tags: 2, name_presets: 1,
             // 4 fields (one deleted), 2 sets (one deleted) with 3 member rows (one removed), 2 applied sets (one taken off),
@@ -417,6 +428,8 @@ fn the_manifest_describes_the_pack() {
             field_definitions: 4, field_sets: 2, field_set_members: 3, item_field_sets: 2, field_values: 4,
             // Strahd's 4 tabs (one removed): a nested document, an embed, an empty slot and the removed one.
             item_tabs: 4,
+            // The "Elves" smart collection.
+            smart_collections: 1,
         }
     );
     assert_eq!(pack.counts(), m.counts);
@@ -446,7 +459,7 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
         )
         .unwrap();
     assert_eq!(shared, 0);
-    assert_eq!(count(&conn, "items"), 46);
+    assert_eq!(count(&conn, "items"), 48);
 }
 
 #[test]
@@ -494,7 +507,7 @@ fn imported_items_remember_where_they_came_from() {
             .map(|r| r.unwrap())
             .collect()
     };
-    assert_eq!(rows.len(), 23);
+    assert_eq!(rows.len(), 24);
     for (name, origin_pack, origin_item) in rows {
         assert_eq!(origin_pack.as_deref(), Some(pack_id.as_str()), "{name}");
         // The origin id is the item's id in the ORIGINAL campaign.
@@ -866,7 +879,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
     assert!(pack.warnings.iter().all(|w| w.chars().next().unwrap().is_ascii_digit()));
     assert_eq!(
         pack.counts(),
-        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0 }
+        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0 }
     );
 
     let conn = open_in_memory();
@@ -987,7 +1000,7 @@ fn the_committed_version_1_pack_still_imports() {
     assert_eq!(result.campaign.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0 }
+        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0 }
     );
     let camp = result.campaign.id;
 
@@ -1849,6 +1862,88 @@ fn a_preset_follows_its_tables_and_tags_to_the_imported_copies() {
     // The original preset still points at the original tables.
     assert_eq!(preset_setup(&conn, &preset.id), setup);
     assert_eq!(search::search(&conn, &imported, "elven", Some("tables"), 10).unwrap().len(), 1);
+}
+
+#[test]
+fn a_smart_collections_query_follows_its_tags_folders_fields_and_items_to_the_imported_copies() {
+    let conn = open_in_memory();
+    let camp = campaigns::create(&conn, "Queries", 1).unwrap().id;
+    let people = folders::create(&conn, &camp, "worldbuilding", None, "People", 2).unwrap();
+    let elf = tags::create(&conn, &camp, None, "Elf", None, 3).unwrap();
+    let home = fields::create_definition(&conn, &camp, "Home", "link", "", r#"{"many":false}"#, 4).unwrap();
+    let mood = fields::create_definition(&conn, &camp, "Mood", "dropdown", "", r#"{"options":[{"id":"calm","label":"Calm","color":null}]}"#, 5).unwrap();
+    let ashgrove = items::create(&conn, &camp, "worldbuilding", "document", "Ashgrove", None, 6).unwrap();
+    let query = json!({
+        "version": 1,
+        "where": { "op": "all", "not": false, "rules": [
+            { "kind": "folder", "folderId": people.id, "subfolders": true, "not": false },
+            { "kind": "tag", "tagId": elf.id, "subtags": true, "not": false },
+            { "kind": "tag", "tagId": "a-tag-that-is-not-in-the-pack", "subtags": true, "not": true },
+            { "kind": "field", "fieldId": home.id, "test": { "check": "links", "itemId": ashgrove.id }, "not": false },
+            { "kind": "field", "fieldId": mood.id, "test": { "check": "choice", "optionIds": ["calm"] }, "not": false },
+            { "kind": "name", "text": "elf", "not": false }
+        ] },
+        "sort": [{ "by": "field", "fieldId": mood.id, "dir": "desc" }]
+    });
+    let collection = items::create(&conn, &camp, "worldbuilding", "smart_collection", "Calm elves", None, 7).unwrap();
+    smart_collections::set_query(&conn, &collection.id, &query.to_string(), 8).unwrap();
+
+    let imported = import_pack(&conn, &export_campaign(&conn, &camp, 5000).unwrap(), 6000).unwrap().campaign.id;
+    let find_item = |name: &str| items::list(&conn, &imported, "worldbuilding", None).unwrap().into_iter().find(|i| i.name == name).unwrap();
+    let new_collection = find_item("Calm elves");
+    assert_ne!(new_collection.id, collection.id);
+    let got: serde_json::Value = serde_json::from_str(&smart_collections::get(&conn, &new_collection.id).unwrap().query_json).unwrap();
+
+    let new_folder = folders::list(&conn, &imported, "worldbuilding").unwrap().into_iter().find(|f| f.name == "People").unwrap();
+    let new_tag = tags::list(&conn, &imported).unwrap().into_iter().find(|t| t.name == "Elf").unwrap();
+    let new_home = fields::list_definitions(&conn, &imported).unwrap().into_iter().find(|d| d.name == "Home").unwrap();
+    let new_mood = fields::list_definitions(&conn, &imported).unwrap().into_iter().find(|d| d.name == "Mood").unwrap();
+    let new_ashgrove = find_item("Ashgrove");
+    let rules = &got["where"]["rules"];
+    assert_eq!(rules[0]["folderId"], json!(new_folder.id));
+    assert_eq!(rules[1]["tagId"], json!(new_tag.id));
+    assert_eq!(rules[2]["tagId"], json!("a-tag-that-is-not-in-the-pack"));
+    assert_eq!(rules[3]["fieldId"], json!(new_home.id));
+    assert_eq!(rules[3]["test"]["itemId"], json!(new_ashgrove.id));
+    assert_eq!(rules[4]["fieldId"], json!(new_mood.id));
+    assert_eq!(rules[4]["test"]["optionIds"], json!(["calm"]), "a dropdown's choice ids are not item ids and stay as they were");
+    assert_eq!(rules[5]["text"], json!("elf"));
+    assert_eq!(got["sort"][0]["fieldId"], json!(new_mood.id));
+    // The original still points at the original.
+    let original: serde_json::Value = serde_json::from_str(&smart_collections::get(&conn, &collection.id).unwrap().query_json).unwrap();
+    assert_eq!(original, query);
+    // And the imported one runs.
+    assert!(smart_collections::run(&conn, &new_collection.id, 7000, None).is_ok());
+}
+
+#[test]
+fn bad_smart_collection_data_in_a_pack_is_skipped_with_warnings() {
+    let item = |id: &str, kind: &str| json!({
+        "id": id, "library": "worldbuilding", "itemType": kind, "name": id, "icon": null,
+        "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null
+    });
+    let record = |id: &str, query: &str| json!({ "itemId": id, "queryJson": query, "createdAt": 1, "updatedAt": 1 });
+    let good = smart_collections::EMPTY_QUERY;
+    let bytes = pack_with(&[
+        (ITEMS_FILE, json!([item("s", "smart_collection"), item("d", "document"), item("s2", "smart_collection"), item("s3", "smart_collection")])),
+        (SMART_COLLECTIONS_FILE, json!([
+            record("s", good),
+            record("s", good),                                                     // twice
+            record("d", good),                                                     // not a smart collection
+            record("ghost", good),                                                 // nothing there
+            record("s2", "nonsense"),                                              // unreadable
+            record("s3", r#"{"version":7,"where":{"op":"all","rules":[]}}"#),     // from a newer app
+        ])),
+    ]);
+    let pack = read_pack(&bytes).unwrap();
+    assert_eq!(pack.smart_collections.len(), 1);
+    assert_eq!(pack.smart_collections[0].item_id, "s");
+    assert!(pack.warnings.iter().any(|w| w.contains("smart collection")), "{:?}", pack.warnings);
+    // Items whose query was dropped still import; they read as the empty query.
+    let conn = open_in_memory();
+    let result = import_parsed(&conn, &pack, 10).unwrap();
+    let s2 = items::list(&conn, &result.campaign.id, "worldbuilding", None).unwrap().into_iter().find(|i| i.name == "s2").unwrap();
+    assert_eq!(smart_collections::get(&conn, &s2.id).unwrap().query_json, smart_collections::EMPTY_QUERY);
 }
 
 #[test]

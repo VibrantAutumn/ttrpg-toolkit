@@ -19,8 +19,8 @@ const WHAT: Record<string, { holds: string; empty: string }> = {
   set: { holds: "cards", empty: "This set is empty. Add some cards." },
   deck: { holds: "cards and sets", empty: "This deck is empty. Add cards and sets." },
   pool: {
-    holds: "cards, sets and decks",
-    empty: "This pool is empty. Add any mix of cards, sets and decks to draw from.",
+    holds: "cards, sets, decks and smart collections",
+    empty: "This pool is empty. Add any mix of cards, sets, decks and smart collections (saved searches, such as every card tagged Major Arcana) to draw from.",
   },
 };
 
@@ -109,7 +109,7 @@ export function CollectionEditor({ itemId, kind }: { itemId: string; kind: "set"
                 <button className="link name" onClick={() => openItem(m.id)}>
                   {cardTypeIcon(m.itemType)} {m.name}
                 </button>{" "}
-                <small className="meta">{m.itemType}</small>
+                <small className="meta">{m.itemType.replace("_", " ")}</small>
               </span>
               <button onClick={() => run(() => removeFromCollection(itemId, m.id))}>Remove</button>
             </li>
@@ -149,7 +149,7 @@ export function CollectionEditor({ itemId, kind }: { itemId: string; kind: "set"
                   {c.itemType === "card" && <CardThumb src={candidateThumbs.get(c.id)} name={c.name} />}
                   <span className="name">
                     {cardTypeIcon(c.itemType)} {c.name}{" "}
-                    <small className="meta">{c.itemType}</small>
+                    <small className="meta">{c.itemType.replace("_", " ")}</small>
                   </span>
                   <button onClick={() => run(() => addToCollection(itemId, c.id))}>Add</button>
                 </li>

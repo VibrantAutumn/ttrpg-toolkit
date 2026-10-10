@@ -15,6 +15,8 @@ use crate::db::items::{self, Item};
 use crate::db::formulas::{self, Formula, FormulaEntry};
 use crate::db::links;
 use crate::db::name_presets::{self, NamePreset, PresetEntry};
+use crate::db::query::{self, QueryResult};
+use crate::db::smart_collections::{self, SmartCollection};
 use crate::db::spreads::{self, PositionInput, Spread, SpreadEntry};
 use crate::db::starters::{self, InstallResult};
 use crate::db::table_starters::{self, TableInstallResult};
@@ -521,6 +523,32 @@ pub fn set_name_preset_setup(db: Db, item_id: String, setup_json: String) -> Res
 #[tauri::command]
 pub fn list_name_presets(db: Db, campaign_id: String) -> Result<Vec<PresetEntry>, String> {
     with_conn(&db, |c| name_presets::list(c, &campaign_id))
+}
+
+// ---- Queries and smart collections ----
+
+/// Runs a query (JSON text, read and checked by the engine) against a campaign. `only_type` keeps
+/// one kind of item. Used for the builder's live preview of a query that isn't saved yet.
+#[tauri::command]
+pub fn run_query(db: Db, campaign_id: String, query_json: String, only_type: Option<String>) -> Result<QueryResult, String> {
+    with_conn(&db, |c| query::run_json(c, &campaign_id, &query_json, db::now_ms(), only_type.as_deref()))
+}
+
+/// A smart collection's saved query (the empty query if none is saved yet).
+#[tauri::command]
+pub fn get_smart_collection(db: Db, item_id: String) -> Result<SmartCollection, String> {
+    with_conn(&db, |c| smart_collections::get(c, &item_id))
+}
+
+#[tauri::command]
+pub fn set_smart_collection_query(db: Db, item_id: String, query_json: String) -> Result<(), String> {
+    with_conn(&db, |c| smart_collections::set_query(c, &item_id, &query_json, db::now_ms()))
+}
+
+/// What a smart collection finds right now.
+#[tauri::command]
+pub fn run_smart_collection(db: Db, item_id: String, only_type: Option<String>) -> Result<QueryResult, String> {
+    with_conn(&db, |c| smart_collections::run(c, &item_id, db::now_ms(), only_type.as_deref()))
 }
 
 // ---- Content packs ----

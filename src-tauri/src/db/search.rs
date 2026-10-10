@@ -1,5 +1,5 @@
-//! Search over item names, their tags' names and document text, using the FTS5
-//! index that database triggers keep up to date (migrations 0004 and 0007).
+//! Search over item names, their tags' names, document text and field values, using the FTS5
+//! index that database triggers keep up to date (migrations 0004, 0007 and 0022).
 
 use super::error::DbError;
 use super::items::{self, Item};
@@ -23,7 +23,7 @@ fn fts_query(text: &str) -> Option<String> {
 }
 
 /// Live items in a campaign whose name, tag names or document text match `text`,
-/// best matches first (name matches outrank tag matches, which outrank text). Optionally limited to one
+/// best matches first (name matches outrank tag and field matches, which outrank text). Optionally limited to one
 /// library. Blank or punctuation-only input finds nothing.
 pub fn search(
     conn: &Connection,
@@ -42,7 +42,7 @@ pub fn search(
          WHERE search_index MATCH ?1
            AND i.campaign_id = ?2 AND i.deleted_at IS NULL
            AND (?3 IS NULL OR i.library = ?3)
-         ORDER BY bm25(search_index, 0.0, 10.0, 2.0, 1.0), i.name COLLATE NOCASE
+         ORDER BY bm25(search_index, 0.0, 10.0, 2.0, 1.0, 2.0), i.name COLLATE NOCASE
          LIMIT ?4"
     ))?;
     let rows = stmt.query_map(
@@ -284,6 +284,76 @@ mod tests {
         // New items still get indexed by the original triggers.
         let fresh = new_item(&conn, &camp.id, "w", "Fresh");
         assert_eq!(find(&conn, &camp.id, "fresh"), [fresh.name]);
+    }
+
+    fn text_value(conn: &Connection, item: &str, field: &str, text: &str, now: i64) {
+        use crate::db::fields::{self, ValueIndex};
+        let index = ValueIndex { sort_num: None, sort_text: Some(text.to_lowercase()), search_text: text.to_string() };
+        fields::set_value(conn, item, field, &serde_json::to_string(text).unwrap(), &index, false, now).unwrap();
+    }
+
+    #[test]
+    fn finds_items_by_what_their_fields_hold_and_follows_every_change() {
+        use crate::db::fields;
+        let (conn, camp) = setup();
+        let strahd = new_item(&conn, &camp, "w", "Strahd");
+        let other = new_item(&conn, &camp, "w", "Ireena");
+        let race = fields::create_definition(&conn, &camp, "Race", "text", "", "{}", 2).unwrap();
+        text_value(&conn, &strahd.id, &race.id, "Vampire lord of Barovia", 3);
+        assert_eq!(find(&conn, &camp, "vampire"), ["Strahd"]);
+        // words from the name and from a field can be asked for together
+        assert_eq!(find(&conn, &camp, "strahd barov"), ["Strahd"]);
+        assert!(find(&conn, &camp, "ireena vampire").is_empty());
+
+        // changing the value moves the match
+        text_value(&conn, &strahd.id, &race.id, "Wolf", 4);
+        assert!(find(&conn, &camp, "vampire").is_empty());
+        assert_eq!(find(&conn, &camp, "wolf"), ["Strahd"]);
+
+        // clearing it, deleting the field, and restoring the field
+        fields::clear_value(&conn, &strahd.id, &race.id, 5).unwrap();
+        assert!(find(&conn, &camp, "wolf").is_empty());
+        text_value(&conn, &strahd.id, &race.id, "Wolf", 6);
+        text_value(&conn, &other.id, &race.id, "Human", 6);
+        fields::delete_definition(&conn, &race.id, 7).unwrap();
+        assert!(find(&conn, &camp, "wolf").is_empty());
+        assert!(find(&conn, &camp, "human").is_empty());
+        fields::restore_definition(&conn, &race.id, 8).unwrap();
+        assert_eq!(find(&conn, &camp, "wolf"), ["Strahd"]);
+        assert_eq!(find(&conn, &camp, "human"), ["Ireena"]);
+
+        // a trashed item is hidden, and comes back
+        items::soft_delete(&conn, &strahd.id, 9).unwrap();
+        assert!(find(&conn, &camp, "wolf").is_empty());
+        trash::restore_item(&conn, &strahd.id, 10).unwrap();
+        assert_eq!(find(&conn, &camp, "wolf"), ["Strahd"]);
+        // and a name match still outranks a field match
+        let wolfram = new_item(&conn, &camp, "w", "Wolf pack");
+        assert_eq!(find(&conn, &camp, "wolf"), [wolfram.name, "Strahd".to_string()]);
+    }
+
+    #[test]
+    fn upgrading_indexes_the_field_values_that_are_already_there() {
+        use crate::db::fields;
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", true).unwrap();
+        migrate(&mut conn, &MIGRATIONS[..21]).unwrap();
+        let camp = campaigns::create(&conn, "Old", 1).unwrap();
+        let item = new_item(&conn, &camp.id, "w", "Legacy");
+        let field = fields::create_definition(&conn, &camp.id, "Motto", "text", "", "{}", 2).unwrap();
+        text_value(&conn, &item.id, &field.id, "Never yield", 3);
+        documents::set_body(&conn, &item.id, "Some old text", 4).unwrap();
+        let t = tags::create(&conn, &camp.id, None, "Heirloom", None, 5).unwrap();
+        tags::add_to_item(&conn, &item.id, &t.id, 6).unwrap();
+        assert!(find(&conn, &camp.id, "yield").is_empty(), "not searchable before the upgrade");
+
+        migrate(&mut conn, MIGRATIONS).unwrap();
+
+        assert_eq!(find(&conn, &camp.id, "yield"), ["Legacy"]);
+        // everything that was searchable still is
+        assert_eq!(find(&conn, &camp.id, "legacy"), ["Legacy"]);
+        assert_eq!(find(&conn, &camp.id, "heirloom"), ["Legacy"]);
+        assert_eq!(find(&conn, &camp.id, "old"), ["Legacy"]);
     }
 
     #[test]

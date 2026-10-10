@@ -1,0 +1,268 @@
+[
+  {
+    "version": 1,
+    "where": {
+      "op": "all",
+      "not": false,
+      "rules": []
+    },
+    "sort": [
+      {
+        "by": "name",
+        "dir": "asc"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "where": {
+      "op": "all",
+      "not": false,
+      "rules": [
+        {
+          "kind": "itemType",
+          "types": [
+            "document",
+            "template"
+          ],
+          "not": false
+        },
+        {
+          "kind": "library",
+          "libraries": [
+            "worldbuilding"
+          ],
+          "not": true
+        }
+      ]
+    },
+    "sort": [
+      {
+        "by": "name",
+        "dir": "asc"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "where": {
+      "op": "all",
+      "not": false,
+      "rules": [
+        {
+          "kind": "tag",
+          "tagId": "t1",
+          "subtags": true,
+          "not": false
+        },
+        {
+          "kind": "tag",
+          "tagId": "t2",
+          "subtags": false,
+          "not": true
+        }
+      ]
+    },
+    "sort": [
+      {
+        "by": "name",
+        "dir": "asc"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "where": {
+      "op": "all",
+      "not": false,
+      "rules": [
+        {
+          "kind": "folder",
+          "folderId": "f1",
+          "subfolders": false,
+          "not": false
+        },
+        {
+          "kind": "name",
+          "text": "Ash",
+          "not": false
+        },
+        {
+          "kind": "text",
+          "text": "wolf",
+          "not": true
+        }
+      ]
+    },
+    "sort": [
+      {
+        "by": "name",
+        "dir": "asc"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "where": {
+      "op": "all",
+      "not": false,
+      "rules": [
+        {
+          "kind": "linksTo",
+          "itemId": "i1",
+          "not": false
+        },
+        {
+          "kind": "linkedFrom",
+          "itemId": "i2",
+          "not": true
+        },
+        {
+          "kind": "changed",
+          "days": 14,
+          "not": false
+        }
+      ]
+    },
+    "sort": [
+      {
+        "by": "name",
+        "dir": "asc"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "where": {
+      "op": "all",
+      "not": false,
+      "rules": [
+        {
+          "kind": "field",
+          "fieldId": "a",
+          "test": {
+            "check": "contains",
+            "text": "x"
+          },
+          "not": false
+        },
+        {
+          "kind": "field",
+          "fieldId": "b",
+          "test": {
+            "check": "equals",
+            "text": "y"
+          },
+          "not": false
+        },
+        {
+          "kind": "field",
+          "fieldId": "c",
+          "test": {
+            "check": "number",
+            "cmp": ">=",
+            "value": 2.5
+          },
+          "not": false
+        },
+        {
+          "kind": "field",
+          "fieldId": "d",
+          "test": {
+            "check": "between",
+            "min": 1,
+            "max": 9
+          },
+          "not": true
+        },
+        {
+          "kind": "field",
+          "fieldId": "e",
+          "test": {
+            "check": "choice",
+            "optionIds": [
+              "x",
+              "y"
+            ]
+          },
+          "not": false
+        },
+        {
+          "kind": "field",
+          "fieldId": "f",
+          "test": {
+            "check": "links",
+            "itemId": "i3"
+          },
+          "not": false
+        },
+        {
+          "kind": "field",
+          "fieldId": "g",
+          "test": {
+            "check": "empty"
+          },
+          "not": true
+        }
+      ]
+    },
+    "sort": [
+      {
+        "by": "name",
+        "dir": "asc"
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "where": {
+      "op": "any",
+      "not": true,
+      "rules": [
+        {
+          "kind": "tag",
+          "tagId": "a",
+          "subtags": true,
+          "not": false
+        },
+        {
+          "op": "all",
+          "not": false,
+          "rules": [
+            {
+              "kind": "name",
+              "text": "b",
+              "not": false
+            },
+            {
+              "kind": "tag",
+              "tagId": "",
+              "subtags": true,
+              "not": false
+            }
+          ]
+        },
+        {
+          "op": "all",
+          "not": false,
+          "rules": []
+        }
+      ]
+    },
+    "sort": [
+      {
+        "by": "updated",
+        "dir": "desc"
+      },
+      {
+        "by": "field",
+        "fieldId": "c",
+        "dir": "asc"
+      },
+      {
+        "by": "type",
+        "dir": "asc"
+      }
+    ]
+  }
+]

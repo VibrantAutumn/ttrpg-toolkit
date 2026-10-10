@@ -11,10 +11,12 @@ pub mod links;
 pub mod migrations;
 pub mod name_presets;
 pub mod play_decks;
+pub mod query;
 pub mod saved_draws;
 pub mod saved_rolls;
 pub mod search;
 pub mod settings;
+pub mod smart_collections;
 pub mod spreads;
 pub mod starters;
 pub mod table_starters;
@@ -50,6 +52,7 @@ pub fn open(path: &Path) -> Result<Connection, MigrationError> {
 /// Settings and migrations every connection gets, real or test.
 fn init(mut conn: Connection) -> Result<Connection, MigrationError> {
     conn.pragma_update(None, "foreign_keys", true)?;
+    query::register_functions(&conn)?;
     migrations::migrate(&mut conn, migrations::MIGRATIONS)?;
     Ok(conn)
 }

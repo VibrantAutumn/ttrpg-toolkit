@@ -12,7 +12,7 @@ use crate::db::campaigns::{self, Campaign};
 use crate::db::fields;
 use crate::db::tabs;
 use crate::db::{
-    cards, collections, documents, formulas, name_presets, play_decks, saved_draws, saved_rolls, settings, spreads, tables,
+    cards, collections, documents, formulas, name_presets, play_decks, saved_draws, saved_rolls, settings, smart_collections, spreads, tables,
 };
 use rusqlite::{params, Connection, ErrorCode};
 use serde::de::DeserializeOwned;
@@ -69,6 +69,7 @@ pub struct ParsedPack {
     pub item_field_sets: Vec<ItemFieldSetRecord>,
     pub field_values: Vec<FieldValueRecord>,
     pub item_tabs: Vec<ItemTabRecord>,
+    pub smart_collections: Vec<SmartCollectionRecord>,
     /// Plain-language notes about anything that had to be fixed or skipped.
     pub warnings: Vec<String>,
 }
@@ -102,6 +103,7 @@ impl ParsedPack {
             item_field_sets: self.item_field_sets.len() as u32,
             field_values: self.field_values.len() as u32,
             item_tabs: self.item_tabs.len() as u32,
+            smart_collections: self.smart_collections.len() as u32,
         }
     }
 }
@@ -204,6 +206,7 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         item_field_sets: read_list(&mut archive, ITEM_FIELD_SETS_FILE, limits, &mut total)?,
         field_values: read_list(&mut archive, FIELD_VALUES_FILE, limits, &mut total)?,
         item_tabs: read_list(&mut archive, ITEM_TABS_FILE, limits, &mut total)?,
+        smart_collections: read_list(&mut archive, SMART_COLLECTIONS_FILE, limits, &mut total)?,
         warnings: Vec::new(),
     };
     sanitize(&mut pack);
@@ -751,6 +754,15 @@ fn sanitize(pack: &mut ParsedPack) {
     });
     note(before - pack.name_presets.len(), "name preset(s) belonged to something missing or were unreadable and were skipped.");
 
+    let before = pack.smart_collections.len();
+    let mut seen = HashSet::new();
+    pack.smart_collections.retain(|s| {
+        item_type.get(s.item_id.as_str()) == Some(&smart_collections::SMART_TYPE)
+            && smart_collections::validate(&s.query_json).is_ok()
+            && seen.insert(s.item_id.clone())
+    });
+    note(before - pack.smart_collections.len(), "smart collection(s) belonged to something missing or were unreadable and were skipped.");
+
     let before = pack.item_field_sets.len();
     let mut seen = HashSet::new();
     pack.item_field_sets.retain(|a| {
@@ -1130,6 +1142,20 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
         tx.execute(
             "INSERT INTO name_presets (item_id, setup_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
             params![item_ids[&p.item_id], setup_json, p.created_at, p.updated_at],
+        )
+        .map_err(db_error)?;
+    }
+    // A smart collection's query names tags, folders, fields and items by id: point them at the
+    // imported copies (ids that aren't in the pack are left alone, and then match nothing).
+    let mut query_ids = item_ids.clone();
+    query_ids.extend(tag_ids.iter().map(|(old, new)| (old.clone(), new.clone())));
+    query_ids.extend(folder_ids.iter().map(|(old, new)| (old.clone(), new.clone())));
+    query_ids.extend(field_ids.iter().map(|(old, new)| (old.clone(), new.clone())));
+    for s in &pack.smart_collections {
+        let query_json = remapped_json(&s.query_json, &query_ids);
+        tx.execute(
+            "INSERT INTO smart_collections (item_id, query_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            params![item_ids[&s.item_id], query_json, s.created_at, s.updated_at],
         )
         .map_err(db_error)?;
     }

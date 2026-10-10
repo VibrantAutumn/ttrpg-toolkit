@@ -3,9 +3,10 @@ import { FieldsManager } from "../../components/fields/FieldsManager";
 import { LibraryScreen } from "../../components/library/LibraryScreen";
 import { documentType } from "./documentType";
 import { NewFromTemplate } from "./NewFromTemplate";
+import { smartCollectionType } from "./smartCollectionType";
 import { templateType } from "./templateType";
 
-const itemTypes = [documentType, templateType];
+const itemTypes = [documentType, templateType, smartCollectionType];
 
 /** The Worldbuilding tool: the document library, and the fields (and field sets) any item can use. */
 export function WorldbuildingScreen() {
