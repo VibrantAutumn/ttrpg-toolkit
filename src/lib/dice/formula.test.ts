@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkFormula, describeParseError, QUICK_ROLLS } from "./formula";
-import { parseDice } from "./parse";
+import { checkFormula, describeParseError } from "./formula";
 
 describe("checkFormula", () => {
   it("accepts a good formula and keeps it as typed, minus outer spaces", () => {
@@ -31,27 +30,5 @@ describe("describeParseError", () => {
     expect(describeParseError({ message: "Unexpected \"x\"", position: 3 })).toBe(
       'Unexpected "x" (at character 4)',
     );
-  });
-});
-
-describe("QUICK_ROLLS", () => {
-  it("offers the usual dice, then advantage and disadvantage", () => {
-    expect(QUICK_ROLLS.map((q) => q.label)).toEqual([
-      "d4",
-      "d6",
-      "d8",
-      "d10",
-      "d12",
-      "d20",
-      "d100",
-      "d20 adv",
-      "d20 dis",
-    ]);
-  });
-
-  it("only contains notation the parser accepts", () => {
-    for (const q of QUICK_ROLLS) {
-      expect(parseDice(q.notation).ok, q.label).toBe(true);
-    }
   });
 });

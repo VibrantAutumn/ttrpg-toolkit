@@ -23,15 +23,3 @@ export function checkFormula(text: string): FormulaCheck {
   if (!parsed.ok) return { ok: false, message: describeParseError(parsed.error) };
   return { ok: true, notation };
 }
-
-export interface QuickRoll {
-  label: string;
-  notation: string;
-}
-
-/** The one-tap buttons on the roller. */
-export const QUICK_ROLLS: readonly QuickRoll[] = [
-  ...[4, 6, 8, 10, 12, 20, 100].map((sides) => ({ label: `d${sides}`, notation: `d${sides}` })),
-  { label: "d20 adv", notation: "d20 adv" },
-  { label: "d20 dis", notation: "d20 dis" },
-];

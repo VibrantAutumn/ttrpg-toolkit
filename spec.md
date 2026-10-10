@@ -72,7 +72,7 @@ Each tool has its own section in the app's navigation and its own library, organ
 | Maps | Maps | Folders, nested maps under their parent |
 | Calendar and timeline | Calendars, events, timelines | Folders |
 | Encounters | Encounters | Folders |
-| Dice | Saved formulas, custom dice | Folders |
+| Dice | Saved formulas | Folders |
 | GM screen | Layouts | List |
 
 **Every library item** has a UUID, name, icon, tags, a visibility setting, timestamps and a soft-delete flag. Every library supports folders, tags and search.
@@ -142,7 +142,7 @@ A ruleset contains:
 
 - **Stat block field sets** (character, monster, vehicle, or whatever the system needs).
 - **Encounter rules:** initiative type, statuses (name, effect notes, duration), which fields show in combat.
-- **Dice:** saved formulas and any custom dice the system uses.
+- **Dice:** saved formulas.
 - **Optional extras:** document templates (NPC, item) and random tables that suit the system.
 
 A project can use more than one ruleset (e.g. a main system plus a ship-combat subsystem).
@@ -229,7 +229,6 @@ One dice notation used everywhere: the roller, tables, stat blocks and encounter
 - **Pools:** count successes against a target (`6d10>=8`).
 - **Exploding:** reroll and add on max or a chosen value.
 - **Fate/Fudge:** `4dF`.
-- **Custom dice:** user-defined faces, including symbols, defined in a ruleset or project.
 - **Quick buttons** for common dice, plus saved named formulas ("Attack: 1d20+5").
 - **Readable results:** shows each die, which were kept or exploded, and the total.
 

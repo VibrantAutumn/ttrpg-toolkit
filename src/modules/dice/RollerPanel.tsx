@@ -1,18 +1,15 @@
 import { useState } from "react";
 import { RollLogList } from "../../components/results/RollLogList";
 import type { ResultKind } from "../../lib/results/rollLog";
-import { FormulaList } from "./FormulaList";
-import { RollControls } from "./RollControls";
+import { DiceRoller } from "./DiceRoller";
 
-/** The roller: a formula box, quick rolls, your formulas, and the roll log. */
+/** The roller (dice, formula box, saved formulas) and the roll log. */
 export function RollerPanel() {
   const [show, setShow] = useState<ResultKind | "all">("all");
 
   return (
     <div>
-      <RollControls />
-
-      <FormulaList />
+      <DiceRoller />
 
       <div className="row wrap">
         <h2 className="grow">Roll log</h2>

@@ -1017,7 +1017,31 @@ button.link {
 
 /* Dice: quick rolls, roll log and saved rolls */
 .quick-rolls {
-  margin-top: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.dice-roller .formula-box {
+  flex: 1 1 100%; /* the formula gets a whole line; the modifier and buttons wrap under it */
+}
+
+.dice-roller .modifier {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.dice-roller .modifier input {
+  flex: 0 0 5rem;
+  width: 5rem;
+}
+
+.dice-roller select {
+  max-width: 100%;
+}
+
+.dice-roller form,
+.dice-roller > .row {
+  margin-bottom: 0.5rem;
 }
 
 .roll-entry {

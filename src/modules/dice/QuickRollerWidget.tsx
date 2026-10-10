@@ -1,12 +1,6 @@
-import { FormulaList } from "./FormulaList";
-import { RollControls } from "./RollControls";
+import { DiceRoller } from "./DiceRoller";
 
-/** The quick tools panel's roller: a formula box, quick rolls, and your saved formulas. */
+/** The quick tools panel's roller: the same dice buttons, formula box and saved formulas as the Dice tool. */
 export function QuickRollerWidget() {
-  return (
-    <div>
-      <RollControls />
-      <FormulaList compact />
-    </div>
-  );
+  return <DiceRoller />;
 }
