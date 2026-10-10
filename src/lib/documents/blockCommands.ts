@@ -9,28 +9,31 @@ export interface BlockCommand {
   id: BlockCommandId;
   label: string;
   hint: string;
+  /** The heading the "/" menu shows it under (when nothing has been typed yet). */
+  group: string;
   /** Other words someone might type to find it. */
   keywords: string[];
 }
 
+// Listed by group, so the menu's headings are contiguous.
 export const BLOCK_COMMANDS: BlockCommand[] = [
-  { id: "text", label: "Text", hint: "Plain paragraph", keywords: ["paragraph", "plain", "normal"] },
-  { id: "h1", label: "Heading 1", hint: "Big section title", keywords: ["title", "h1"] },
-  { id: "h2", label: "Heading 2", hint: "Medium section title", keywords: ["subtitle", "h2"] },
-  { id: "h3", label: "Heading 3", hint: "Small section title", keywords: ["h3"] },
-  { id: "h4", label: "Heading 4", hint: "Smallest section title", keywords: ["h4"] },
-  { id: "bullet", label: "Bulleted list", hint: "A simple list", keywords: ["ul", "unordered", "points"] },
-  { id: "ordered", label: "Numbered list", hint: "A list with numbers", keywords: ["ol", "ordered", "steps"] },
-  { id: "quote", label: "Quote", hint: "Set text apart", keywords: ["blockquote"] },
-  { id: "code", label: "Code block", hint: "Text kept exactly as typed", keywords: ["monospace", "pre"] },
-  { id: "table", label: "Table", hint: "Rows and columns of text", keywords: ["grid", "rows", "spreadsheet"] },
-  { id: "columns2", label: "2 columns", hint: "Side by side", keywords: ["column", "layout", "split"] },
-  { id: "columns3", label: "3 columns", hint: "Three side by side", keywords: ["column", "layout"] },
-  { id: "callout", label: "Callout", hint: "A highlighted note", keywords: ["note", "info", "tip", "aside", "box"] },
-  { id: "warning", label: "Warning callout", hint: "A highlighted warning", keywords: ["alert", "caution", "danger"] },
-  { id: "toggle", label: "Toggle", hint: "A section that opens and closes", keywords: ["expand", "fold", "accordion", "details"] },
-  { id: "secret", label: "Secret", hint: "GM-only block", keywords: ["gm", "hidden", "private"] },
-  { id: "divider", label: "Divider", hint: "A line across the page", keywords: ["rule", "hr", "line", "separator"] },
+  { id: "text", label: "Text", hint: "Plain paragraph", group: "Basic blocks", keywords: ["paragraph", "plain", "normal"] },
+  { id: "h1", label: "Heading 1", hint: "Big section title", group: "Basic blocks", keywords: ["title", "h1"] },
+  { id: "h2", label: "Heading 2", hint: "Medium section title", group: "Basic blocks", keywords: ["subtitle", "h2"] },
+  { id: "h3", label: "Heading 3", hint: "Small section title", group: "Basic blocks", keywords: ["h3"] },
+  { id: "h4", label: "Heading 4", hint: "Smallest section title", group: "Basic blocks", keywords: ["h4"] },
+  { id: "quote", label: "Quote", hint: "Set text apart", group: "Basic blocks", keywords: ["blockquote"] },
+  { id: "code", label: "Code block", hint: "Text kept exactly as typed", group: "Basic blocks", keywords: ["monospace", "pre"] },
+  { id: "divider", label: "Divider", hint: "A line across the page", group: "Basic blocks", keywords: ["rule", "hr", "line", "separator"] },
+  { id: "bullet", label: "Bulleted list", hint: "A simple list", group: "Lists", keywords: ["ul", "unordered", "points"] },
+  { id: "ordered", label: "Numbered list", hint: "A list with numbers", group: "Lists", keywords: ["ol", "ordered", "steps"] },
+  { id: "table", label: "Table", hint: "Rows and columns of text", group: "Layout", keywords: ["grid", "rows", "spreadsheet"] },
+  { id: "columns2", label: "2 columns", hint: "Side by side", group: "Layout", keywords: ["column", "layout", "split"] },
+  { id: "columns3", label: "3 columns", hint: "Three side by side", group: "Layout", keywords: ["column", "layout"] },
+  { id: "toggle", label: "Toggle", hint: "A section that opens and closes", group: "Layout", keywords: ["expand", "fold", "accordion", "details"] },
+  { id: "callout", label: "Callout", hint: "A highlighted note", group: "Highlights", keywords: ["note", "info", "tip", "aside", "box"] },
+  { id: "warning", label: "Warning callout", hint: "A highlighted warning", group: "Highlights", keywords: ["alert", "caution", "danger"] },
+  { id: "secret", label: "Secret", hint: "GM-only block", group: "Highlights", keywords: ["gm", "hidden", "private"] },
 ];
 
 /** How well one typed word fits a command, lower is better; null = no match. */

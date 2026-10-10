@@ -29,6 +29,7 @@ export function installMockBackend(): void {
   const project = { id: "p1", name: "Curse of Strahd", createdAt: now, updatedAt: now, deletedAt: null };
   const items = new Map<string, MockItem>();
   const notations = new Map<string, string>();
+  const bodies = new Map<string, string>();
   let counter = 0;
 
   const add = (library: string, itemType: string, name: string, notation?: string): MockItem => {
@@ -71,6 +72,8 @@ export function installMockBackend(): void {
   add("worldbuilding", "document", "Ireena Kolyana").folderId = npcs.id;
   add("worldbuilding", "document", "Ismark the Lesser").folderId = npcs.id;
 
+  bodies.set("i4", ["# Strahd", "", "The lord of Barovia.", "", "- First", "- Second", "", "A closing line.", ""].join(String.fromCharCode(10)));
+
   const live = (library: string, itemType?: string) =>
     [...items.values()].filter((i) => i.deletedAt === null && i.library === library && (itemType === undefined || i.itemType === itemType));
 
@@ -96,7 +99,8 @@ export function installMockBackend(): void {
     list_items_of_type: (a) => live(String(a.library), String(a.itemType)),
     list_items: (a) => live(String(a.library)).filter((i) => i.folderId === (a.folderId ?? null)),
     get_item_fields: () => ({ setIds: [], values: [] }),
-    get_document_body: () => "",
+    get_document_body: (a) => bodies.get(String(a.itemId)) ?? "",
+    set_document_body: (a) => void bodies.set(String(a.itemId), String(a.body)),
     list_trash: () => ({ folders: [], items: [] }),
     list_folders: (a) => folders.filter((f) => f.library === String(a.library)),
     create_folder: (a) => addFolder(String(a.library), String(a.name)),

@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import { exitSuggestion, type SuggestionProps } from "@tiptap/suggestion";
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 
 /**
  * The popup menu behind the editor's "/" and "@" triggers. TipTap's suggestion plugin tells a
@@ -78,11 +78,14 @@ export function PickerMenu<T>({
   itemKey,
   row,
   hint,
+  group,
 }: {
   view: PickerView<T>;
   label: string;
   itemKey: (item: T) => string;
   row: (item: T) => ReactNode;
+  /** A heading to show above the first item of each group (only while nothing has been typed). */
+  group?: (item: T) => string;
   /** Shown when there is nothing to pick yet (for example before anything is typed). */
   hint?: string;
 }) {
@@ -95,18 +98,28 @@ export function PickerMenu<T>({
   return (
     <ul className="slash-menu" role="listbox" aria-label={label} style={style}>
       {view.items.length === 0 && <li className="picker-hint">{hint}</li>}
-      {view.items.map((item, i) => (
-        <li key={itemKey(item)} role="option" aria-selected={i === view.index}>
-          <button
-            type="button"
-            className={i === view.index ? "on" : ""}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => view.pick(item)}
-          >
-            {row(item)}
-          </button>
-        </li>
-      ))}
+      {view.items.map((item, i) => {
+        const heading = group && view.query.trim() === "" && (i === 0 || group(view.items[i - 1]) !== group(item)) ? group(item) : null;
+        return (
+          <Fragment key={itemKey(item)}>
+            {heading && (
+              <li className="picker-group" role="presentation">
+                {heading}
+              </li>
+            )}
+            <li role="option" aria-selected={i === view.index}>
+              <button
+                type="button"
+                className={i === view.index ? "on" : ""}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => view.pick(item)}
+              >
+                {row(item)}
+              </button>
+            </li>
+          </Fragment>
+        );
+      })}
     </ul>
   );
 }

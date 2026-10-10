@@ -148,37 +148,19 @@ button.link.name {
   position: relative;
 }
 
-.rich-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  padding: 0.35rem;
-  border: 1px solid var(--border);
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
-  background: var(--surface);
-}
-
-.rich-toolbar select {
-  min-height: 36px;
-}
-
-.rich-toolbar .tool {
+.rich-top .tool {
   min-width: 36px;
   min-height: 36px;
   padding: 0 0.5rem;
 }
 
-.rich-toolbar .tool.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+.rich-top {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
 }
 
-.rich-toolbar .tool:disabled {
+.rich-top .tool:disabled {
   opacity: 0.4;
 }
 
@@ -198,11 +180,12 @@ button.link.name {
   opacity: 0.8;
 }
 
+/* The writing surface: a clearly bordered box, with room on the left for the block handle. */
 .rich-text {
-  min-height: 50vh;
-  padding: 0.75rem;
+  min-height: 40vh;
+  padding: 0.75rem 0.75rem 3rem 2.75rem;
   border: 1px solid var(--border);
-  border-radius: 0 0 8px 8px;
+  border-radius: 8px;
   background: var(--surface);
   line-height: 1.6;
   overflow-wrap: anywhere;
@@ -211,6 +194,83 @@ button.link.name {
 .rich-text:focus {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+.rich-text p.is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+@media (max-width: 700px) {
+  .rich-text {
+    padding-left: 2.5rem;
+  }
+}
+
+/* The handle in the left gutter: "+" adds a block below, the grip drags it or opens its menu */
+.block-handle {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  z-index: 10;
+}
+
+.block-handle button {
+  min-width: 24px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  opacity: 0.45;
+  line-height: 1;
+}
+
+.block-handle button:hover,
+.block-handle button:focus-visible {
+  opacity: 1;
+  background: var(--surface);
+}
+
+.block-handle .block-grip {
+  cursor: grab;
+  letter-spacing: -0.2em;
+  font-size: 0.8rem;
+}
+
+.block-menu {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: 220px;
+  max-height: 320px;
+  padding: 0.25rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+.block-menu button {
+  min-height: 40px;
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+}
+
+.block-menu button:hover {
+  background: var(--bg);
+}
+
+.block-menu button.danger {
+  color: var(--danger);
 }
 
 .rich-text > :first-child {
@@ -559,6 +619,14 @@ button.link.name {
   outline: 2px solid var(--accent);
 }
 
+.slash-menu .picker-group {
+  padding: 0.5rem 0.5rem 0.15rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+}
+
 .slash-menu .picker-hint {
   padding: 0.5rem;
   font-size: 0.85rem;
@@ -642,7 +710,6 @@ button.link.name {
   background: var(--surface);
 }
 
-.rich-toolbar .tool.wide,
 .rich-context .tool.wide {
   min-height: 32px;
   font-size: 0.85rem;
@@ -1455,16 +1522,16 @@ input.narrow {
   display: flex;
   gap: 0.25rem;
   overflow-x: auto;
-  border-bottom: 2px solid var(--border);
+  overflow-y: hidden; /* no vertical scroll bar */
+  /* The line under the tabs is drawn inside, so the tabs need no negative margin to cover it. */
+  box-shadow: inset 0 -2px 0 var(--border);
 }
 
 .tab-strip .tab {
   flex: 0 0 auto;
   min-height: 40px;
-  margin-bottom: -2px;
   padding: 0 0.9rem;
   border: 2px solid transparent;
-  border-bottom: none;
   border-radius: 8px 8px 0 0;
   background: transparent;
   white-space: nowrap;
@@ -1474,7 +1541,7 @@ input.narrow {
   border-color: var(--border);
   background: var(--surface);
   font-weight: 600;
-  border-bottom: 2px solid var(--surface);
+  border-bottom-color: var(--surface);
 }
 
 .tab-strip .tab.add {
@@ -1891,8 +1958,54 @@ input.narrow {
   overflow-wrap: anywhere;
 }
 
+.page-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .page-icon {
   font-size: 0.9em;
+}
+
+.add-icon {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+}
+
+.section-toggle {
+  min-height: 32px;
+  padding: 0 0.25rem;
+  font-weight: 600;
+}
+
+.item-fields h2 {
+  margin: 0.5rem 0;
+  font-size: 1.1rem;
+}
+
+.page-title-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+.page-title-input:focus {
+  outline: none;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.page-title-input::placeholder {
+  opacity: 0.35;
 }
 
 .page-meta {

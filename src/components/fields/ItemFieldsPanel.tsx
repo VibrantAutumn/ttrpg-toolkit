@@ -5,10 +5,6 @@ import {
   deleteFieldDefinition,
   deleteFieldSet,
   getItemFields,
-  listDeletedFieldDefinitions,
-  listDeletedFieldSets,
-  restoreFieldDefinition,
-  restoreFieldSet,
   saveFieldValue,
   setFieldSecret,
   unapplyFieldSet,
@@ -16,7 +12,7 @@ import {
 } from "../../api/fields";
 import type { Item } from "../../api/library";
 import type { FieldDefinition } from "../../lib/fields/definition";
-import { fieldsToShow, type FieldSet, type ShownField } from "../../lib/fields/fieldSets";
+import { fieldsToShow, type ShownField } from "../../lib/fields/fieldSets";
 import { coerceValue, emptyValue, formatValue, isEmpty, type FieldValue } from "../../lib/fields/value";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useFieldCatalog } from "../../state/fieldCatalog";
@@ -40,6 +36,8 @@ export function ItemFieldsPanel({ item }: { item: Item }) {
   const [extraIds, setExtraIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [open, setOpen] = useState(true); // collapsible, but starts open like the tags
+  const [adding, setAdding] = useState(false); // the add controls behind the plus button
   const [editingField, setEditingField] = useState<string | "new" | null>(null);
   const [editingSet, setEditingSet] = useState<string | "new" | null>(null);
   const isTemplate = item.itemType === "template";
@@ -61,6 +59,8 @@ export function ItemFieldsPanel({ item }: { item: Item }) {
   // Properties picked with "Add a property" stay on the page until they have a value (and after).
   useEffect(() => {
     setExtraIds([]);
+    setOpen(true);
+    setAdding(false);
     setEditingField(null);
     setEditingSet(null);
   }, [item.id]);
@@ -122,14 +122,20 @@ export function ItemFieldsPanel({ item }: { item: Item }) {
 
   return (
     <section className="item-fields" aria-label="Properties">
-      <h2>Properties</h2>
+      <h2>
+        <button type="button" className="link section-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? "▾" : "▸"} Properties
+        </button>
+      </h2>
+      {open && (
+        <>
       {(error || catalog.error) && <p className="error">{error ?? catalog.error}</p>}
       {!data && !error && <p className="empty">Loading...</p>}
 
       {data && groups.length === 0 && (
         <p className="empty">
           {catalog.definitions.length === 0
-            ? "No properties yet. Use “New property” below to make one."
+            ? "No properties yet. Use the + below to make one."
             : "No properties on this page yet. Add a property set or a single property."}
         </p>
       )}
@@ -224,6 +230,11 @@ export function ItemFieldsPanel({ item }: { item: Item }) {
 
       {data && (
         <div className="row wrap">
+          <button type="button" className="add-icon" aria-label="Add a property" aria-expanded={adding} title="Add a property" onClick={() => setAdding(!adding)}>
+            ＋
+          </button>
+          {adding && (
+            <>
           {setsToAdd.length > 0 && (
             <select
               aria-label="Add a property set"
@@ -263,72 +274,13 @@ export function ItemFieldsPanel({ item }: { item: Item }) {
               New property set
             </button>
           )}
+            </>
+          )}
         </div>
       )}
-
-      <DeletedProperties projectId={item.projectId} showSets={isTemplate} onError={setError} />
+        </>
+      )}
     </section>
-  );
-}
-
-/** Properties (and, on templates, property sets) that were deleted, with a way to bring them back. */
-function DeletedProperties({ projectId, showSets, onError }: { projectId: string; showSets: boolean; onError: (message: string) => void }) {
-  const dataVersion = useDataVersion();
-  const [fields, setFields] = useState<FieldDefinition[]>([]);
-  const [sets, setSets] = useState<FieldSet[]>([]);
-
-  useEffect(() => {
-    let active = true;
-    Promise.all([listDeletedFieldDefinitions(projectId), showSets ? listDeletedFieldSets(projectId) : Promise.resolve([] as FieldSet[])])
-      .then(([f, s]) => {
-        if (!active) return;
-        setFields(f);
-        setSets(s);
-      })
-      .catch((e) => active && onError(String(e)));
-    return () => {
-      active = false;
-    };
-  }, [projectId, showSets, dataVersion, onError]);
-
-  async function restore(action: () => Promise<unknown>) {
-    try {
-      await action();
-      bumpDataVersion();
-    } catch (e) {
-      onError(String(e));
-    }
-  }
-
-  if (fields.length === 0 && sets.length === 0) return null;
-  return (
-    <details className="trash">
-      <summary>
-        Deleted properties{showSets ? " and sets" : ""} ({fields.length + sets.length})
-      </summary>
-      <ul className="list">
-        {fields.map((d) => (
-          <li key={d.id} className="row wrap">
-            <span className="grow">
-              {d.name} <span className="meta">property</span>
-            </span>
-            <button type="button" onClick={() => restore(() => restoreFieldDefinition(d.id))}>
-              Restore
-            </button>
-          </li>
-        ))}
-        {sets.map((s) => (
-          <li key={s.id} className="row wrap">
-            <span className="grow">
-              {s.name} <span className="meta">property set</span>
-            </span>
-            <button type="button" onClick={() => restore(() => restoreFieldSet(s.id))}>
-              Restore
-            </button>
-          </li>
-        ))}
-      </ul>
-    </details>
   );
 }
 

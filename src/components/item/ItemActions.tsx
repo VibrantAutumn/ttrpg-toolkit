@@ -3,6 +3,7 @@ import { listItemTags, listTags, type Item, type Tag } from "../../api/library";
 import { useDataVersion } from "../../state/dataVersion";
 import { useRenameItem } from "../../state/renameReview";
 import { ConfirmButton } from "../ConfirmButton";
+import { TagChips } from "../library/TagChips";
 import { TagEditor } from "../library/TagEditor";
 
 /**
@@ -14,13 +15,17 @@ export function ItemActions({
   item,
   run,
   deleteLabel = "Delete",
+  hideRename = false,
   onDelete,
   children,
 }: {
   item: Item;
   run: (action: () => Promise<unknown>) => Promise<void>;
   deleteLabel?: string;
-  onDelete: () => Promise<unknown>;
+  /** The page's own title is edited in place, so its Rename button is left out. */
+  hideRename?: boolean;
+  /** What the delete button does; without it there is no delete button (pages are deleted from the sidebar). */
+  onDelete?: () => Promise<unknown>;
   /** More buttons, drawn before the delete button. */
   children?: React.ReactNode;
 }) {
@@ -28,6 +33,7 @@ export function ItemActions({
   const dataVersion = useDataVersion();
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState("");
+  const [tagsOpen, setTagsOpen] = useState(true); // the Tags row is collapsible but starts open
   const [editingTags, setEditingTags] = useState(false);
   const [tags, setTags] = useState<Tag[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
@@ -87,29 +93,41 @@ export function ItemActions({
         </form>
       ) : (
         <div className="row wrap">
-          <button
-            onClick={() => {
-              setNewName(item.name);
-              setRenaming(true);
-            }}
-          >
-            Rename
+          <button type="button" className="link section-toggle" onClick={() => setTagsOpen(!tagsOpen)} aria-expanded={tagsOpen}>
+            {tagsOpen ? "▾" : "▸"} Tags
           </button>
-          <button onClick={toggleTagEditor} aria-expanded={editingTags}>
-            {editingTags ? "Done with tags" : "Tags"}
-          </button>
+          {tagsOpen && (
+            <>
+              <TagChips tags={tags} />
+              <button type="button" className="add-icon" aria-label="Add a tag" aria-expanded={editingTags} title="Add or remove tags" onClick={toggleTagEditor}>
+                ＋
+              </button>
+            </>
+          )}
+          {!hideRename && (
+            <button
+              onClick={() => {
+                setNewName(item.name);
+                setRenaming(true);
+              }}
+            >
+              Rename
+            </button>
+          )}
           {children}
-          <ConfirmButton
-            label={deleteLabel}
-            confirmLabel="Tap again to confirm"
-            onConfirm={() => {
-              setEditingTags(false);
-              void run(onDelete);
-            }}
-          />
+          {onDelete && (
+            <ConfirmButton
+              label={deleteLabel}
+              confirmLabel="Tap again to confirm"
+              onConfirm={() => {
+                setEditingTags(false);
+                void run(onDelete);
+              }}
+            />
+          )}
         </div>
       )}
-      {editingTags && <TagEditor projectId={item.projectId} itemId={item.id} itemTags={tags} allTags={allTags} run={runTags} />}
+      {tagsOpen && editingTags && <TagEditor projectId={item.projectId} itemId={item.id} itemTags={tags} allTags={allTags} run={runTags} />}
     </>
   );
 }

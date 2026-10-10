@@ -1,18 +1,20 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { DragHandle } from "@tiptap/extension-drag-handle-react";
 import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import type { Node as ProseNode } from "@tiptap/pm/model";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
+import { Placeholder } from "@tiptap/extensions";
 import StarterKit from "@tiptap/starter-kit";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import type { Item } from "../../api/library";
 import { itemIcon, itemTypeLabel, libraryLabel } from "../../components/item/itemDisplay";
-import { BLOCK_COMMANDS, type BlockCommand, type BlockCommandId } from "../../lib/documents/blockCommands";
+import { BLOCK_COMMANDS, type BlockCommand } from "../../lib/documents/blockCommands";
 import { canOpenExternally, normalizeLinkAddress } from "../../lib/documents/links";
 import { docToMarkdown, markdownToDoc } from "../../lib/documents/markdown";
 import type { DocNode } from "../../lib/documents/types";
 import { ancestorOf, CALLOUT_KINDS, Callout, Secret, Toggle, ToggleSummary, unwrapBlock } from "./containerNodes";
-import { addColumn, Column, Columns, columnsContext, deleteColumn, insertColumns, insideNode, MAX_COLUMNS, unwrapColumns } from "./layoutNodes";
+import { addColumn, Column, Columns, columnsContext, deleteColumn, insideNode, MAX_COLUMNS, unwrapColumns } from "./layoutNodes";
 import { createMention, type MentionSupport } from "./mentionNode";
 import { PickerMenu, usePickerMenu } from "./PickerMenu";
 import { RawMarkdown } from "./rawMarkdownNode";
@@ -23,20 +25,12 @@ export interface RichEditorHandle {
   commit(): void;
 }
 
-/** What the toolbar's Insert menu offers (the rest are on the toolbar already). */
-const INSERT_OPTIONS = BLOCK_COMMANDS.filter((c) => ["callout", "warning", "toggle", "secret", "table", "columns2", "columns3"].includes(c.id));
-
 // A table cell holds one paragraph (the Markdown table format has nothing more), and the first row is the header.
 const MarkdownCell = TableCell.extend({ content: "paragraph+" });
 const MarkdownHeader = TableHeader.extend({ content: "paragraph+" });
 
 /** True on a phone or tablet, where the system shows its own menu above a selection. */
 const touchScreen = () => typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches === true;
-
-const BLOCK_OPTIONS:{ value: string; label: string }[] = [
-  { value: "text", label: "Text" },
-  ...[1, 2, 3, 4, 5, 6].map((n) => ({ value: `h${n}`, label: `Heading ${n}` })),
-];
 
 /**
  * The rich text editor for a document: formatting buttons, a "/" menu for blocks, links.
@@ -75,6 +69,9 @@ export function RichEditor({
   const mentionMenu = usePickerMenu<Item>(() => editorRef.current);
 
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
+  // The block the handle in the gutter is next to (top-level blocks only), and its open menu.
+  const handleBlock = useRef<{ node: ProseNode; pos: number } | null>(null);
+  const [blockMenu, setBlockMenu] = useState<{ left: number; top: number; node: ProseNode; pos: number } | null>(null);
 
   const commit = useCallback(() => {
     window.clearTimeout(timer.current);
@@ -94,6 +91,7 @@ export function RichEditor({
         underline: false, // Markdown has no underline, so it would be lost on saving
         link: { openOnClick: false, autolink: false, linkOnPaste: true },
       }),
+      Placeholder.configure({ placeholder: "Type '/' for commands", includeChildren: true }),
       RawMarkdown,
       Table.configure({ resizable: false }),
       TableRow,
@@ -179,12 +177,6 @@ export function RichEditor({
 
   if (!editor || !ui) return null;
 
-  function setBlock(value: string) {
-    const chain = editor!.chain().focus();
-    if (value === "text") chain.setParagraph().run();
-    else chain.setHeading({ level: Number(value.slice(1)) as 1 | 2 | 3 | 4 | 5 | 6 }).run();
-  }
-
   function applyLink(draft: string) {
     const href = normalizeLinkAddress(draft);
     const chain = editor!.chain().focus();
@@ -200,67 +192,60 @@ export function RichEditor({
 
   const run = () => editor.chain().focus();
 
+  const closeBlockMenu = () => setBlockMenu(null);
+
+  /** The "+" in the gutter: a new empty block under this one, with the "/" menu open. */
+  function addBlockBelow() {
+    const block = handleBlock.current;
+    if (!block) return;
+    const at = block.pos + block.node.nodeSize;
+    editor
+      .chain()
+      .insertContentAt(at, { type: "paragraph", content: [{ type: "text", text: "/" }] })
+      .focus(at + 2)
+      .run();
+  }
+
+  function openBlockMenu(button: HTMLElement) {
+    const block = handleBlock.current;
+    if (!block) return;
+    const rect = button.getBoundingClientRect();
+    setBlockMenu({ left: Math.max(8, Math.min(rect.right + 4, window.innerWidth - 228)), top: Math.min(rect.top, window.innerHeight - 320), ...block });
+  }
+
+  const TURN_INTO_TYPES = ["paragraph", "heading", "bulletList", "orderedList", "blockquote", "codeBlock"];
+
+  function turnBlockInto(menu: NonNullable<typeof blockMenu>, command: BlockCommand) {
+    closeBlockMenu();
+    // Select the block first; the commands act on the blocks the selection touches. Lists and
+    // quotes are first taken apart into plain paragraphs, so "Turn into Heading" changes the
+    // whole thing and "Turn into Bulleted list" on a list stays a list.
+    const container = ["bulletList", "orderedList", "blockquote"].includes(menu.node.type.name);
+    if (container) {
+      const sizeBefore = editor.state.doc.content.size;
+      editor.chain().setTextSelection({ from: menu.pos + 1, to: menu.pos + menu.node.nodeSize - 1 }).clearNodes().run();
+      // The pieces are now plain paragraphs filling the same place (a different size): select them all again.
+      const end = menu.pos + menu.node.nodeSize + (editor.state.doc.content.size - sizeBefore);
+      editor.chain().setTextSelection({ from: menu.pos + 1, to: end - 1 }).run();
+    } else {
+      editor.chain().setTextSelection(menu.pos + 1).run();
+    }
+    runBlockCommand(editor, command.id);
+  }
+
+  function duplicateBlock(menu: NonNullable<typeof blockMenu>) {
+    closeBlockMenu();
+    editor.chain().focus().insertContentAt(menu.pos + menu.node.nodeSize, menu.node.toJSON()).run();
+  }
+
+  function deleteBlock(menu: NonNullable<typeof blockMenu>) {
+    closeBlockMenu();
+    editor.chain().focus().deleteRange({ from: menu.pos, to: menu.pos + menu.node.nodeSize }).run();
+  }
+
   return (
     <div className="rich-editor">
-      <div className="rich-toolbar" role="toolbar" aria-label="Formatting">
-        <select aria-label="Block type" value={ui.block} onChange={(e) => setBlock(e.currentTarget.value)}>
-          {BLOCK_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <ToolButton label="Bold" active={ui.bold} onClick={() => run().toggleBold().run()}>
-          <strong>B</strong>
-        </ToolButton>
-        <ToolButton label="Italic" active={ui.italic} onClick={() => run().toggleItalic().run()}>
-          <em>I</em>
-        </ToolButton>
-        <ToolButton label="Strikethrough" active={ui.strike} onClick={() => run().toggleStrike().run()}>
-          <s>S</s>
-        </ToolButton>
-        <ToolButton label="Inline code" active={ui.code} onClick={() => run().toggleCode().run()}>
-          {"</>"}
-        </ToolButton>
-        <ToolButton label="Link" active={ui.link} onClick={() => setLinkDraft(ui.linkHref)}>
-          🔗
-        </ToolButton>
-        <ToolButton label="Bulleted list" active={ui.bullet} onClick={() => run().toggleBulletList().run()}>
-          •≡
-        </ToolButton>
-        <ToolButton label="Numbered list" active={ui.ordered} onClick={() => run().toggleOrderedList().run()}>
-          1≡
-        </ToolButton>
-        <ToolButton label="Quote" active={ui.quote} onClick={() => run().toggleBlockquote().run()}>
-          ❝
-        </ToolButton>
-        <ToolButton label="Code block" active={ui.codeBlock} onClick={() => run().toggleCodeBlock().run()}>
-          {"{ }"}
-        </ToolButton>
-        <ToolButton label="Table" active={ui.inTable} onClick={() => runBlockCommand(editor, "table")}>
-          ▦
-        </ToolButton>
-        <ToolButton label="Columns" active={ui.columnCount > 0} onClick={() => insertColumns(editor, 2)}>
-          ◫
-        </ToolButton>
-        <select
-          aria-label="Insert a block"
-          value=""
-          onChange={(e) => {
-            const id = e.currentTarget.value as BlockCommandId;
-            if (id) runBlockCommand(editor, id);
-          }}
-        >
-          <option value="">Insert…</option>
-          {INSERT_OPTIONS.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-        <ToolButton label="Divider" onClick={() => runBlockCommand(editor, "divider")}>
-          ―
-        </ToolButton>
+      <div className="rich-top">
         <ToolButton label="Undo" disabled={!ui.canUndo} onClick={() => run().undo().run()}>
           ↶
         </ToolButton>
@@ -268,7 +253,6 @@ export function RichEditor({
           ↷
         </ToolButton>
       </div>
-
       {linkDraft !== null ? (
         <form
           className="rich-link-form row"
@@ -425,11 +409,42 @@ export function RichEditor({
       </BubbleMenu>
 
       <EditorContent editor={editor} />
+      <DragHandle
+        editor={editor}
+        className="block-handle"
+        onNodeChange={({ node, pos }) => {
+          handleBlock.current = node && pos >= 0 ? { node, pos } : null;
+        }}
+      >
+        <button type="button" className="block-add" aria-label="Add a block below" title="Add a block below" onClick={addBlockBelow}>
+          +
+        </button>
+        <button
+          type="button"
+          className="block-grip"
+          aria-label="Block options (drag to move)"
+          title="Drag to move, click for options"
+          onClick={(e) => openBlockMenu(e.currentTarget)}
+        >
+          ⋮⋮
+        </button>
+      </DragHandle>
+      {blockMenu && (
+        <BlockMenu
+          menu={blockMenu}
+          canTurnInto={TURN_INTO_TYPES.includes(blockMenu.node.type.name)}
+          onTurnInto={(c) => turnBlockInto(blockMenu, c)}
+          onDuplicate={() => duplicateBlock(blockMenu)}
+          onDelete={() => deleteBlock(blockMenu)}
+          onClose={closeBlockMenu}
+        />
+      )}
       {slashMenu.view && (
         <PickerMenu
           view={slashMenu.view}
           label="Insert a block"
           itemKey={(c) => c.id}
+          group={(c) => c.group}
           row={(c) => (
             <>
               <strong>{c.label}</strong>
@@ -492,5 +507,73 @@ function ToolButton({
     >
       {children}
     </button>
+  );
+}
+
+/** The menu behind a block's grip: turn it into another block, duplicate it, or delete it. */
+function BlockMenu({
+  menu,
+  canTurnInto,
+  onTurnInto,
+  onDuplicate,
+  onDelete,
+  onClose,
+}: {
+  menu: { left: number; top: number };
+  canTurnInto: boolean;
+  onTurnInto: (command: BlockCommand) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [turning, setTurning] = useState(false);
+
+  useEffect(() => {
+    const away = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) onClose();
+    };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("pointerdown", away, true);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", away, true);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [onClose]);
+
+  const turnOptions = BLOCK_COMMANDS.filter((c) => ["text", "h1", "h2", "h3", "h4", "bullet", "ordered", "quote", "code"].includes(c.id));
+
+  return (
+    <div ref={ref} className="block-menu" role="menu" aria-label="Block options" style={{ left: menu.left, top: menu.top }}>
+      {turning ? (
+        <>
+          <button type="button" role="menuitem" onClick={() => setTurning(false)}>
+            ← Back
+          </button>
+          {turnOptions.map((c) => (
+            <button key={c.id} type="button" role="menuitem" onClick={() => onTurnInto(c)}>
+              {c.label}
+            </button>
+          ))}
+        </>
+      ) : (
+        <>
+          {canTurnInto && (
+            <button type="button" role="menuitem" onClick={() => setTurning(true)}>
+              Turn into…
+            </button>
+          )}
+          <button type="button" role="menuitem" onClick={onDuplicate}>
+            Duplicate
+          </button>
+          <button type="button" role="menuitem" className="danger" onClick={onDelete}>
+            Delete
+          </button>
+        </>
+      )}
+    </div>
   );
 }

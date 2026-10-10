@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { addDocumentTab, addEmbedTab, type Tab } from "../../api/tabs";
+import { addDocumentTab, addEmbedTab, updateEmbedTab, type Tab } from "../../api/tabs";
+import { useRenameItem } from "../../state/renameReview";
 import { itemIcon } from "./itemDisplay";
 import { LinkPicker } from "./LinkPicker";
 
@@ -26,6 +27,7 @@ export function TabStrip({
   onSelect,
   onChanged,
   canAdd,
+  onRenamed,
 }: {
   parentId: string;
   projectId: string;
@@ -36,7 +38,11 @@ export function TabStrip({
   /** Called after a tab was added (so the page reloads its tabs), with the new tab. */
   onChanged: (added: Tab) => void;
   canAdd: boolean;
+  /** Called after a tab was renamed (so the page reloads its tabs). */
+  onRenamed: () => void;
 }) {
+  const renameReviewed = useRenameItem();
+  const [renaming, setRenaming] = useState<{ tab: Tab; name: string } | null>(null);
   const [adding, setAdding] = useState<Adding>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +78,12 @@ export function TabStrip({
             aria-selected={selected === tab.id}
             className={selected === tab.id ? "tab active" : "tab"}
             onClick={() => onSelect(tab.id)}
+            title="Right-click to rename"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              onSelect(tab.id);
+              setRenaming({ tab, name: tabLabel(tab) });
+            }}
           >
             {tabIcon(tab)} {tabLabel(tab)}
           </button>
@@ -82,6 +94,36 @@ export function TabStrip({
           </button>
         )}
       </div>
+
+      {renaming && (
+        <form
+          className="tab-menu row wrap"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const { tab, name: newName } = renaming;
+            const rename = tab.kind === "document" && tab.item ? () => renameReviewed(tab.item!, newName) : () => updateEmbedTab(tab.id, newName, tab.item?.id ?? null);
+            rename()
+              .then(() => {
+                setRenaming(null);
+                setError(null);
+                onRenamed();
+              })
+              .catch((err) => setError(String(err)));
+          }}
+        >
+          <input
+            value={renaming.name}
+            onChange={(e) => setRenaming({ ...renaming, name: e.currentTarget.value })}
+            aria-label="New name for the tab"
+            autoFocus
+            onKeyDown={(e) => e.key === "Escape" && setRenaming(null)}
+          />
+          <button type="submit">Save name</button>
+          <button type="button" onClick={() => setRenaming(null)}>
+            Cancel
+          </button>
+        </form>
+      )}
 
       {adding === "menu" && (
         <div className="tab-menu row wrap">

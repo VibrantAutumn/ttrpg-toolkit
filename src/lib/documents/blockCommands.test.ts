@@ -13,6 +13,16 @@ describe("filterBlockCommands", () => {
     expect(new Set(BLOCK_COMMANDS.map((c) => c.id)).size).toBe(BLOCK_COMMANDS.length);
   });
 
+  it("keeps each group together, so the menu's headings are not repeated", () => {
+    const seen: string[] = [];
+    for (const c of BLOCK_COMMANDS) {
+      if (seen[seen.length - 1] !== c.group) {
+        expect(seen).not.toContain(c.group);
+        seen.push(c.group);
+      }
+    }
+  });
+
   it("matches the start of the label, case-insensitively", () => {
     expect(ids("QUO")).toEqual(["quote"]);
   });

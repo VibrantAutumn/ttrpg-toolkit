@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { deleteItem, getItem, listFolders, listItemTags, restoreItem, type Folder, type Item, type Tag } from "../../api/library";
+import { getItem, listFolders, listItemTags, restoreItem, type Folder, type Item, type Tag } from "../../api/library";
 import { listTabs, moveTab, removeTab, type Tab } from "../../api/tabs";
 import { registry } from "../../registry";
+import { useRenameItem } from "../../state/renameReview";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { folderPath } from "../library/helpers";
 import { TagChips } from "../library/TagChips";
@@ -125,15 +126,12 @@ export function ItemPage({ pageId, openTab, onBack }: { pageId: string; openTab:
         </>
       ) : (
         <>
-          <h1 className="page-title">
-            <span className="page-icon" aria-hidden="true">
-              {itemIcon(item)}
-            </span>{" "}
-            {item.name}
-          </h1>
-          <p className="meta page-meta">
-            {itemTypeLabel(item)} <TagChips tags={tags} />
-          </p>
+          <InlineTitle item={item} readOnly={trashed} run={run} />
+          {!canHaveTabs && (
+            <p className="meta page-meta">
+              {itemTypeLabel(item)} <TagChips tags={tags} />
+            </p>
+          )}
           {error && <p className="error">{error}</p>}
 
           {trashed ? (
@@ -141,7 +139,7 @@ export function ItemPage({ pageId, openTab, onBack }: { pageId: string; openTab:
               This {itemTypeLabel(item).toLowerCase()} is in the trash. <button onClick={() => run(() => restoreItem(item.id))}>Restore</button>
             </p>
           ) : (
-            <ItemActions item={item} run={run} onDelete={() => deleteItem(item.id)} />
+            <ItemActions item={item} run={run} hideRename />
           )}
 
           {!trashed && canHaveTabs && (
@@ -156,6 +154,7 @@ export function ItemPage({ pageId, openTab, onBack }: { pageId: string; openTab:
                 void run(async () => undefined);
               }}
               canAdd
+              onRenamed={() => void run(async () => undefined)}
             />
           )}
 
@@ -176,5 +175,49 @@ export function ItemPage({ pageId, openTab, onBack }: { pageId: string; openTab:
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * The page's big title, edited in place (like Notion). The name is saved when you press Enter or
+ * leave the box; Esc puts the old name back. Renaming goes through the same review as the Rename
+ * button used to (a table's name is used by slots in other entries).
+ */
+function InlineTitle({ item, readOnly, run }: { item: Item; readOnly: boolean; run: (action: () => Promise<unknown>) => Promise<void> }) {
+  const renameReviewed = useRenameItem();
+  const [draft, setDraft] = useState(item.name);
+  useEffect(() => setDraft(item.name), [item.name]);
+
+  function save() {
+    const name = draft.trim();
+    if (name === "" || name === item.name) {
+      setDraft(item.name);
+      return;
+    }
+    void run(() => renameReviewed(item, name));
+  }
+
+  return (
+    <h1 className="page-title">
+      <span className="page-icon" aria-hidden="true">
+        {itemIcon(item)}
+      </span>
+      <input
+        className="page-title-input"
+        value={draft}
+        readOnly={readOnly}
+        aria-label="Title"
+        placeholder="Untitled"
+        onChange={(e) => setDraft(e.currentTarget.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          else if (e.key === "Escape") {
+            setDraft(item.name);
+            e.currentTarget.blur();
+          }
+        }}
+      />
+    </h1>
   );
 }

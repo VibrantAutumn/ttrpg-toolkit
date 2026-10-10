@@ -17,6 +17,8 @@
     "@tauri-apps/plugin-opener": "^2",
     "@tiptap/core": "^3.31.4",
     "@tiptap/extension-document": "^3.31.4",
+    "@tiptap/extension-drag-handle": "^3.31.4",
+    "@tiptap/extension-drag-handle-react": "^3.31.4",
     "@tiptap/extension-hard-break": "^3.31.4",
     "@tiptap/extension-paragraph": "^3.31.4",
     "@tiptap/extension-table": "^3.31.4",
