@@ -30,7 +30,7 @@ const numberOrNull = (text: string): number | null => {
 type Of<K extends FieldKind> = Extract<FieldDefinition, { kind: K }>;
 
 /**
- * Makes a field or changes one. The kind can only be chosen when making it (changing it later
+ * Makes a property or changes one. The kind can only be chosen when making it (changing it later
  * could leave saved values that don't fit). Problems are listed in plain words before anything
  * is saved.
  */
@@ -42,7 +42,8 @@ export function FieldDefinitionForm({
 }: {
   projectId: string;
   initial: FieldDefinition | null;
-  onDone: () => void;
+  /** Called after saving, with the id of the property that was made or changed. */
+  onDone: (savedId?: string) => void;
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState<FieldDefinition>(initial ?? newDefinition("text", "", ""));
@@ -64,7 +65,7 @@ export function FieldDefinitionForm({
       // A dropdown's values sort and search by its choices, and a removed choice clears them.
       if (initial && saved.kind === "dropdown") await refreshFieldValues(saved);
       bumpDataVersion();
-      onDone();
+      onDone(saved.id);
     } catch (err) {
       setProblems([String(err)]);
     } finally {
@@ -74,7 +75,7 @@ export function FieldDefinitionForm({
 
   return (
     <form className="field-form" onSubmit={submit}>
-      <h3>{initial ? `Change “${initial.name}”` : "New field"}</h3>
+      <h3>{initial ? `Change “${initial.name}”` : "New property"}</h3>
       <label>
         Name
         <input
@@ -175,7 +176,7 @@ export function FieldDefinitionForm({
       )}
       <div className="row">
         <button type="submit" disabled={saving}>
-          {initial ? "Save changes" : "Make field"}
+          {initial ? "Save changes" : "Make property"}
         </button>
         <button type="button" onClick={onCancel}>
           Cancel

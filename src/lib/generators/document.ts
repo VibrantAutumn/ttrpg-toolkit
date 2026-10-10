@@ -130,7 +130,7 @@ export function buildDocument(
         const fieldId = row.target.fieldId;
         const field = fields.find((f) => f.id === fieldId);
         if (!field) {
-          warnings.push(`“${label}” fills a field that no longer exists, so it was left out.`);
+          warnings.push(`“${label}” fills a property that no longer exists, so it was left out.`);
           break;
         }
         const candidate = candidateFor(field, generated);

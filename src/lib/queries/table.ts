@@ -34,7 +34,7 @@ export function columnLabel(column: Column, definitions: FieldDefinition[]): str
     case "updated":
       return "Changed";
     case "field":
-      return definitions.find((d) => d.id === column.fieldId)?.name ?? "(missing field)";
+      return definitions.find((d) => d.id === column.fieldId)?.name ?? "(missing property)";
   }
 }
 

@@ -98,12 +98,12 @@ export function InsertSlotMenu({
       {(kind === "table" || kind === "entity" || kind === "draw") && (
         <>
           <label className="field">
-            <span>{kind === "table" ? "Table" : kind === "entity" ? "Smart collection or tag" : "Deck, set or pool"}</span>
+            <span>{kind === "table" ? "Table" : kind === "entity" ? "Filter set or tag" : "Deck, set or pool"}</span>
             <input
               value={name}
               onChange={(e) => setName(e.currentTarget.value)}
               list={listId}
-              placeholder={kind === "table" ? "Choose or type a table name" : kind === "entity" ? "Documents from a smart collection or tag" : "Choose or type a name"}
+              placeholder={kind === "table" ? "Choose or type a table name" : kind === "entity" ? "Documents from a filter set or tag" : "Choose or type a name"}
               autoFocus
             />
             <datalist id={listId}>
@@ -146,7 +146,7 @@ export function InsertSlotMenu({
             </select>
           </label>
           <label className="field">
-            <span>A field of it (optional, when it is a document)</span>
+            <span>A property of it (optional, when it is a document)</span>
             <input
               value={fieldName}
               onChange={(e) => setFieldName(e.currentTarget.value)}

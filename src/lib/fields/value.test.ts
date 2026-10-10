@@ -219,7 +219,7 @@ describe("link", () => {
   });
 
   it("holds only one when the field allows one", () => {
-    expect(bad(def("link"), ["a", "b"])).toBe("This field links to one item only.");
+    expect(bad(def("link"), ["a", "b"])).toBe("This property links to one item only.");
   });
 
   it("refuses ids that are not text, and too many", () => {

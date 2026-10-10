@@ -196,7 +196,7 @@ function bool(v: unknown, fallback: boolean): boolean {
 }
 
 function readTest(raw: unknown): FieldTest {
-  if (!isObject(raw)) return bad("A field rule needs a test.");
+  if (!isObject(raw)) return bad("A property rule needs a test.");
   switch (raw.check) {
     case "contains":
     case "equals":
@@ -217,7 +217,7 @@ function readTest(raw: unknown): FieldTest {
     case "empty":
       return { check: "empty" };
     default:
-      return bad(`I don't know a field test called “${String(raw.check)}”.`);
+      return bad(`I don't know a property test called “${String(raw.check)}”.`);
   }
 }
 
@@ -277,8 +277,8 @@ function readSort(raw: unknown): SortKey[] {
     if (entry.by === "name" || entry.by === "created" || entry.by === "updated" || entry.by === "type") {
       key = { by: entry.by, dir };
     } else if (entry.by === "field") {
-      const fieldId = text(entry.fieldId, "The sort field", true);
-      if (fieldId === "") return bad("A sort by field needs a field.");
+      const fieldId = text(entry.fieldId, "The sort property", true);
+      if (fieldId === "") return bad("A sort by property needs a property.");
       key = { by: "field", fieldId, dir };
     } else {
       return bad(`I can't sort by “${String(entry.by)}”.`);
@@ -304,8 +304,8 @@ function readView(raw: unknown): View | undefined {
     if (entry.by === "type" || entry.by === "created" || entry.by === "updated") {
       column = { by: entry.by };
     } else if (entry.by === "field") {
-      const fieldId = text(entry.fieldId, "The column's field", true);
-      if (fieldId === "") return bad("A field column needs a field.");
+      const fieldId = text(entry.fieldId, "The column's property", true);
+      if (fieldId === "") return bad("A property column needs a property.");
       column = { by: "field", fieldId };
     } else {
       return bad(`I don't know a column called “${String(entry.by)}”.`);

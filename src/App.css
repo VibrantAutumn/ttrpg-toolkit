@@ -500,8 +500,24 @@ button.link.name {
   border-radius: 8px;
 }
 
-.fields-manager h2 {
-  margin-top: 1.25rem;
+.prop-menu {
+  display: inline-block;
+}
+
+.prop-menu > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.prop-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.prop-menu[open] > .row {
+  margin-top: 0.4rem;
 }
 
 @media (max-width: 600px) {

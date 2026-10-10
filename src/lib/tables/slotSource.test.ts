@@ -121,7 +121,7 @@ describe("entity slot choices", () => {
   });
   it("are checked", () => {
     expect(checkSlotChoice({ type: "entity", name: "Person", count: 1, unique: false })).toBeNull();
-    expect(checkSlotChoice({ type: "entity", name: "  ", count: 1, unique: false })).toMatch(/smart collection or a tag/);
+    expect(checkSlotChoice({ type: "entity", name: "  ", count: 1, unique: false })).toMatch(/filter set or a tag/);
     expect(checkSlotChoice({ type: "entity", name: "P", count: 0, unique: false })).not.toBeNull();
   });
 });

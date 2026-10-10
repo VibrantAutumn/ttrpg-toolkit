@@ -80,7 +80,7 @@ const INCOMPLETE: Record<Rule["kind"], string> = {
   tag: "(choose a tag)",
   name: "(type some text)",
   text: "(type some text)",
-  field: "(finish this field rule)",
+  field: "(finish this property rule)",
   linksTo: "(choose an item)",
   linkedFrom: "(choose an item)",
   changed: "(choose how many days)",

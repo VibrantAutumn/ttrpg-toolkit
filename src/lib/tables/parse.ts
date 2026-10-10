@@ -219,7 +219,7 @@ function explicitSlot(kind: string, args: string, at: number, labels: Map<string
     case "table":
       return tableSlot(args, at);
     case "entity": {
-      const picked = tableSlot(args, at, "An entity slot needs the name of a smart collection or a tag");
+      const picked = tableSlot(args, at, "An entity slot needs the name of a filter set or a tag");
       return picked.type === "table" ? { type: "entity", name: picked.name, count: picked.count, unique: picked.unique } : picked;
     }
     case "dice": {

@@ -61,7 +61,7 @@ pub fn add_member(conn: &Connection, collection_id: &str, member_id: &str, now: 
         return Err(DbError::Invalid(match collection.item_type.as_str() {
             SET_TYPE => "A set can only hold cards.",
             DECK_TYPE => "A deck can only hold cards and sets.",
-            _ => "A pool can only hold cards, sets, decks and smart collections.",
+            _ => "A pool can only hold cards, sets, decks and filter sets.",
         }));
     }
 

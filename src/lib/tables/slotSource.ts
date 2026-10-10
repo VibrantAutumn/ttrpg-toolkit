@@ -69,7 +69,7 @@ export function checkSlotChoice(choice: SlotChoice): string | null {
       if (choice.name.trim() === "") return "Choose a table.";
       return checkCount(choice.count, MAX_PICKS, "pick");
     case "entity":
-      if (choice.name.trim() === "") return "Choose a smart collection or a tag.";
+      if (choice.name.trim() === "") return "Choose a filter set or a tag.";
       return checkCount(choice.count, MAX_PICKS, "pick");
     case "draw":
       if (choice.source.trim() === "") return "Choose a deck, set or pool.";

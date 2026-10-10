@@ -11,7 +11,7 @@ const several = { many: true, library: null, itemTypes: [] };
 export const coreTemplates: TemplateStarterDef = {
   id: "starter:templates",
   name: "Templates",
-  description: "NPC, Location, Faction, Item, Quest and Session, each with a field set and starter headings. NPC comes with a Relationships tab, Location with an empty Map slot.",
+  description: "NPC, Location, Faction, Item, Quest and Session, each with a property set and starter headings. NPC comes with a Relationships tab, Location with an empty Map slot.",
   tags: [{ name: "NPC" }, { name: "Location" }, { name: "Faction" }, { name: "Item" }, { name: "Quest" }, { name: "Session" }],
 
   fields: [

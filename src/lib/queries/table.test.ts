@@ -37,7 +37,7 @@ describe("cells", () => {
     const b = item("b", "Birch");
     expect(cellText(b, { by: "field", fieldId: "f-level" }, ctx)).toBe("");
     expect(cellText(a, { by: "field", fieldId: "gone" }, ctx)).toBe("");
-    expect(columnLabel({ by: "field", fieldId: "gone" }, definitions)).toBe("(missing field)");
+    expect(columnLabel({ by: "field", fieldId: "gone" }, definitions)).toBe("(missing property)");
     expect(columnLabel({ by: "field", fieldId: "f-level" }, definitions)).toBe("Level");
   });
   it("build one row per item", () => {

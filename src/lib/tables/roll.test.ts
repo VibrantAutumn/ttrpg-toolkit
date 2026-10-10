@@ -499,7 +499,7 @@ describe("rollTable: entity slots and field references", () => {
     const r = roll(w, "T", scripted(1, 2, 3));
     expect(r.warnings[0]).toContain("isn't a document or item");
     const noFields: TableWorld = { ...withEntities([table("T", [entry("u", "[entity:Person as A] [A.Faction]")])]), entityField: undefined };
-    expect(roll(noFields, "T", scripted(1, 1)).warnings[0]).toContain("fields aren't available");
+    expect(roll(noFields, "T", scripted(1, 1)).warnings[0]).toContain("properties aren't available");
   });
 
   it("keeps a locked pick when rerolling, and a field reference follows it", () => {

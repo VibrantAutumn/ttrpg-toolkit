@@ -296,9 +296,9 @@ function evaluateSlot(slot: Slot, depth: number, ctx: Context, labels: ReadonlyM
       if (slot.field === undefined) return { outcome: { type: "ref", text: value.text }, text: value.text };
       const shown = `${slot.label}.${slot.field}`;
       if (value.itemId === undefined) {
-        return problem(ctx, `${slot.label} isn't a document or item, so it has no field “${slot.field}”.`, `${shown} (no fields here)`);
+        return problem(ctx, `${slot.label} isn't a document or item, so it has no property “${slot.field}”.`, `${shown} (no properties here)`);
       }
-      if (!ctx.world.entityField) return problem(ctx, `${shown}: fields aren't available here.`, `${shown} (fields not available)`);
+      if (!ctx.world.entityField) return problem(ctx, `${shown}: properties aren't available here.`, `${shown} (properties not available)`);
       const found = ctx.world.entityField(value.itemId, slot.field);
       if (!found.ok) return problem(ctx, found.message, `${shown} (${found.message})`);
       return { outcome: { type: "ref", text: found.text }, text: found.text };
@@ -320,7 +320,7 @@ function evaluateSlot(slot: Slot, depth: number, ctx: Context, labels: ReadonlyM
 function evaluateEntitySlot(name: string, count: number, unique: boolean, explicit: boolean, ctx: Context): Evaluated {
   const source = ctx.world.findEntities?.(name);
   if (!source) {
-    warn(ctx, explicit ? `No smart collection or tag called "${name}" was found.` : `The table "${name}" was not found.`);
+    warn(ctx, explicit ? `No filter set or tag called "${name}" was found.` : `The table "${name}" was not found.`);
     return { outcome: { type: "missing", kind: "entity", name }, text: `⚠ ${name}` };
   }
   const left = source.items.slice();

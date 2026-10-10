@@ -358,7 +358,7 @@ function LinkEditor({ def, value, projectId, itemId, disabled, onChange }: Kind<
           excludeIds={new Set([itemId, ...ids])}
           onPick={(item) => {
             setPicking(false);
-            if (!matches(item)) return setError("This field only links to a different kind of item.");
+            if (!matches(item)) return setError("This property only links to a different kind of item.");
             void save(def.config.many ? [...ids, item.id] : [item.id]);
           }}
           onClose={() => setPicking(false)}

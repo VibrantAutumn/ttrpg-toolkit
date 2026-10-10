@@ -7,6 +7,7 @@ import {
   resolveCollectionCards,
 } from "../../api/cards";
 import { getItem, type Item } from "../../api/library";
+import { createFilterSet } from "../worldbuilding/FilterSets";
 import { CardThumb } from "../../components/cards/CardThumb";
 import { useThumbs } from "../../components/cards/useThumbs";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
@@ -19,8 +20,8 @@ const WHAT: Record<string, { holds: string; empty: string }> = {
   set: { holds: "cards", empty: "This set is empty. Add some cards." },
   deck: { holds: "cards and sets", empty: "This deck is empty. Add cards and sets." },
   pool: {
-    holds: "cards, sets, decks and smart collections",
-    empty: "This pool is empty. Add any mix of cards, sets, decks and smart collections (saved searches, such as every card tagged Major Arcana) to draw from.",
+    holds: "cards, sets, decks and filter sets",
+    empty: "This pool is empty. Add any mix of cards, sets, decks and filter sets (saved searches, such as every card tagged Major Arcana) to draw from.",
   },
 };
 
@@ -91,6 +92,21 @@ export function CollectionEditor({ itemId, kind }: { itemId: string; kind: "set"
 
   const info = WHAT[kind];
 
+  /** Makes a filter set, puts it in this pool and opens it to set up its rules. */
+  async function newFilterSet() {
+    try {
+      const made = await createFilterSet(projectId, filter);
+      await addToCollection(itemId, made.id);
+      setFilter("");
+      setPicking(false);
+      await reload();
+      bumpDataVersion();
+      openItem(made.id);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   return (
     <div className="collection-editor">
       {error && <p className="error">{error}</p>}
@@ -136,6 +152,14 @@ export function CollectionEditor({ itemId, kind }: { itemId: string; kind: "set"
               Done
             </button>
           </div>
+          {kind === "pool" && (
+            <p className="row">
+              <button type="button" onClick={newFilterSet}>
+                New filter set{filter.trim() ? ` “${filter.trim()}”` : ""}
+              </button>
+              <span className="meta">Makes a saved search, adds it here and opens it.</span>
+            </p>
+          )}
           {shownCandidates.length === 0 ? (
             <p className="empty">
               {candidates.length === 0

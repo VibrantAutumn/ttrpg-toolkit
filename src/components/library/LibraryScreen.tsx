@@ -49,9 +49,13 @@ export function LibraryScreen({
   itemTypes,
   allowNewItems = true,
   extraCreate,
+  showTitle = true,
 }: {
   library: string;
   title: string;
+  /** False when the screen's own tab or header already says where you are (no big heading, and the
+   * root crumb only appears once you are inside a folder). */
+  showTitle?: boolean;
   itemTypes: ItemTypeDefinition[];
   /** Another way to make items (for example "New from template"), drawn under the "New item" form. */
   extraCreate?: (context: { folderId: string | null }) => ReactNode;
@@ -161,7 +165,7 @@ export function LibraryScreen({
   if (!projectId) {
     return (
       <section>
-        <h1>{title}</h1>
+        {showTitle && <h1>{title}</h1>}
         <p className="empty">
           No project is open. Tap the bar at the top to choose one.
         </p>
@@ -339,7 +343,7 @@ export function LibraryScreen({
 
   return (
     <section>
-      <h1>{title}</h1>
+      {showTitle && <h1>{title}</h1>}
 
       <input
         className="search"
@@ -377,19 +381,21 @@ export function LibraryScreen({
         )
       ) : (
         <>
-          <nav className="crumbs" aria-label="Folder path">
-            <button className="link" onClick={() => setFolderId(null)}>
-              {title}
-            </button>
-            {path.map((f) => (
-              <span key={f.id}>
-                {" › "}
-                <button className="link" onClick={() => setFolderId(f.id)}>
-                  {f.name}
-                </button>
-              </span>
-            ))}
-          </nav>
+          {(showTitle || path.length > 0) && (
+            <nav className="crumbs" aria-label="Folder path">
+              <button className="link" onClick={() => setFolderId(null)}>
+                {showTitle ? title : "All pages"}
+              </button>
+              {path.map((f) => (
+                <span key={f.id}>
+                  {" › "}
+                  <button className="link" onClick={() => setFolderId(f.id)}>
+                    {f.name}
+                  </button>
+                </span>
+              ))}
+            </nav>
+          )}
 
           <form
             className="row"

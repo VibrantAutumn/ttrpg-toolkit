@@ -29,7 +29,7 @@ const RULE_LABELS: Record<RuleKind, string> = {
   tag: "Tag",
   name: "Name contains",
   text: "Mentions the text",
-  field: "A field",
+  field: "A property",
   linksTo: "Links to",
   linkedFrom: "Is linked from",
   changed: "Changed recently",
@@ -278,7 +278,7 @@ function RuleBody({ projectId, catalog, rule, set }: { projectId: string; catalo
         <input
           value={rule.text}
           maxLength={QUERY_LIMITS.text}
-          placeholder={rule.kind === "name" ? "Part of the name" : "A word or phrase (in the name, text or fields)"}
+          placeholder={rule.kind === "name" ? "Part of the name" : "A word or phrase (in the name, text or properties)"}
           aria-label="Text to look for"
           onChange={(e) => set((r) => ({ ...r, text: e.currentTarget.value }) as Rule)}
         />
@@ -315,20 +315,20 @@ function FieldRule({ projectId, catalog, rule, set }: { projectId: string; catal
       <div className="row wrap">
         <select
           value={rule.fieldId}
-          aria-label="Field"
+          aria-label="Property"
           onChange={(e) => {
             const next = catalog.fields.find((d) => d.id === e.currentTarget.value);
             const first = next ? testsForKind(next.kind)[0] : "empty";
             set((r) => ({ ...r, fieldId: e.currentTarget.value, test: defaultTest(first) }) as Rule);
           }}
         >
-          <option value="">Choose a field...</option>
+          <option value="">Choose a property...</option>
           {catalog.fields.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
             </option>
           ))}
-          {rule.fieldId !== "" && !def && <option value={rule.fieldId}>(missing field)</option>}
+          {rule.fieldId !== "" && !def && <option value={rule.fieldId}>(missing property)</option>}
         </select>
         {def && (
           <select value={rule.test.check} aria-label="Test" onChange={(e) => setTest(defaultTest(e.currentTarget.value as FieldCheck))}>
@@ -337,7 +337,7 @@ function FieldRule({ projectId, catalog, rule, set }: { projectId: string; catal
                 {CHECK_LABELS[c]}
               </option>
             ))}
-            {!checks.includes(rule.test.check) && <option value={rule.test.check}>{CHECK_LABELS[rule.test.check]} (doesn't suit this field)</option>}
+            {!checks.includes(rule.test.check) && <option value={rule.test.check}>{CHECK_LABELS[rule.test.check]} (doesn't suit this property)</option>}
           </select>
         )}
       </div>
@@ -405,10 +405,10 @@ function SortEditor({ query, catalog, onChange, advanced }: { query: Query; cata
             ))}
             {catalog.fields.map((d) => (
               <option key={d.id} value={`field:${d.id}`}>
-                Field: {d.name}
+                Property: {d.name}
               </option>
             ))}
-            {k.by === "field" && !catalog.fields.some((d) => d.id === k.fieldId) && <option value={valueOf(k)}>(missing field)</option>}
+            {k.by === "field" && !catalog.fields.some((d) => d.id === k.fieldId) && <option value={valueOf(k)}>(missing property)</option>}
           </select>
           <select value={k.dir} aria-label="Direction" onChange={(e) => change(index, valueOf(k), e.currentTarget.value === "desc" ? "desc" : "asc")}>
             <option value="asc">A to Z / low to high / oldest first</option>

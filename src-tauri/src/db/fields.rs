@@ -143,11 +143,11 @@ fn check_description(description: &str) -> Result<(), DbError> {
 /// The settings must be a JSON object of reasonable size (also used when importing packs).
 pub fn validate_config(config_json: &str) -> Result<(), DbError> {
     if config_json.len() > MAX_CONFIG_BYTES {
-        return Err(DbError::Invalid("That field's settings are too large to save."));
+        return Err(DbError::Invalid("That property's settings are too large to save."));
     }
     match serde_json::from_str::<serde_json::Value>(config_json) {
         Ok(v) if v.is_object() => Ok(()),
-        _ => Err(DbError::Invalid("That field's settings can't be read.")),
+        _ => Err(DbError::Invalid("That property's settings can't be read.")),
     }
 }
 
@@ -204,12 +204,12 @@ pub fn create_definition(
 ) -> Result<FieldDefinition, DbError> {
     let name = clean_field_name(name)?;
     if !KINDS.contains(&kind) {
-        return Err(DbError::Invalid("That kind of field isn't known."));
+        return Err(DbError::Invalid("That kind of property isn't known."));
     }
     check_description(description)?;
     validate_config(config_json)?;
     if name_taken(conn, "field_definitions", project_id, name, "")? {
-        return Err(DbError::Invalid("A field with that name already exists."));
+        return Err(DbError::Invalid("A property with that name already exists."));
     }
     let id = Uuid::now_v7().to_string();
     conn.execute(
@@ -239,7 +239,7 @@ pub fn update_definition(
     validate_config(config_json)?;
     let def = get_definition_live(conn, id)?;
     if name_taken(conn, "field_definitions", &def.project_id, name, id)? {
-        return Err(DbError::Invalid("A field with that name already exists."));
+        return Err(DbError::Invalid("A property with that name already exists."));
     }
     conn.execute(
         "UPDATE field_definitions SET name = ?2, description = ?3, config_json = ?4, updated_at = ?5 WHERE id = ?1",
@@ -292,7 +292,7 @@ pub fn restore_definition(conn: &Connection, id: &str, now: i64) -> Result<Field
         return Ok(def);
     };
     if name_taken(conn, "field_definitions", &def.project_id, &def.name, id)? {
-        return Err(DbError::Invalid("Another field already has that name. Rename one of them first."));
+        return Err(DbError::Invalid("Another property already has that name. Rename one of them first."));
     }
     let tx = conn.unchecked_transaction()?;
     tx.execute("UPDATE field_definitions SET deleted_at = NULL, updated_at = ?2 WHERE id = ?1", params![id, now])?;
@@ -357,7 +357,7 @@ pub fn create_set(conn: &Connection, project_id: &str, name: &str, description: 
     let name = clean_field_name(name)?;
     check_description(description)?;
     if name_taken(conn, "field_sets", project_id, name, "")? {
-        return Err(DbError::Invalid("A field set with that name already exists."));
+        return Err(DbError::Invalid("A property set with that name already exists."));
     }
     let id = Uuid::now_v7().to_string();
     conn.execute(
@@ -376,7 +376,7 @@ pub fn update_set(conn: &Connection, id: &str, name: &str, description: &str, no
     check_description(description)?;
     let set = get_set_live(conn, id)?;
     if name_taken(conn, "field_sets", &set.project_id, name, id)? {
-        return Err(DbError::Invalid("A field set with that name already exists."));
+        return Err(DbError::Invalid("A property set with that name already exists."));
     }
     conn.execute(
         "UPDATE field_sets SET name = ?2, description = ?3, updated_at = ?4 WHERE id = ?1",
@@ -392,11 +392,11 @@ pub fn set_set_fields(conn: &Connection, set_id: &str, field_ids: &[String], now
     let mut seen = std::collections::HashSet::new();
     for field_id in field_ids {
         if !seen.insert(field_id.as_str()) {
-            return Err(DbError::Invalid("A field can only be in a set once."));
+            return Err(DbError::Invalid("A property can only be in a set once."));
         }
         let def = get_definition_live(conn, field_id)?;
         if def.project_id != set.project_id {
-            return Err(DbError::Invalid("A set can only hold fields from its own project."));
+            return Err(DbError::Invalid("A set can only hold properties from its own project."));
         }
     }
     let tx = conn.unchecked_transaction()?;
@@ -444,7 +444,7 @@ pub fn restore_set(conn: &Connection, id: &str, now: i64) -> Result<FieldSet, Db
         return Ok(set);
     }
     if name_taken(conn, "field_sets", &set.project_id, &set.name, id)? {
-        return Err(DbError::Invalid("Another field set already has that name. Rename one of them first."));
+        return Err(DbError::Invalid("Another property set already has that name. Rename one of them first."));
     }
     conn.execute("UPDATE field_sets SET deleted_at = NULL, updated_at = ?2 WHERE id = ?1", params![id, now])?;
     get_set_live(conn, id)
@@ -523,7 +523,7 @@ fn value_ids_for_link(value_json: &str) -> Result<Vec<String>, DbError> {
     let parsed: Result<Vec<String>, _> = serde_json::from_str(value_json);
     match parsed {
         Ok(ids) if ids.len() <= MAX_LINK_TARGETS => Ok(ids),
-        _ => Err(DbError::Invalid("A link field holds a list of items.")),
+        _ => Err(DbError::Invalid("A link property holds a list of items.")),
     }
 }
 
@@ -542,7 +542,7 @@ pub fn set_value(
     let item = live_item(conn, item_id)?;
     let def = get_definition_live(conn, field_id)?;
     if item.project_id != def.project_id {
-        return Err(DbError::Invalid("That field belongs to a different project."));
+        return Err(DbError::Invalid("That property belongs to a different project."));
     }
     if value_json.len() > MAX_VALUE_BYTES || index.search_text.len() > MAX_VALUE_BYTES {
         return Err(DbError::Invalid("That value is too large to save."));

@@ -82,12 +82,12 @@ function SmartCollectionBody({ projectId, query, status, problem, onChange }: { 
   return (
     <div className="smart-collection">
       <p className="meta">
-        A smart collection finds items by rules and is always up to date.{" "}
+        A filter set finds items by rules and is always up to date.{" "}
         {status === "saved" ? "Saved." : status === "error" ? "Couldn't save yet; will try again." : "Saving..."}
       </p>
       {problem && (
         <p className="error">
-          This collection's saved rules can't be read ({problem}) so it is showing an empty set of rules. Changing anything replaces the old rules.
+          This filter set's saved rules can't be read ({problem}) so it is showing an empty set of rules. Changing anything replaces the old rules.
         </p>
       )}
       <QueryBuilder projectId={projectId} query={query} catalog={catalog} onChange={onChange} />

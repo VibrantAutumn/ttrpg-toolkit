@@ -90,7 +90,7 @@ export function toTemplateBundle(def: TemplateStarterDef): TemplateBundleJson {
     fields: def.fields.map((f) => {
       // The one reader of definitions turns the settings into their one proper form (and refuses a field that isn't one).
       const checked = normalizeDefinition({ id: f.key, name: f.name, kind: f.kind, description: f.description ?? "", config: f.config ?? {} });
-      if (!checked) throw new Error(`The starter field “${f.name}” isn't a valid field.`);
+      if (!checked) throw new Error(`The starter property “${f.name}” isn't a valid property.`);
       return { key: f.key, name: checked.name, kind: checked.kind, description: checked.description, configJson: JSON.stringify(checked.config) };
     }),
     sets: def.sets.map((s) => ({ name: s.name, description: s.description ?? "", fieldKeys: s.fields })),

@@ -49,7 +49,7 @@ describe("new definitions", () => {
 
 describe("validateDefinition", () => {
   it("needs a name of reasonable length", () => {
-    expect(validateDefinition(newDefinition("text", "f", "   "))).toEqual(["Give the field a name."]);
+    expect(validateDefinition(newDefinition("text", "f", "   "))).toEqual(["Give the property a name."]);
     expect(validateDefinition(newDefinition("text", "f", "x".repeat(LIMITS.name + 1)))[0]).toMatch(/at most 60/);
   });
 

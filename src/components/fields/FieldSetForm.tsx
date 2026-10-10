@@ -5,7 +5,7 @@ import { LIMITS } from "../../lib/fields/definition";
 import type { FieldSet } from "../../lib/fields/fieldSets";
 import { bumpDataVersion } from "../../state/dataVersion";
 
-/** Makes or changes a field set: its name and which fields it holds, in order. */
+/** Makes or changes a property set: its name and which properties it holds, in order. */
 export function FieldSetForm({
   projectId,
   initial,
@@ -16,7 +16,8 @@ export function FieldSetForm({
   projectId: string;
   initial: FieldSet | null;
   definitions: FieldDefinition[];
-  onDone: () => void;
+  /** Called after saving, with the id of the set that was made or changed. */
+  onDone: (savedId?: string) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
@@ -43,7 +44,7 @@ export function FieldSetForm({
       const set = initial ? await updateFieldSet(initial.id, name, description) : await createFieldSet(projectId, name, description);
       await setFieldSetFields(set.id, members);
       bumpDataVersion();
-      onDone();
+      onDone(set.id);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -53,7 +54,7 @@ export function FieldSetForm({
 
   return (
     <form className="field-form" onSubmit={submit}>
-      <h3>{initial ? `Change “${initial.name}”` : "New field set"}</h3>
+      <h3>{initial ? `Change “${initial.name}”` : "New property set"}</h3>
       <label>
         Name
         <input type="text" value={name} maxLength={LIMITS.name + 20} autoFocus onChange={(e) => setName(e.currentTarget.value)} />
@@ -64,8 +65,8 @@ export function FieldSetForm({
       </label>
 
       <fieldset className="choices">
-        <legend>Fields in this set</legend>
-        {members.length === 0 && <p className="empty">No fields yet.</p>}
+        <legend>Properties in this set</legend>
+        {members.length === 0 && <p className="empty">No properties yet.</p>}
         <ul className="list">
           {members.map((id, i) => (
             <li key={id} className="row wrap">
@@ -76,7 +77,7 @@ export function FieldSetForm({
               <button type="button" disabled={i === members.length - 1} aria-label="Move down" onClick={() => move(i, 1)}>
                 ↓
               </button>
-              <button type="button" aria-label={`Take ${byId.get(id)?.name ?? "field"} out`} onClick={() => setMembers(members.filter((m) => m !== id))}>
+              <button type="button" aria-label={`Take ${byId.get(id)?.name ?? "property"} out`} onClick={() => setMembers(members.filter((m) => m !== id))}>
                 Remove
               </button>
             </li>
@@ -84,11 +85,11 @@ export function FieldSetForm({
         </ul>
         {available.length > 0 ? (
           <select
-            aria-label="Add a field to the set"
+            aria-label="Add a property to the set"
             value=""
             onChange={(e) => e.currentTarget.value && setMembers([...members, e.currentTarget.value])}
           >
-            <option value="">Add a field…</option>
+            <option value="">Add a property…</option>
             {available.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
@@ -96,7 +97,7 @@ export function FieldSetForm({
             ))}
           </select>
         ) : (
-          definitions.length === 0 && <p className="meta">Make some fields first, then group them here.</p>
+          definitions.length === 0 && <p className="meta">Make some properties first, then group them here.</p>
         )}
       </fieldset>
 

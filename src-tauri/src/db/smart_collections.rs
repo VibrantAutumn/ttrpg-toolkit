@@ -46,7 +46,7 @@ fn require_live(conn: &Connection, item_id: &str) -> Result<items::Item, DbError
         return Err(DbError::NotFound);
     }
     if item.item_type != SMART_TYPE {
-        return Err(DbError::Invalid("This item isn't a smart collection."));
+        return Err(DbError::Invalid("This item isn't a filter set."));
     }
     Ok(item)
 }

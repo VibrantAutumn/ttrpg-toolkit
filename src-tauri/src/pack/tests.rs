@@ -2010,7 +2010,7 @@ fn bad_smart_collection_data_in_a_pack_is_skipped_with_warnings() {
     let pack = read_pack(&bytes).unwrap();
     assert_eq!(pack.smart_collections.len(), 1);
     assert_eq!(pack.smart_collections[0].item_id, "s");
-    assert!(pack.warnings.iter().any(|w| w.contains("smart collection")), "{:?}", pack.warnings);
+    assert!(pack.warnings.iter().any(|w| w.contains("filter set")), "{:?}", pack.warnings);
     // Items whose query was dropped still import; they read as the empty query.
     let conn = open_in_memory();
     let result = import_parsed(&conn, &pack, 10).unwrap();

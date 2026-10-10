@@ -46,7 +46,7 @@ export function StarterTemplates() {
       bumpDataVersion();
       setAdded(
         `Added ${plural(result.templates, "template")} in a “${starter.name}” folder` +
-          (result.fieldsMade > 0 ? `, with ${plural(result.fieldsMade, "new field")} and ${plural(result.setsMade, "field set")}.` : "."),
+          (result.fieldsMade > 0 ? `, with ${plural(result.fieldsMade, "new property")} and ${plural(result.setsMade, "property set")}.` : "."),
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

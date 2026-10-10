@@ -79,7 +79,7 @@ export function buildEntityLookups(data: EntityData): {
     findEntities: (name) => sources.get(key(name)) ?? null,
     entityField: (itemId, field) => {
       const loaded = fields.get(key(field));
-      if (!loaded) return { ok: false, message: `There is no field called “${field}”.` };
+      if (!loaded) return { ok: false, message: `There is no property called “${field}”.` };
       return { ok: true, text: loaded.text.get(itemId) ?? NO_VALUE };
     },
   };

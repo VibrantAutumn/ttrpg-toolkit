@@ -133,7 +133,7 @@ export function coerceValue(def: FieldDefinition, raw: unknown): CoerceResult {
       const list = typeof raw === "string" ? [raw] : raw;
       if (!Array.isArray(list) || list.some((id) => typeof id !== "string" || id.trim() === "")) return fail("Expected items to link to.");
       const ids = [...new Set((list as string[]).map((id) => id.trim()))];
-      if (!def.config.many && ids.length > 1) return fail("This field links to one item only.");
+      if (!def.config.many && ids.length > 1) return fail("This property links to one item only.");
       if (ids.length > LIMITS.linkTargets) return fail(`A field can link to at most ${LIMITS.linkTargets} items.`);
       return done(ids);
     }

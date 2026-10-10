@@ -160,7 +160,7 @@ describe("helpers", () => {
       sets: [],
       templates: [],
     };
-    expect(() => toTemplateBundle(bad)).toThrow(/valid field/);
+    expect(() => toTemplateBundle(bad)).toThrow(/valid property/);
   });
 });
 

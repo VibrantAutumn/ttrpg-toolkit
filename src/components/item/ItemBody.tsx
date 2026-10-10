@@ -90,9 +90,9 @@ export function ItemBody({ item }: { item: Item }) {
             ) : (
               <span
                 className="meta"
-                title="Made by a mention in this item's text or by a link field. Remove the mention or the field's value to remove the link."
+                title="Made by a mention in this item's text or by a link property. Remove the mention or the property's value to remove the link."
               >
-                from text or a field
+                from text or a property
               </span>
             )}
           </li>

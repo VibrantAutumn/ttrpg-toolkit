@@ -764,7 +764,7 @@ fn sanitize(pack: &mut ParsedPack) {
             && smart_collections::validate(&s.query_json).is_ok()
             && seen.insert(s.item_id.clone())
     });
-    note(before - pack.smart_collections.len(), "smart collection(s) belonged to something missing or were unreadable and were skipped.");
+    note(before - pack.smart_collections.len(), "filter set(s) belonged to something missing or were unreadable and were skipped.");
 
     let before = pack.generators.len();
     let mut seen = HashSet::new();

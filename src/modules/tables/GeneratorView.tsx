@@ -199,10 +199,10 @@ function RowEditor({
           <option value="name">Fills: the name</option>
           {fields.map((f) => (
             <option key={f.id} value={`field:${f.id}`}>
-              Fills field: {f.name}
+              Fills property: {f.name}
             </option>
           ))}
-          {fieldGone && <option value={targetValue(row.target)}>Fills: (missing field)</option>}
+          {fieldGone && <option value={targetValue(row.target)}>Fills: (missing property)</option>}
         </select>
       </div>
       <input

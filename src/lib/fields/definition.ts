@@ -123,7 +123,7 @@ export function newDefinition(kind: FieldKind, id: string, name: string): FieldD
 export function validateDefinition(def: FieldDefinition): string[] {
   const problems: string[] = [];
   const name = def.name.trim();
-  if (name === "") problems.push("Give the field a name.");
+  if (name === "") problems.push("Give the property a name.");
   else if (name.length > LIMITS.name) problems.push(`A field name can be at most ${LIMITS.name} characters.`);
   if (def.description.length > LIMITS.description) {
     problems.push(`A description can be at most ${LIMITS.description} characters.`);
