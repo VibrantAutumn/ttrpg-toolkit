@@ -138,9 +138,9 @@ Phases: 1 Foundation, 2 Dice/results/cards and 3 Random tables are done · 4 Wor
 
 Paste this as the first message of the new chat (the hand-off is set up; this is ready to use):
 
-> Please read CLAUDE.md, especially "Phase 4b: status and handoff" and "Phase 4b: the plan". Stages 1 to 6 are done (6 uncommitted until Katie says so). Start with Stage 7 (Tables -> Generators). Ask me whenever something is unclear, ask before installing any package, test what you can yourself, and give me a list of what I need to check on Windows (the phone is not testable right now). Commit only when I say "commit please".
+> Please read CLAUDE.md, especially "Phase 4b: status and handoff" and "Phase 4b: the plan". Stages 1 to 6 are done and committed. Start with Stage 7 (Tables -> Generators). Ask me whenever something is unclear, ask before installing any package, test what you can yourself, and give me a list of what I need to check on Windows (the phone is not testable right now). Commit only when I say "commit please".
 
-*Tips for the new chat:* if Katie runs `npm run tauri dev`, port 1420 is taken: look at the app with `preview_start` using a `url` of `http://localhost:1420` instead of the `web-preview` server (the plain browser still gets the mock backend). Stage 6 starts from a clean working tree.
+*Tips for the new chat:* if Katie runs `npm run tauri dev`, port 1420 is taken: look at the app with `preview_start` using a `url` of `http://localhost:1420` instead of the `web-preview` server (the plain browser still gets the mock backend). Stage 7 starts from a clean working tree (stage 6 is commit 1235313).
 
 ### Running list of what Katie must check at the end (Windows and phone)
 
@@ -194,7 +194,7 @@ Phase 4 (worldbuilding) is built and passes all automated checks, but Katie revi
 **Stage 5 - Notion-style editor (DONE, see the handoff section)** (`modules/worldbuilding/RichEditor.tsx`, `DocumentEditor.tsx`).
 - Remove the fixed toolbar; keep the floating (bubble) menu; large inline title; placeholder "Type '/' for commands"; the `/` menu (already exists: `slashCommands.ts`, `blockCommands.ts`) grouped like Notion; **block handle** in the left gutter (+ to insert, drag to reorder, menu: turn into / duplicate / delete); Properties shown under the title as Notion page properties. Uses TipTap's drag-handle extension: **needs installing one package (`@tiptap/extension-drag-handle-react`) - ask Katie before installing.** Markdown storage, converter and tests do not change (the block UI is a view over the same document).
 
-**Stage 6 - Cards.**
+**Stage 6 - Cards (DONE and committed; see the Cards Draw tab bullet in Conventions).**
 - `modules/cards/CardsScreen.tsx` becomes: **Draw** tab first with a ready 3-card draw (default settings, one click) and an options row (count, repeats, reversals, percent) reusing `DrawPanel`/`SourceDraw`/`lib/cards/draw.ts`; **Spread** selector (draw a spread, "Edit spread" opens `SpreadEditor` in place); **Pool** dropdown = saved pools/decks/sets ("presets") plus **Custom pool** (build on the fly by ticking sets/decks/filter sets, with "Save as pool"). **Library** tab = the current card library with create/edit of cards, decks, sets, pools, spreads (existing `LibraryScreen` + editors). Starter decks stay in the Library tab.
 
 **Stage 7 - Tables -> Generators.**
