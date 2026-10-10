@@ -36,7 +36,7 @@ export function DrawTab() {
   }, [projectId, dataVersion]);
 
   if (!projectId) {
-    return <p className="empty">No project is open. Tap the bar at the top to choose one.</p>;
+    return <p className="empty">No project is open. Choose one from the project name at the top of the sidebar.</p>;
   }
 
   async function drawFromSpread(spreadId: string) {

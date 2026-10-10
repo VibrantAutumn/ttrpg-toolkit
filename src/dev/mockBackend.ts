@@ -56,6 +56,20 @@ export function installMockBackend(): void {
   add("dice", "saved_roll", "Crit damage", "2d8+4");
   add("worldbuilding", "document", "Strahd von Zarovich");
   add("worldbuilding", "document", "Castle Ravenloft");
+  add("worldbuilding", "template", "NPC");
+  add("worldbuilding", "smart_collection", "Living NPCs");
+
+  const folders: { id: string; projectId: string; library: string; parentId: string | null; name: string; createdAt: number; updatedAt: number; deletedAt: null }[] = [];
+  const addFolder = (library: string, name: string) => {
+    counter += 1;
+    const folder = { id: `f${counter}`, projectId: project.id, library, parentId: null, name, createdAt: now, updatedAt: now, deletedAt: null };
+    folders.push(folder);
+    return folder;
+  };
+  const npcs = addFolder("worldbuilding", "NPCs");
+  addFolder("worldbuilding", "Places");
+  add("worldbuilding", "document", "Ireena Kolyana").folderId = npcs.id;
+  add("worldbuilding", "document", "Ismark the Lesser").folderId = npcs.id;
 
   const live = (library: string, itemType?: string) =>
     [...items.values()].filter((i) => i.deletedAt === null && i.library === library && (itemType === undefined || i.itemType === itemType));
@@ -80,7 +94,21 @@ export function installMockBackend(): void {
       updatedAt: now,
     }),
     list_items_of_type: (a) => live(String(a.library), String(a.itemType)),
-    list_items: (a) => live(String(a.library)),
+    list_items: (a) => live(String(a.library)).filter((i) => i.folderId === (a.folderId ?? null)),
+    get_item_fields: () => ({ setIds: [], values: [] }),
+    get_document_body: () => "",
+    list_trash: () => ({ folders: [], items: [] }),
+    list_folders: (a) => folders.filter((f) => f.library === String(a.library)),
+    create_folder: (a) => addFolder(String(a.library), String(a.name)),
+    create_item: (a) => {
+      const made = add(String(a.library), String(a.itemType), String(a.name));
+      made.folderId = (a.folderId as string | null) ?? null;
+      return made;
+    },
+    search_items: (a) => {
+      const text = String(a.text ?? "").toLowerCase();
+      return [...items.values()].filter((i) => i.deletedAt === null && i.name.toLowerCase().includes(text)).slice(0, 8);
+    },
     get_item: (a) => items.get(String(a.id)) ?? null,
     rename_item: (a) => {
       const item = items.get(String(a.id));

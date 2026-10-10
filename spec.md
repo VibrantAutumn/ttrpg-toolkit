@@ -321,6 +321,8 @@ Widgets are built once and appear in two places: the GM screen and the quick too
 
 **GM screen:** saved layouts of resizable widgets per project (combat, social, travel).
 
+**Dashboards** *(Phase 8; decided by Katie during the Phase 4b redesign)*: the GM screen is one kind of **dashboard**. A project can have **as many dashboards as you like**, each created and customized by the user: add blocks (widgets such as dice, card draws, table or generator rolls, the roll log, pinned or recent pages, a filter set's results, notes, the current encounter), then resize and arrange them. Dashboards are saved per project and listed in the sidebar; any of them can be set as the project's **Home**. Until Phase 8 the Home button shows a placeholder page.
+
 **Quick tools:** a panel you can open from anywhere in the app.
 
 - **Windows:** a floating or side panel, opened by button or shortcut (e.g. Ctrl+D for dice), and pinnable while you browse.
@@ -385,7 +387,7 @@ Nine phases, each usable at the table. Shared engines are **designed** in Phase 
 5. **Rulesets and encounters:** ruleset editor, stat blocks, encounter library and runner, first version of the player display. Starter rulesets.
 6. **Time:** calendar builder, multiple calendars, project state and status bar, sessions, weather, events, timelines.
 7. **Maps:** map library, layers, pins, regions, nested maps, roads, terrain, travel modes, travel time, party marker.
-8. **GM screen and polish:** GM screen layouts, embeds of every tool in documents, new project wizard, themes, fog of war, animations.
+8. **Dashboards, GM screen and polish:** user-made dashboards (any number per project, customizable, one can be Home) including GM screen layouts, embeds of every tool in documents, new project wizard, themes, fog of war, animations.
 9. **Sync and sharing:** server, device sync, project sharing, player spaces, visibility defaults, per-player reveals, view-as-player, player quick tools.
 
 At a few hours a week, phases take several weeks to a few months each. Phases 1, 4, 7 and 9 are the largest.

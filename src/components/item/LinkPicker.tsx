@@ -106,7 +106,7 @@ export function LinkPicker({
               >
                 {creatable.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.icon} {t.label} ({registry.getTool(t.toolId)?.label ?? t.toolId})
+                    {t.icon} {t.label} ({registry.getLibraryLabel(t.toolId)})
                   </option>
                 ))}
               </select>

@@ -1,5 +1,6 @@
 import type { ModuleDefinition } from "../../registry/types";
 import { ProjectsScreen } from "./ProjectsScreen";
+import { SettingsScreen } from "./SettingsScreen";
 
 /** App-level features that exist in every project setup. */
 export const coreModule: ModuleDefinition = {
@@ -11,6 +12,15 @@ export const coreModule: ModuleDefinition = {
       icon: "🏕️",
       order: 0,
       component: ProjectsScreen,
+      inSidebar: false, // reached from the project switcher at the top of the sidebar
+    },
+    {
+      id: "settings",
+      label: "Settings",
+      icon: "⚙️",
+      order: 99,
+      component: SettingsScreen,
+      placement: "bottom",
     },
   ],
   commands: [

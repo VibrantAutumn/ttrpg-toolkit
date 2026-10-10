@@ -167,7 +167,7 @@ export function LibraryScreen({
       <section>
         {showTitle && <h1>{title}</h1>}
         <p className="empty">
-          No project is open. Tap the bar at the top to choose one.
+          No project is open. Choose one from the project name at the top of the sidebar.
         </p>
       </section>
     );

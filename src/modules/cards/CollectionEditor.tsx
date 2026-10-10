@@ -7,7 +7,7 @@ import {
   resolveCollectionCards,
 } from "../../api/cards";
 import { getItem, type Item } from "../../api/library";
-import { createFilterSet } from "../worldbuilding/FilterSets";
+import { createFilterSet } from "../worldbuilding/filterSets";
 import { CardThumb } from "../../components/cards/CardThumb";
 import { useThumbs } from "../../components/cards/useThumbs";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";

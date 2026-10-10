@@ -13,5 +13,5 @@ export function itemTypeLabel(item: Item): string {
 
 /** The name of the tool whose library holds the item, e.g. "Worldbuilding". */
 export function libraryLabel(item: Item): string {
-  return registry.getTool(item.library)?.label ?? item.library;
+  return registry.getLibraryLabel(item.library);
 }

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { deleteItem, getItem, listItemTags, restoreItem, type Item, type Tag } from "../../api/library";
+import { deleteItem, getItem, listFolders, listItemTags, restoreItem, type Folder, type Item, type Tag } from "../../api/library";
 import { listTabs, moveTab, removeTab, type Tab } from "../../api/tabs";
 import { registry } from "../../registry";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
+import { folderPath } from "../library/helpers";
 import { TagChips } from "../library/TagChips";
 import { EmbedBody } from "./EmbedBody";
 import { ItemActions } from "./ItemActions";
@@ -22,6 +23,7 @@ export function ItemPage({ pageId, openTab, onBack }: { pageId: string; openTab:
   const [tags, setTags] = useState<Tag[]>([]);
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [tabsLoaded, setTabsLoaded] = useState(false);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const [selected, setSelected] = useState(openTab);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +45,20 @@ export function ItemPage({ pageId, openTab, onBack }: { pageId: string; openTab:
   useEffect(() => {
     void reload();
   }, [reload, dataVersion]);
+
+  // The folders of the item's tool, for the breadcrumb above the title.
+  const projectId = item?.projectId;
+  const library = item?.library;
+  useEffect(() => {
+    if (!projectId || !library) return;
+    let active = true;
+    listFolders(projectId, library)
+      .then((f) => active && setFolders(f))
+      .catch(() => active && setFolders([]));
+    return () => {
+      active = false;
+    };
+  }, [projectId, library, dataVersion]);
 
   // Opening a link to one of this page's tabs selects it.
   useEffect(() => setSelected(openTab), [openTab]);
@@ -87,8 +103,20 @@ export function ItemPage({ pageId, openTab, onBack }: { pageId: string; openTab:
   };
 
   return (
-    <section>
-      <button onClick={onBack}>← Back</button>
+    <section className="item-page">
+      <div className="page-crumbs">
+        <button onClick={onBack} aria-label="Back">
+          ← Back
+        </button>
+        {item && (
+          <nav className="crumbs" aria-label="Where this page is">
+            {libraryLabel(item)}
+            {folderPath(folders, item.folderId).map((f) => (
+              <span key={f.id}> › {f.name}</span>
+            ))}
+          </nav>
+        )}
+      </div>
 
       {!item ? (
         <>
@@ -97,11 +125,14 @@ export function ItemPage({ pageId, openTab, onBack }: { pageId: string; openTab:
         </>
       ) : (
         <>
-          <h1>
-            {itemIcon(item)} {item.name}
+          <h1 className="page-title">
+            <span className="page-icon" aria-hidden="true">
+              {itemIcon(item)}
+            </span>{" "}
+            {item.name}
           </h1>
-          <p className="meta">
-            {itemTypeLabel(item)} in {libraryLabel(item)} <TagChips tags={tags} />
+          <p className="meta page-meta">
+            {itemTypeLabel(item)} <TagChips tags={tags} />
           </p>
           {error && <p className="error">{error}</p>}
 

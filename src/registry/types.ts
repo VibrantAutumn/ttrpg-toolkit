@@ -8,15 +8,23 @@ export interface AppContext {
   openQuickTools: () => void;
 }
 
-/** A section of the app with its own screen (shown in the navigation). */
+/** A section of the app with its own screen (shown in the sidebar). */
 export interface ToolDefinition {
   id: string;
   label: string;
   /** Emoji for now; may become an icon name later. */
   icon: string;
-  /** Lower numbers appear first in the navigation. */
+  /** Lower numbers appear first in the sidebar. */
   order: number;
   component: ComponentType;
+  /** False for screens reached some other way (the project list, from the project switcher). Default true. */
+  inSidebar?: boolean;
+  /** Where the tool's icon goes in the sidebar: in the row under the search bar (default) or in the footer at the bottom. */
+  placement?: "top" | "bottom";
+  /** Whatever the tool wants drawn under its sidebar button (Home's pages tree and Templates section). */
+  sidebar?: ComponentType;
+  /** Names for libraries (the `library` of items) that have no tool of the same id, e.g. { worldbuilding: "Pages" }. */
+  libraryLabels?: Record<string, string>;
 }
 
 /**

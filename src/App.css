@@ -30,11 +30,6 @@ body {
   margin: 0;
 }
 
-.app {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: 1rem;
-}
 
 h1 {
   font-size: 1.5rem;
@@ -843,107 +838,11 @@ button.link.name {
   padding: 0.25rem 0;
 }
 
-.status-bar {
-  display: flex;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 1rem;
-  font-size: 0.9rem;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.status-bar .quick-button {
-  margin-left: auto;
-  min-height: 32px;
-  font-size: 0.85rem;
-}
-
-.status-bar .search-button {
-  margin-left: 0.5rem;
-  min-height: 32px;
-  font-size: 0.85rem;
-}
-
-.palette-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 8vh 1rem 1rem;
-  background: rgba(0, 0, 0, 0.45);
-}
-
-.palette {
-  width: 100%;
-  max-width: 36rem;
-  max-height: 75vh;
-  overflow-y: auto;
-  padding: 0.75rem;
-  box-sizing: border-box;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-}
-
-.palette input {
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.palette ul {
-  list-style: none;
-  margin: 0.5rem 0 0;
-  padding: 0;
-}
-
-.palette li[role="option"] {
-  padding: 0.6rem 0.75rem;
-  border-radius: 8px;
-  border-left: 3px solid transparent;
-  cursor: pointer;
-}
-
-.palette li.selected {
-  background: var(--bg);
-  border-left-color: var(--accent);
-}
-
-.palette li.group {
-  padding: 0.5rem 0.75rem 0.15rem;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  opacity: 0.6;
-}
-
-.status-bar button.link {
-  font-size: inherit;
-  font-weight: 600;
-  text-decoration: none;
-}
-
 .badge {
   padding: 0 0.75rem;
   color: var(--accent);
   font-weight: 600;
   white-space: nowrap;
-}
-
-.nav {
-  display: flex;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--border);
-}
-
-.nav button.active {
-  border-color: var(--accent);
-  color: var(--accent);
-  font-weight: 600;
 }
 
 .row {
@@ -1262,16 +1161,17 @@ input.narrow {
 .quick-panel {
   position: fixed;
   z-index: 40;
-  top: 38px; /* just below the status bar, so its buttons stay reachable */
-  right: 0;
-  bottom: 0;
-  width: min(24rem, 100vw);
+  top: 0.5rem;
+  right: 4.75rem; /* left of the floating quick menu */
+  bottom: 0.5rem;
+  width: min(24rem, calc(100vw - 6rem));
   box-sizing: border-box;
   overflow-y: auto;
   padding: 0.75rem;
   padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
   background: var(--bg);
-  border-left: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 12px;
   box-shadow: -4px 0 16px rgba(0, 0, 0, 0.18);
 }
 
@@ -1283,10 +1183,11 @@ input.narrow {
   .quick-panel {
     top: auto;
     left: 0;
+    right: 0;
+    bottom: 0;
     width: auto;
     height: 78vh;
-    border-left: 0;
-    border-top: 1px solid var(--border);
+    border-width: 1px 0 0;
     border-radius: 12px 12px 0 0;
     box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
   }
@@ -1689,4 +1590,419 @@ input.narrow {
 
 .slot-chip.slot-entity {
   border-color: var(--accent);
+}
+
+/* App shell: fixed sidebar (a drawer on narrow screens) and the main area */
+.shell {
+  min-height: 100vh;
+}
+
+.sidebar {
+  position: fixed;
+  z-index: 30;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 17rem;
+  box-sizing: border-box;
+  overflow-y: auto;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar-inner {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: 100%;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
+.app {
+  box-sizing: border-box;
+  max-width: 54rem;
+  margin: 0 auto 0 17rem;
+  padding: 1rem 1.5rem;
+}
+
+.mobile-bar {
+  display: none;
+}
+
+.drawer-backdrop {
+  display: none;
+}
+
+/* Project switcher */
+.project-switcher {
+  position: relative;
+}
+
+.project-button {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  font-weight: 600;
+  text-align: left;
+}
+
+.project-button .project-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.project-menu button {
+  text-align: left;
+  border-color: transparent;
+}
+
+.project-menu hr {
+  width: 100%;
+  margin: 0.1rem 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* Search bar and its dropdown */
+.sidebar-search {
+  position: relative;
+}
+
+.sidebar-search input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.search-results {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  right: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 0.4rem;
+  box-sizing: border-box;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.search-results ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.search-results li[role="option"] {
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+}
+
+.search-results li.selected {
+  background: var(--bg);
+  border-left-color: var(--accent);
+}
+
+.search-results li.group {
+  padding: 0.4rem 0.6rem 0.1rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+}
+
+/* Tool buttons, the tree under Worldbuilding, quick tools */
+.sidebar-heading {
+  margin: 0.75rem 0.25rem 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+}
+
+.sidebar-tree {
+  margin: 0.15rem 0 0.4rem;
+}
+
+.tree-templates {
+  margin-top: 0.5rem;
+}
+
+.tree-templates .sidebar-heading {
+  margin-left: 0;
+}
+
+.tree-tools {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.25rem;
+}
+
+.tree-tools button {
+  min-height: 36px;
+  font-size: 0.85rem;
+}
+
+.tree-new-folder input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 36px;
+}
+
+.tree-level {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+}
+
+.tree-label {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  text-align: left;
+  border-color: transparent;
+  background: transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-label:hover {
+  background: var(--bg);
+}
+
+.tree-add {
+  min-height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+.tree-empty {
+  padding: 0.25rem 0.5rem 0.25rem 1.5rem;
+  font-size: 0.85rem;
+  opacity: 0.6;
+}
+
+/* Narrow screens: the sidebar slides in from the left over a dimmed page */
+@media (max-width: 700px) {
+  .app {
+    margin: 0;
+    padding: 0.75rem 1rem;
+  }
+
+  .mobile-bar {
+    position: sticky;
+    z-index: 20;
+    top: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mobile-title {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar {
+    z-index: 36;
+    width: min(20rem, 85vw);
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    visibility: hidden;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    visibility: visible;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.35);
+  }
+
+  .drawer-backdrop {
+    display: block;
+    position: fixed;
+    z-index: 35;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+  }
+}
+
+@media (max-width: 700px) and (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+}
+
+/* A page's header: breadcrumb, big title, type and tags, then the tab strip */
+.page-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.page-crumbs .crumbs {
+  font-size: 0.9rem;
+  opacity: 0.75;
+}
+
+.page-title {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 2.1rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.page-icon {
+  font-size: 0.9em;
+}
+
+.page-meta {
+  margin: 0 0 0.75rem;
+}
+
+@media (max-width: 700px) {
+  .page-title {
+    font-size: 1.7rem;
+  }
+}
+
+/* Floating quick menu (bottom right) */
+.quick-menu {
+  position: fixed;
+  z-index: 38;
+  right: 1rem;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.quick-fab {
+  width: 3.25rem;
+  height: 3.25rem;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  background: var(--surface);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
+}
+
+.quick-fab.active {
+  border-color: var(--accent);
+  background: var(--bg);
+}
+
+@media (max-width: 700px) {
+  /* the bottom sheet takes the whole width, so the menu steps aside while a tool is open */
+  .quick-menu.panel-open {
+    display: none;
+  }
+}
+
+/* Row menus in the sidebar tree */
+.tree-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.15rem 0 0.35rem 0.9rem;
+}
+
+.tree-menu button,
+.tree-menu input,
+.tree-menu select {
+  min-height: 36px;
+  font-size: 0.85rem;
+}
+
+.tree-menu input,
+.tree-menu select {
+  flex: 1;
+  min-width: 0;
+}
+
+.tree-starters {
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+}
+
+/* Tool icons under the search bar, and the footer icons at the bottom */
+.sidebar-icons,
+.sidebar-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  font-size: 1.3rem;
+  border-color: transparent;
+  background: transparent;
+}
+
+.sidebar-icon:hover {
+  background: var(--bg);
+}
+
+.sidebar-icon.active {
+  border-color: var(--accent);
+  background: var(--bg);
+}
+
+.sidebar-heading-toggle {
+  min-height: 32px;
+  padding: 0 0.25rem;
+  border-color: transparent;
+  background: transparent;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  opacity: 1;
 }

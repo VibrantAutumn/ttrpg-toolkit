@@ -1,7 +1,7 @@
 import type { ModuleDefinition } from "../../registry/types";
 import { cardItemTypes } from "./cardTypes";
 import { CardsScreen } from "./CardsScreen";
-import { DecksInPlayWidget, QuickDrawWidget } from "./DrawWidgets";
+import { QuickDrawWidget } from "./DrawWidgets";
 
 /**
  * Cards, sets, decks and pools. A pool is a saved, reusable selection of cards,
@@ -21,7 +21,6 @@ export const cardsModule: ModuleDefinition = {
   itemTypes: cardItemTypes,
   widgets: [
     { id: "cards.quick-draw", label: "Quick draw", icon: "🃏", order: 20, component: QuickDrawWidget },
-    { id: "cards.decks-in-play", label: "Decks in play", icon: "▶️", order: 30, component: DecksInPlayWidget },
   ],
   commands: [
     {

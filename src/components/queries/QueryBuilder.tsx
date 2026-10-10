@@ -243,7 +243,7 @@ function RuleBody({ projectId, catalog, rule, set }: { projectId: string; catalo
             <option value="">Choose a folder...</option>
             {catalog.folders.map((f) => (
               <option key={f.id} value={f.id}>
-                {registry.getTool(f.library)?.label ?? f.library}: {pathLabel(catalog.folders, f.id)}
+                {registry.getLibraryLabel(f.library)}: {pathLabel(catalog.folders, f.id)}
               </option>
             ))}
             {rule.folderId !== "" && !catalog.folders.some((f) => f.id === rule.folderId) && <option value={rule.folderId}>(missing folder)</option>}

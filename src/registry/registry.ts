@@ -63,6 +63,16 @@ export function createRegistry() {
         (a, b) => a.order - b.order || a.label.localeCompare(b.label),
       ),
     getTool: (id: string) => tools.get(id),
+    /** What to call a library in the interface: its tool's label, a tool's `libraryLabels` entry, else the id. */
+    getLibraryLabel: (library: string) => {
+      const own = tools.get(library);
+      if (own) return own.label;
+      for (const tool of tools.values()) {
+        const label = tool.libraryLabels?.[library];
+        if (label) return label;
+      }
+      return library;
+    },
     getItemTypes: () => [...itemTypes.values()],
     getItemType: (id: string) => itemTypes.get(id),
     getCommands: () => [...commands.values()],

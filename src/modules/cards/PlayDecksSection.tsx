@@ -8,9 +8,10 @@ import { cardTypeIcon } from "./icons";
 
 /**
  * Your decks in play with how many cards are left, and a Draw button for each.
- * Used by the Draw tab and by the quick tools panel (`compact` drops the heading).
+ * Used by the Draw tab. (Each game in play is also an item in the card library, so it can be
+ * opened, linked and mentioned like anything else.)
  */
-export function PlayDecksSection({ compact = false }: { compact?: boolean }) {
+export function PlayDecksSection() {
   const { project } = useCurrentProject();
   const { openItem } = useNavigation();
   const dataVersion = useDataVersion();
@@ -42,7 +43,7 @@ export function PlayDecksSection({ compact = false }: { compact?: boolean }) {
 
   return (
     <div>
-      {!compact && <h2>Decks in play</h2>}
+      <h2>Decks in play</h2>
       {error && <p className="error" role="alert">{error}</p>}
       {!projectId ? (
         <p className="empty">No project is open.</p>

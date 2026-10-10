@@ -69,7 +69,7 @@ export function useQueryCatalog(projectId: string, query: Query): QueryCatalog {
         return def?.kind === "dropdown" ? def.config.options.find((o) => o.id === optionId)?.label : undefined;
       },
       itemType: (id) => registry.getItemType(id)?.label ?? id,
-      library: (id) => registry.getTool(id)?.label ?? id,
+      library: (id) => registry.getLibraryLabel(id),
     }),
     [tags, folders, definitions, itemNames],
   );

@@ -1,7 +1,6 @@
 import type { ModuleDefinition } from "../../registry/types";
 import { generatorType } from "./generatorType";
 import { namePresetType } from "./namePresetType";
-import { QuickNameWidget } from "./QuickNameWidget";
 import { QuickTableWidget } from "./QuickTableWidget";
 import { tableType } from "./tableType";
 import { TablesScreen } from "./TablesScreen";
@@ -21,7 +20,6 @@ export const tablesModule: ModuleDefinition = {
   itemTypes: [tableType, namePresetType, generatorType],
   widgets: [
     { id: "tables.quick-roll", label: "Quick table roll", icon: "📋", order: 25, component: QuickTableWidget },
-    { id: "tables.quick-name", label: "Quick name", icon: "🏷️", order: 26, component: QuickNameWidget },
   ],
   commands: [
     {

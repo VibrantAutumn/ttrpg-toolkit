@@ -84,6 +84,19 @@ describe("registry", () => {
     expect(registry.getTool("fresh")).toBeDefined();
   });
 
+  describe("library labels", () => {
+    it("uses the tool of the same id, then a tool's libraryLabels, then the id", () => {
+      const registry = createRegistry();
+      registry.register({
+        id: "m",
+        tools: [tool("dice"), { ...tool("home"), label: "Home", libraryLabels: { worldbuilding: "Pages" } }],
+      });
+      expect(registry.getLibraryLabel("dice")).toBe(tool("dice").label);
+      expect(registry.getLibraryLabel("worldbuilding")).toBe("Pages");
+      expect(registry.getLibraryLabel("unknown")).toBe("unknown");
+    });
+  });
+
   describe("widgets (the small tools in the quick tools panel)", () => {
     it("returns what a module contributes, by id", () => {
       const registry = createRegistry();
