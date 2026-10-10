@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFromTemplate, listItemsOfType, type Item } from "../../api/library";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
 import { itemIcon } from "../../components/item/itemDisplay";
@@ -11,10 +11,10 @@ import { StarterTemplates } from "./StarterTemplates";
  * you are looking at (with the template's text, tags, field sets and default values) and opened.
  */
 export function NewFromTemplate({ folderId }: { folderId: string | null }) {
-  const { campaign } = useCurrentCampaign();
+  const { project } = useCurrentProject();
   const { openItem } = useNavigation();
   const dataVersion = useDataVersion();
-  const campaignId = campaign?.id ?? null;
+  const projectId = project?.id ?? null;
   const [open, setOpen] = useState(false);
   const [templates, setTemplates] = useState<Item[]>([]);
   const [chosen, setChosen] = useState("");
@@ -22,9 +22,9 @@ export function NewFromTemplate({ folderId }: { folderId: string | null }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open || !campaignId) return;
+    if (!open || !projectId) return;
     let active = true;
-    listItemsOfType(campaignId, "worldbuilding", "template")
+    listItemsOfType(projectId, "worldbuilding", "template")
       .then((found) => {
         if (!active) return;
         setTemplates(found);
@@ -34,7 +34,7 @@ export function NewFromTemplate({ folderId }: { folderId: string | null }) {
     return () => {
       active = false;
     };
-  }, [open, campaignId, dataVersion]);
+  }, [open, projectId, dataVersion]);
 
   const template = templates.find((t) => t.id === chosen);
 

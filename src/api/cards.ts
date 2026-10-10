@@ -64,21 +64,21 @@ export interface SavedDraw {
 
 /** Saves a finished draw as a new item in the Cards library. A blank name uses "<source> draw". */
 export const saveDraw = (
-  campaignId: string,
+  projectId: string,
   name: string,
   folderId: string | null,
   sourceName: string,
   seed: number,
   text: string,
   resultJson: string,
-) => invoke<Item>("save_draw", { campaignId, name, folderId, sourceName, seed, text, resultJson });
+) => invoke<Item>("save_draw", { projectId, name, folderId, sourceName, seed, text, resultJson });
 export const getSavedDraw = (itemId: string) => invoke<SavedDraw>("get_saved_draw", { itemId });
 export const setSavedDrawNotes = (itemId: string, notes: string) =>
   invoke<void>("set_saved_draw_notes", { itemId, notes });
 
-/** Every set, deck and pool in the campaign: what can be drawn from. */
-export const listCollections = (campaignId: string) =>
-  invoke<Item[]>("list_collections", { campaignId });
+/** Every set, deck and pool in the project: what can be drawn from. */
+export const listCollections = (projectId: string) =>
+  invoke<Item[]>("list_collections", { projectId });
 
 /** Mirrors the Rust `PlayDeck`: a running game (see `lib/cards/play.ts` for the state's shape). */
 export interface PlayDeck {
@@ -101,18 +101,18 @@ export interface PlayDeckEntry {
 
 /** Starts a deck in play. `stateJson` comes from `startPlay`; a blank name uses "<source> in play". */
 export const createPlayDeck = (
-  campaignId: string,
+  projectId: string,
   name: string,
   folderId: string | null,
   sourceId: string | null,
   sourceName: string,
   stateJson: string,
-) => invoke<Item>("create_play_deck", { campaignId, name, folderId, sourceId, sourceName, stateJson });
+) => invoke<Item>("create_play_deck", { projectId, name, folderId, sourceId, sourceName, stateJson });
 export const getPlayDeck = (itemId: string) => invoke<PlayDeck>("get_play_deck", { itemId });
 export const setPlayDeckState = (itemId: string, stateJson: string) =>
   invoke<void>("set_play_deck_state", { itemId, stateJson });
-export const listPlayDecks = (campaignId: string) =>
-  invoke<PlayDeckEntry[]>("list_play_decks", { campaignId });
+export const listPlayDecks = (projectId: string) =>
+  invoke<PlayDeckEntry[]>("list_play_decks", { projectId });
 
 /** A position of a spread, as stored (mirrors the Rust `Position`). */
 export interface SpreadPosition {
@@ -154,4 +154,4 @@ export const setSpreadNotes = (itemId: string, notes: string) =>
   invoke<void>("set_spread_notes", { itemId, notes });
 export const setSpreadReversals = (itemId: string, reversals: boolean, percent: number) =>
   invoke<void>("set_spread_reversals", { itemId, reversals, percent });
-export const listSpreads = (campaignId: string) => invoke<SpreadEntry[]>("list_spreads", { campaignId });
+export const listSpreads = (projectId: string) => invoke<SpreadEntry[]>("list_spreads", { projectId });

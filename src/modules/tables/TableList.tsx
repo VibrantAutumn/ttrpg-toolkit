@@ -1,42 +1,42 @@
 import { useEffect, useState } from "react";
 import { listTables, type TableSummary } from "../../api/tables";
 import { RollLogList } from "../../components/results/RollLogList";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { useDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
 import { rollTableById } from "../../state/tableActions";
 import { RollContextBar } from "./RollContextBar";
 
-/** Every table in the campaign with a Roll button, and the log of table rolls below. */
+/** Every table in the project with a Roll button, and the log of table rolls below. */
 export function TableList() {
-  const { campaign } = useCurrentCampaign();
+  const { project } = useCurrentProject();
   const { openItem } = useNavigation();
   const dataVersion = useDataVersion();
-  const campaignId = campaign?.id ?? null;
+  const projectId = project?.id ?? null;
 
   const [tables, setTables] = useState<TableSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!campaignId) {
+    if (!projectId) {
       setTables([]);
       return;
     }
     let active = true;
-    listTables(campaignId)
+    listTables(projectId)
       .then((list) => active && setTables(list))
       .catch((e) => active && setError(String(e)));
     return () => {
       active = false;
     };
-  }, [campaignId, dataVersion]);
+  }, [projectId, dataVersion]);
 
   async function roll(table: TableSummary) {
     const outcome = await rollTableById(table.itemId);
     setError(outcome.ok ? null : outcome.message);
   }
 
-  if (!campaignId) return <p className="empty">Choose a campaign to roll its tables.</p>;
+  if (!projectId) return <p className="empty">Choose a project to roll its tables.</p>;
 
   return (
     <div>

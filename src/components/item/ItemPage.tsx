@@ -116,7 +116,7 @@ export function ItemPage({ pageId, openTab, onBack }: { pageId: string; openTab:
           {!trashed && canHaveTabs && (
             <TabStrip
               parentId={item.id}
-              campaignId={item.campaignId}
+              projectId={item.projectId}
               tabs={tabs}
               selected={current ? current.id : "main"}
               onSelect={setSelected}
@@ -139,7 +139,7 @@ export function ItemPage({ pageId, openTab, onBack }: { pageId: string; openTab:
             </div>
           ) : (
             <div className="tab-body">
-              <EmbedBody key={current.id} tab={current} parentId={item.id} campaignId={item.campaignId} run={run} moveButtons={moveButtons(current)} />
+              <EmbedBody key={current.id} tab={current} parentId={item.id} projectId={item.projectId} run={run} moveButtons={moveButtons(current)} />
             </div>
           )}
         </>

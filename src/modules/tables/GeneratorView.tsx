@@ -56,11 +56,11 @@ export function GeneratorView({ itemId }: { itemId: string }) {
     };
   }, [itemId]);
 
-  const campaignId = item?.campaignId ?? null;
+  const projectId = item?.projectId ?? null;
   useEffect(() => {
-    if (!campaignId) return;
+    if (!projectId) return;
     let active = true;
-    Promise.all([listItemsOfType(campaignId, "worldbuilding", "template"), listFieldDefinitions(campaignId), listTables(campaignId)])
+    Promise.all([listItemsOfType(projectId, "worldbuilding", "template"), listFieldDefinitions(projectId), listTables(projectId)])
       .then(([t, f, tb]) => {
         if (!active) return;
         setTemplates(t);
@@ -71,7 +71,7 @@ export function GeneratorView({ itemId }: { itemId: string }) {
     return () => {
       active = false;
     };
-  }, [campaignId, dataVersion]);
+  }, [projectId, dataVersion]);
 
   useEffect(() => {
     const onHide = () => document.visibilityState === "hidden" && void saverRef.current.flush();
@@ -89,7 +89,7 @@ export function GeneratorView({ itemId }: { itemId: string }) {
   );
 
   if (error) return <p className="error">{error}</p>;
-  if (!item || !def || !campaignId) return <p className="empty">Loading...</p>;
+  if (!item || !def || !projectId) return <p className="empty">Loading...</p>;
 
   const setRow = (index: number, patch: Partial<GeneratorRow>) => change({ ...def, rows: def.rows.map((r, i) => (i === index ? { ...r, ...patch } : r)) });
   const move = (index: number, delta: -1 | 1) => {
@@ -146,7 +146,7 @@ export function GeneratorView({ itemId }: { itemId: string }) {
         Add a row
       </button>
 
-      <Preview campaignId={campaignId} def={def} name={item.name} />
+      <Preview projectId={projectId} def={def} name={item.name} />
     </div>
   );
 }
@@ -243,7 +243,7 @@ function RowEditor({
   );
 }
 
-function Preview({ campaignId, def, name }: { campaignId: string; def: GeneratorDef; name: string }) {
+function Preview({ projectId, def, name }: { projectId: string; def: GeneratorDef; name: string }) {
   const { openItem } = useNavigation();
   const [run, setRun] = useState<GeneratorRun | null>(null);
   const [kept, setKept] = useState<Set<string>>(new Set());
@@ -258,7 +258,7 @@ function Preview({ campaignId, def, name }: { campaignId: string; def: Generator
       return;
     }
     let active = true;
-    previewDocument(campaignId, def, run, name)
+    previewDocument(projectId, def, run, name)
       .then((p) => active && setPreview(p))
       .catch(() => active && setPreview(null));
     return () => {
@@ -266,7 +266,7 @@ function Preview({ campaignId, def, name }: { campaignId: string; def: Generator
     };
     // `defKey` stands for the generator's content
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, defKey, run, name]);
+  }, [projectId, defKey, run, name]);
 
   async function go(action: () => Promise<GeneratorRun>) {
     setBusy(true);
@@ -283,7 +283,7 @@ function Preview({ campaignId, def, name }: { campaignId: string; def: Generator
   async function create() {
     if (!run) return;
     setBusy(true);
-    const result = await createFromRun(campaignId, def, run, name);
+    const result = await createFromRun(projectId, def, run, name);
     setBusy(false);
     if (result.ok) {
       setMessage(null);
@@ -306,11 +306,11 @@ function Preview({ campaignId, def, name }: { campaignId: string; def: Generator
     <div className="generator-preview">
       <h2>Try it</h2>
       <div className="row wrap">
-        <button type="button" disabled={busy || !rollable} onClick={() => void go(() => runGenerator(campaignId, def))}>
+        <button type="button" disabled={busy || !rollable} onClick={() => void go(() => runGenerator(projectId, def))}>
           {run ? "Start over" : "Generate"}
         </button>
         {run && (
-          <button type="button" disabled={busy} onClick={() => void go(() => rerollGenerator(campaignId, def, run, kept))}>
+          <button type="button" disabled={busy} onClick={() => void go(() => rerollGenerator(projectId, def, run, kept))}>
             Reroll the rows that aren't kept
           </button>
         )}
@@ -332,7 +332,7 @@ function Preview({ campaignId, def, name }: { campaignId: string; def: Generator
                       <input type="checkbox" checked={isKept} disabled={generated.override !== undefined} onChange={() => toggle(row.id)} />
                       <span>keep</span>
                     </label>
-                    <button type="button" disabled={busy} onClick={() => void go(() => rerollGenerator(campaignId, def, run, new Set(def.rows.map((r) => r.id).filter((id) => id !== row.id))))}>
+                    <button type="button" disabled={busy} onClick={() => void go(() => rerollGenerator(projectId, def, run, new Set(def.rows.map((r) => r.id).filter((id) => id !== row.id))))}>
                       Reroll this
                     </button>
                   </div>

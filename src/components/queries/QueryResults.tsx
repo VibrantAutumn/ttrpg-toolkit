@@ -9,8 +9,8 @@ import type { QueryCatalog } from "./useQueryCatalog";
 
 const SHOWN_AT_FIRST = 50;
 
-/** What a query finds right now. Re-runs when the query or the campaign's data changes. */
-export function QueryResults({ campaignId, query, catalog, onlyType }: { campaignId: string; query: Query; catalog: QueryCatalog; onlyType?: string }) {
+/** What a query finds right now. Re-runs when the query or the project's data changes. */
+export function QueryResults({ projectId, query, catalog, onlyType }: { projectId: string; query: Query; catalog: QueryCatalog; onlyType?: string }) {
   const { openItem } = useNavigation();
   const dataVersion = useDataVersion();
   const [result, setResult] = useState<QueryResult | null>(null);
@@ -21,7 +21,7 @@ export function QueryResults({ campaignId, query, catalog, onlyType }: { campaig
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(() => {
-      runQuery(campaignId, query, onlyType)
+      runQuery(projectId, query, onlyType)
         .then((r) => {
           if (cancelled) return;
           setResult(r);
@@ -35,7 +35,7 @@ export function QueryResults({ campaignId, query, catalog, onlyType }: { campaig
     };
     // `key` stands for the query's content
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, key, onlyType, dataVersion]);
+  }, [projectId, key, onlyType, dataVersion]);
 
   if (error) return <p className="error">{error}</p>;
   if (!result) return <p className="empty">Looking...</p>;

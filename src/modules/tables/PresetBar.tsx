@@ -11,14 +11,14 @@ import { bumpDataVersion } from "../../state/dataVersion";
  * the setup no longer matches it, so you can see what Update would overwrite.
  */
 export function PresetBar({
-  campaignId,
+  projectId,
   setup,
   presets,
   loadedId,
   onLoad,
   onForget,
 }: {
-  campaignId: string;
+  projectId: string;
   setup: NameSetup;
   presets: PresetEntry[];
   /** The preset the setup was loaded from or saved as, if any. */
@@ -66,7 +66,7 @@ export function PresetBar({
   async function saveAs() {
     if (name.trim() === "") return;
     await run(async () => {
-      const item = await createNamePreset(campaignId, name, null, serializeSetup(setup));
+      const item = await createNamePreset(projectId, name, null, serializeSetup(setup));
       setSaving(false);
       setName("");
       bumpDataVersion();

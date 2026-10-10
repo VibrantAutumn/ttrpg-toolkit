@@ -1,12 +1,12 @@
 //! Starter templates: ready-made templates (with the fields and field sets they use) that come
-//! with the app, added to a campaign in one all-or-nothing step, like the starter decks and tables.
+//! with the app, added to a project in one all-or-nothing step, like the starter decks and tables.
 //!
 //! The app builds a "bundle" (plain data, see `TemplateBundle`) and this module writes it:
 //! a folder holding the templates, each with its starter text, tags and applied field sets.
 //! The templates carry `origin_pack_id = <bundle id>`, which is how "already added" is known.
 //! Once added they are ordinary templates: edit, rename or delete them freely.
 //!
-//! Fields and field sets are shared by name across the campaign, so a starter that wants a field
+//! Fields and field sets are shared by name across the project, so a starter that wants a field
 //! or set that already exists *uses the existing one* (and leaves it as it is) instead of making
 //! a second; the one exception is a field of the same name but another kind, which is refused
 //! (it could not hold the starter's values).
@@ -17,7 +17,7 @@ use super::fields::{self, FieldDefinition};
 use super::starters::{installed, BundleTag, ID_PREFIX};
 use super::tabs;
 use super::templates::{LIBRARY, TEMPLATE_TYPE};
-use super::{campaigns, folders, items, tags};
+use super::{projects, folders, items, tags};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -206,20 +206,20 @@ fn validate(bundle: &TemplateBundle) -> Result<(), DbError> {
     Ok(())
 }
 
-/// Puts the bundle into the campaign. All or nothing: a failure part-way leaves the campaign
+/// Puts the bundle into the project. All or nothing: a failure part-way leaves the project
 /// exactly as it was. Refuses if this starter is already there, if a template with one of its
 /// names exists, or if a field of one of its names exists with a different kind.
-pub fn install(conn: &Connection, campaign_id: &str, bundle: &TemplateBundle, now: i64) -> Result<TemplateInstallResult, DbError> {
-    campaigns::require_live(conn, campaign_id)?;
+pub fn install(conn: &Connection, project_id: &str, bundle: &TemplateBundle, now: i64) -> Result<TemplateInstallResult, DbError> {
+    projects::require_live(conn, project_id)?;
     validate(bundle)?;
-    if installed(conn, campaign_id)?.contains(&bundle.id) {
-        return Err(DbError::Invalid("That starter has already been added to this campaign."));
+    if installed(conn, project_id)?.contains(&bundle.id) {
+        return Err(DbError::Invalid("That starter has already been added to this project."));
     }
     for template in &bundle.templates {
         let taken: i64 = conn.query_row(
             "SELECT COUNT(*) FROM items
-             WHERE campaign_id = ?1 AND library = ?2 AND item_type = ?3 AND deleted_at IS NULL AND name = ?4 COLLATE NOCASE",
-            params![campaign_id, LIBRARY, TEMPLATE_TYPE, template.name.trim()],
+             WHERE project_id = ?1 AND library = ?2 AND item_type = ?3 AND deleted_at IS NULL AND name = ?4 COLLATE NOCASE",
+            params![project_id, LIBRARY, TEMPLATE_TYPE, template.name.trim()],
             |r| r.get(0),
         )?;
         if taken > 0 {
@@ -228,7 +228,7 @@ pub fn install(conn: &Connection, campaign_id: &str, bundle: &TemplateBundle, no
             ));
         }
     }
-    let existing_fields: Vec<FieldDefinition> = fields::list_definitions(conn, campaign_id)?;
+    let existing_fields: Vec<FieldDefinition> = fields::list_definitions(conn, project_id)?;
     for field in &bundle.fields {
         if let Some(found) = existing_fields.iter().find(|d| d.name.eq_ignore_ascii_case(field.name.trim())) {
             if found.kind != field.kind {
@@ -244,13 +244,13 @@ pub fn install(conn: &Connection, campaign_id: &str, bundle: &TemplateBundle, no
     let tx = conn.unchecked_transaction()?;
 
     // Tags: reuse a top-level tag with the same name.
-    let existing_tags = tags::list(&tx, campaign_id)?;
+    let existing_tags = tags::list(&tx, project_id)?;
     let mut tag_ids: HashMap<String, String> = HashMap::new();
     for tag in &bundle.tags {
         let found = existing_tags.iter().find(|t| t.parent_id.is_none() && t.name.eq_ignore_ascii_case(tag.name.trim()));
         let id = match found {
             Some(t) => t.id.clone(),
-            None => tags::create(&tx, campaign_id, None, &tag.name, tag.color.as_deref(), now)?.id,
+            None => tags::create(&tx, project_id, None, &tag.name, tag.color.as_deref(), now)?.id,
         };
         tag_ids.insert(tag.name.trim().to_lowercase(), id);
     }
@@ -263,14 +263,14 @@ pub fn install(conn: &Connection, campaign_id: &str, bundle: &TemplateBundle, no
             Some(found) => found.id.clone(),
             None => {
                 fields_made += 1;
-                fields::create_definition(&tx, campaign_id, &field.name, &field.kind, &field.description, &field.config_json, now)?.id
+                fields::create_definition(&tx, project_id, &field.name, &field.kind, &field.description, &field.config_json, now)?.id
             }
         };
         field_ids.insert(field.key.as_str(), id);
     }
 
     // Sets: use the existing one of that name (as the person has it), or make it.
-    let existing_sets = fields::list_sets(&tx, campaign_id)?;
+    let existing_sets = fields::list_sets(&tx, project_id)?;
     let mut set_ids: HashMap<String, String> = HashMap::new();
     let mut sets_made = 0;
     for set in &bundle.sets {
@@ -278,7 +278,7 @@ pub fn install(conn: &Connection, campaign_id: &str, bundle: &TemplateBundle, no
             Some(found) => found.id.clone(),
             None => {
                 sets_made += 1;
-                let made = fields::create_set(&tx, campaign_id, &set.name, &set.description, now)?;
+                let made = fields::create_set(&tx, project_id, &set.name, &set.description, now)?;
                 for (position, key) in set.field_keys.iter().enumerate() {
                     tx.execute(
                         "INSERT INTO field_set_members (set_id, field_id, position, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)",
@@ -291,9 +291,9 @@ pub fn install(conn: &Connection, campaign_id: &str, bundle: &TemplateBundle, no
         set_ids.insert(set.name.trim().to_lowercase(), id);
     }
 
-    let folder = folders::create(&tx, campaign_id, LIBRARY, None, &bundle.name, now)?;
+    let folder = folders::create(&tx, project_id, LIBRARY, None, &bundle.name, now)?;
     for template in &bundle.templates {
-        let item = items::create(&tx, campaign_id, LIBRARY, TEMPLATE_TYPE, &template.name, Some(&folder.id), now)?;
+        let item = items::create(&tx, project_id, LIBRARY, TEMPLATE_TYPE, &template.name, Some(&folder.id), now)?;
         tx.execute(
             "UPDATE items SET origin_pack_id = ?2, origin_item_id = ?3, icon = ?4 WHERE id = ?1",
             params![item.id, bundle.id, template.key, template.icon],
@@ -381,7 +381,7 @@ mod tests {
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -570,7 +570,7 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_campaign_is_refused() {
+    fn a_missing_project_is_refused() {
         let (conn, _) = setup();
         assert!(matches!(install(&conn, "nope", &bundle(), 10), Err(DbError::NotFound)));
     }

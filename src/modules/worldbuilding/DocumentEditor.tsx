@@ -53,14 +53,14 @@ export function DocumentEditor({ itemId }: { itemId: string }) {
   const latest = useRef<string>(""); // the newest text from whichever view is showing
   const rich = useRef<RichEditorHandle | null>(null);
   const { openItem } = useNavigation();
-  const campaignId = useRef<string | null>(null);
+  const projectId = useRef<string | null>(null);
 
-  // What "@" needs: search the open campaign (never the document itself), look up names, open items.
+  // What "@" needs: search the open project (never the document itself), look up names, open items.
   const mentions = useMemo<MentionSupport>(
     () => ({
       search: async (query) => {
-        if (!campaignId.current) return [];
-        const found = await searchItems(campaignId.current, query, null, 8);
+        if (!projectId.current) return [];
+        const found = await searchItems(projectId.current, query, null, 8);
         return found.filter((i) => i.id !== itemId);
       },
       lookup: (ids) => getItems(ids),
@@ -74,7 +74,7 @@ export function DocumentEditor({ itemId }: { itemId: string }) {
     let lastMentions = "";
     getItem(itemId)
       .then((item) => {
-        campaignId.current = item.campaignId;
+        projectId.current = item.projectId;
       })
       .catch(() => {});
     const autosaver = createAutosaver({

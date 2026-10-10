@@ -1,4 +1,4 @@
-use super::export::export_campaign;
+use super::export::export_project;
 use super::format::*;
 use super::import::{import_pack, import_parsed, parent_first, read_pack, read_pack_with, Limits};
 use super::PackError;
@@ -15,21 +15,21 @@ use crate::db::tables::{self, EntryInput, Pick};
 use crate::db::play_decks::{self, NewPlayDeck};
 use crate::db::saved_draws::{self, NewSavedDraw};
 use crate::db::saved_rolls::{self, NewSavedRoll};
-use crate::db::{campaigns, documents, folders, items, links, open_in_memory, search, settings, tags};
+use crate::db::{projects, documents, folders, items, links, open_in_memory, search, settings, tags};
 use rusqlite::types::Value;
 use rusqlite::Connection;
 use serde_json::json;
 use std::io::{Cursor, Write};
 use zip::{write::SimpleFileOptions, ZipWriter};
 
-/// A campaign exercising everything a pack carries, with fixed timestamps:
+/// A project exercising everything a pack carries, with fixed timestamps:
 /// nested folders, items in and out of folders, a map, document text, nested and
 /// coloured tags, attached and removed tags, links (one removed), and trash
 /// (a deleted item, a deleted folder with a deleted item inside, a deleted tag),
 /// two saved dice rolls (one in the trash), two formulas (one in the trash), and cards: a card with a picture, a set, a deck and a pool holding each other,
 /// a removed member and a trashed card.
 fn populate(conn: &Connection) -> String {
-    let camp = campaigns::create(conn, "Strahd", 1000).unwrap();
+    let camp = projects::create(conn, "Strahd", 1000).unwrap();
     let c = camp.id.as_str();
 
     let npcs = folders::create(conn, c, "worldbuilding", None, "NPCs", 1100).unwrap();
@@ -70,7 +70,7 @@ fn populate(conn: &Connection) -> String {
 
     let roll = |name: &str, seed: i64, at: i64| {
         let new = NewSavedRoll {
-            campaign_id: c,
+            project_id: c,
             name,
             folder_id: None,
             notation: "2d6+3",
@@ -109,7 +109,7 @@ fn populate(conn: &Connection) -> String {
     items::soft_delete(conn, &lost.id, 3700).unwrap();
 
     let reading = NewSavedDraw {
-        campaign_id: c,
+        project_id: c,
         name: "Evening reading",
         folder_id: None,
         source_name: "Omens",
@@ -121,7 +121,7 @@ fn populate(conn: &Connection) -> String {
     saved_draws::set_notes(conn, &reading.id, "A fresh start", 3810).unwrap();
 
     let game = NewPlayDeck {
-        campaign_id: c,
+        project_id: c,
         name: "Harrow game",
         folder_id: None,
         source_id: Some("not-a-real-id"),
@@ -175,7 +175,7 @@ mind the [Rumors]".into(), weight: 1 },
     let hooks = items::create(conn, c, "tables", "table", "Hooks", None, 4200).unwrap();
     tables::add_entry(conn, &hooks.id, "[3 unique Rumors] and [table:Rumors as R] [R]", 1, 4210).unwrap();
 
-    // A saved name setup (its table and tag ids are made-up ones here, so the whole campaign can be
+    // A saved name setup (its table and tag ids are made-up ones here, so the whole project can be
     // compared by content; a test of its own checks that real ids follow the import).
     let preset = r#"{"version":1,"mode":"two","sources":{"first":"some-table","last":"another-table"},"tagIds":["some-tag"],"tagMatch":"any","join1":"apostrophe","join2":"none","capitalisation":"everyPart","mergeDoubles":true}"#;
     name_presets::create(conn, c, "Elven name", None, preset, 4400).unwrap();
@@ -213,7 +213,7 @@ mind the [Rumors]".into(), weight: 1 },
     let removed = tabs::add_embed_tab(conn, &strahd.id, "Removed", None, 4840).unwrap();
     tabs::remove_tab(conn, &removed.id, 4850).unwrap();
 
-    // A smart collection (its query holds no ids here, so the whole campaign can be compared by
+    // A smart collection (its query holds no ids here, so the whole project can be compared by
     // content; a test of its own checks that real ids follow the import).
     let elves = items::create(conn, c, "worldbuilding", "smart_collection", "Elves", None, 4900).unwrap();
     let query = r#"{"version":1,"where":{"op":"all","not":false,"rules":[{"kind":"name","text":"elf","not":false}]},"sort":[{"by":"name","dir":"asc"}]}"#;
@@ -227,13 +227,13 @@ mind the [Rumors]".into(), weight: 1 },
     camp.id
 }
 
-/// Runs a query and renders each row as text, so two campaigns can be compared
+/// Runs a query and renders each row as text, so two projects can be compared
 /// by content (names, dates, relationships) while their ids differ.
-fn lines(conn: &Connection, sql: &str, campaign_id: &str) -> Vec<String> {
+fn lines(conn: &Connection, sql: &str, project_id: &str) -> Vec<String> {
     let mut stmt = conn.prepare(sql).unwrap();
     let columns = stmt.column_count();
     let mut rows: Vec<String> = stmt
-        .query_map([campaign_id], |r| {
+        .query_map([project_id], |r| {
             let mut values = Vec::new();
             for i in 0..columns {
                 values.push(r.get::<_, Value>(i)?);
@@ -278,21 +278,21 @@ struct Snapshot {
     generators: Vec<String>,
 }
 
-fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
+fn snapshot(conn: &Connection, project_id: &str) -> Snapshot {
     Snapshot {
         folders: lines(conn,
             "SELECT f.library, f.name, p.name, f.created_at, f.updated_at, f.deleted_at
-             FROM folders f LEFT JOIN folders p ON p.id = f.parent_id WHERE f.campaign_id = ?1", campaign_id),
+             FROM folders f LEFT JOIN folders p ON p.id = f.parent_id WHERE f.project_id = ?1", project_id),
         items: lines(conn,
             "SELECT i.library, i.item_type, i.name, f.name, i.visibility, i.created_at, i.updated_at, i.deleted_at
-             FROM items i LEFT JOIN folders f ON f.id = i.folder_id WHERE i.campaign_id = ?1", campaign_id),
+             FROM items i LEFT JOIN folders f ON f.id = i.folder_id WHERE i.project_id = ?1", project_id),
         tags: lines(conn,
             "SELECT t.name, p.name, t.color, t.created_at, t.updated_at, t.deleted_at
-             FROM tags t LEFT JOIN tags p ON p.id = t.parent_id WHERE t.campaign_id = ?1", campaign_id),
+             FROM tags t LEFT JOIN tags p ON p.id = t.parent_id WHERE t.project_id = ?1", project_id),
         item_tags: lines(conn,
             "SELECT i.name, t.name, it.created_at, it.updated_at, it.deleted_at
              FROM item_tags it JOIN items i ON i.id = it.item_id JOIN tags t ON t.id = it.tag_id
-             WHERE i.campaign_id = ?1", campaign_id),
+             WHERE i.project_id = ?1", project_id),
         links: lines(conn,
             "SELECT s.name, t.name,
                     CASE WHEN l.source_ref LIKE 'field:%'
@@ -300,82 +300,82 @@ fn snapshot(conn: &Connection, campaign_id: &str) -> Snapshot {
                          ELSE l.source_ref END,
                     l.created_at, l.updated_at, l.deleted_at
              FROM links l JOIN items s ON s.id = l.source_item_id JOIN items t ON t.id = l.target_item_id
-             WHERE s.campaign_id = ?1", campaign_id),
+             WHERE s.project_id = ?1", project_id),
         documents: lines(conn,
             "SELECT i.name, d.body, d.created_at, d.updated_at
-             FROM document_content d JOIN items i ON i.id = d.item_id WHERE i.campaign_id = ?1", campaign_id),
+             FROM document_content d JOIN items i ON i.id = d.item_id WHERE i.project_id = ?1", project_id),
         saved_rolls: lines(conn,
             "SELECT i.name, i.library, s.notation, s.seed, s.text, s.result_json, s.created_at, s.updated_at, i.deleted_at
-             FROM saved_rolls s JOIN items i ON i.id = s.item_id WHERE i.campaign_id = ?1", campaign_id),
+             FROM saved_rolls s JOIN items i ON i.id = s.item_id WHERE i.project_id = ?1", project_id),
         formulas: lines(conn,
             "SELECT i.name, i.library, f.notation, f.created_at, f.updated_at, i.deleted_at
-             FROM formulas f JOIN items i ON i.id = f.item_id WHERE i.campaign_id = ?1", campaign_id),
+             FROM formulas f JOIN items i ON i.id = f.item_id WHERE i.project_id = ?1", project_id),
         card_details: lines(conn,
             "SELECT i.name, d.value, d.notes, d.created_at, d.updated_at, i.deleted_at
-             FROM card_details d JOIN items i ON i.id = d.item_id WHERE i.campaign_id = ?1", campaign_id),
+             FROM card_details d JOIN items i ON i.id = d.item_id WHERE i.project_id = ?1", project_id),
         card_images: lines(conn,
             "SELECT i.name, c.mime, c.image, c.thumb, c.created_at, c.updated_at
-             FROM card_images c JOIN items i ON i.id = c.item_id WHERE i.campaign_id = ?1", campaign_id),
+             FROM card_images c JOIN items i ON i.id = c.item_id WHERE i.project_id = ?1", project_id),
         collection_members: lines(conn,
             "SELECT h.name, m.name, k.position, k.created_at, k.updated_at, k.deleted_at
              FROM collection_members k JOIN items h ON h.id = k.collection_id JOIN items m ON m.id = k.member_id
-             WHERE h.campaign_id = ?1", campaign_id),
+             WHERE h.project_id = ?1", project_id),
         saved_draws: lines(conn,
             "SELECT i.name, i.library, s.source_name, s.seed, s.text, s.result_json, s.notes, s.created_at, s.updated_at, i.deleted_at
-             FROM saved_draws s JOIN items i ON i.id = s.item_id WHERE i.campaign_id = ?1", campaign_id),
+             FROM saved_draws s JOIN items i ON i.id = s.item_id WHERE i.project_id = ?1", project_id),
         play_decks: lines(conn,
             "SELECT i.name, i.library, p.source_name, p.state_json, p.created_at, p.updated_at, i.deleted_at
-             FROM play_decks p JOIN items i ON i.id = p.item_id WHERE i.campaign_id = ?1", campaign_id),
+             FROM play_decks p JOIN items i ON i.id = p.item_id WHERE i.project_id = ?1", project_id),
         spreads: lines(conn,
             "SELECT i.name, s.notes, s.reversals, s.reversal_percent, s.created_at, s.updated_at, i.deleted_at
-             FROM spreads s JOIN items i ON i.id = s.item_id WHERE i.campaign_id = ?1", campaign_id),
+             FROM spreads s JOIN items i ON i.id = s.item_id WHERE i.project_id = ?1", project_id),
         spread_positions: lines(conn,
             "SELECT i.name, p.position, p.name, src.name, p.meaning
              FROM spread_positions p JOIN items i ON i.id = p.spread_id LEFT JOIN items src ON src.id = p.source_id
-             WHERE i.campaign_id = ?1", campaign_id),
+             WHERE i.project_id = ?1", project_id),
         random_tables: lines(conn,
             "SELECT i.name, i.library, t.notes, t.die_size, t.avoid_recent, t.created_at, t.updated_at, i.deleted_at
-             FROM random_tables t JOIN items i ON i.id = t.item_id WHERE i.campaign_id = ?1", campaign_id),
+             FROM random_tables t JOIN items i ON i.id = t.item_id WHERE i.project_id = ?1", project_id),
         table_entries: lines(conn,
             "SELECT i.name, e.position, e.text, e.weight, e.created_at, e.updated_at, e.deleted_at
-             FROM table_entries e JOIN items i ON i.id = e.table_id WHERE i.campaign_id = ?1", campaign_id),
+             FROM table_entries e JOIN items i ON i.id = e.table_id WHERE i.project_id = ?1", project_id),
         table_entry_tags: lines(conn,
             "SELECT i.name, e.text, t.name, l.created_at, l.updated_at, l.deleted_at
              FROM table_entry_tags l JOIN table_entries e ON e.id = l.entry_id
-             JOIN items i ON i.id = e.table_id JOIN tags t ON t.id = l.tag_id WHERE i.campaign_id = ?1", campaign_id),
+             JOIN items i ON i.id = e.table_id JOIN tags t ON t.id = l.tag_id WHERE i.project_id = ?1", project_id),
         name_presets: lines(conn,
             "SELECT i.name, i.library, p.setup_json, p.created_at, p.updated_at, i.deleted_at
-             FROM name_presets p JOIN items i ON i.id = p.item_id WHERE i.campaign_id = ?1", campaign_id),
+             FROM name_presets p JOIN items i ON i.id = p.item_id WHERE i.project_id = ?1", project_id),
         field_definitions: lines(conn,
             "SELECT name, kind, description, config_json, created_at, updated_at, deleted_at
-             FROM field_definitions WHERE campaign_id = ?1", campaign_id),
+             FROM field_definitions WHERE project_id = ?1", project_id),
         field_sets: lines(conn,
-            "SELECT name, description, created_at, updated_at, deleted_at FROM field_sets WHERE campaign_id = ?1", campaign_id),
+            "SELECT name, description, created_at, updated_at, deleted_at FROM field_sets WHERE project_id = ?1", project_id),
         field_set_members: lines(conn,
             "SELECT s.name, d.name, m.position, m.created_at, m.updated_at, m.deleted_at
              FROM field_set_members m JOIN field_sets s ON s.id = m.set_id JOIN field_definitions d ON d.id = m.field_id
-             WHERE s.campaign_id = ?1", campaign_id),
+             WHERE s.project_id = ?1", project_id),
         item_field_sets: lines(conn,
             "SELECT i.name, s.name, a.position, a.created_at, a.updated_at, a.deleted_at
              FROM item_field_sets a JOIN items i ON i.id = a.item_id JOIN field_sets s ON s.id = a.set_id
-             WHERE i.campaign_id = ?1", campaign_id),
+             WHERE i.project_id = ?1", project_id),
         // A link field's value holds item ids, which differ between copies (its links are compared above).
         field_values: lines(conn,
             "SELECT i.name, d.name, CASE WHEN d.kind = 'link' THEN '' ELSE v.value_json END,
                     v.sort_num, v.sort_text, v.search_text, v.secret, v.created_at, v.updated_at, v.deleted_at
              FROM field_values v JOIN items i ON i.id = v.item_id JOIN field_definitions d ON d.id = v.field_id
-             WHERE i.campaign_id = ?1", campaign_id),
+             WHERE i.project_id = ?1", project_id),
         item_tabs: lines(conn,
             "SELECT p.name, t.kind, t.position, c.name, g.name, t.title, t.created_at, t.updated_at, t.deleted_at
              FROM item_tabs t JOIN items p ON p.id = t.parent_id
              LEFT JOIN items c ON c.id = t.child_id LEFT JOIN items g ON g.id = t.target_id
-             WHERE p.campaign_id = ?1", campaign_id),
+             WHERE p.project_id = ?1", project_id),
         smart_collections: lines(conn,
             "SELECT i.name, i.library, s.query_json, s.created_at, s.updated_at, i.deleted_at
-             FROM smart_collections s JOIN items i ON i.id = s.item_id WHERE i.campaign_id = ?1", campaign_id),
+             FROM smart_collections s JOIN items i ON i.id = s.item_id WHERE i.project_id = ?1", project_id),
         generators: lines(conn,
             "SELECT i.name, i.library, g.definition_json, g.created_at, g.updated_at, i.deleted_at
-             FROM generators g JOIN items i ON i.id = g.item_id WHERE i.campaign_id = ?1", campaign_id),
+             FROM generators g JOIN items i ON i.id = g.item_id WHERE i.project_id = ?1", project_id),
     }
 }
 
@@ -418,10 +418,10 @@ fn count(conn: &Connection, table: &str) -> i64 {
 fn the_manifest_describes_the_pack() {
     let conn = open_in_memory();
     let camp = populate(&conn);
-    let pack = read_pack(&export_campaign(&conn, &camp, 5000).unwrap()).unwrap();
+    let pack = read_pack(&export_project(&conn, &camp, 5000).unwrap()).unwrap();
     let m = &pack.manifest;
     assert_eq!((m.format.as_str(), m.format_version), (FORMAT, FORMAT_VERSION));
-    assert_eq!((m.campaign.name.as_str(), m.created_at), ("Strahd", 5000));
+    assert_eq!((m.project.name.as_str(), m.created_at), ("Strahd", 5000));
     assert!(!m.pack_id.is_empty() && !m.app_version.is_empty());
     assert_eq!(
         m.counts,
@@ -453,19 +453,19 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
     let conn = open_in_memory();
     let original = populate(&conn);
     let before = snapshot(&conn, &original);
-    let bytes = export_campaign(&conn, &original, 5000).unwrap();
+    let bytes = export_project(&conn, &original, 5000).unwrap();
 
     let result = import_pack(&conn, &bytes, 6000).unwrap();
-    assert_eq!(result.campaign.name, "Strahd (imported)");
+    assert_eq!(result.project.name, "Strahd (imported)");
     assert!(result.warnings.is_empty());
 
-    assert_eq!(snapshot(&conn, &result.campaign.id), before);
+    assert_eq!(snapshot(&conn, &result.project.id), before);
     // The original is untouched.
     assert_eq!(snapshot(&conn, &original), before);
     // And nothing is shared: every id is new.
     let shared: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM items a JOIN items b ON a.id = b.id AND a.campaign_id <> b.campaign_id",
+            "SELECT COUNT(*) FROM items a JOIN items b ON a.id = b.id AND a.project_id <> b.project_id",
             [],
             |r| r.get(0),
         )
@@ -478,19 +478,19 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
 fn a_round_trip_into_a_fresh_database_gives_the_same_content() {
     let source = open_in_memory();
     let original = populate(&source);
-    let bytes = export_campaign(&source, &original, 5000).unwrap();
+    let bytes = export_project(&source, &original, 5000).unwrap();
 
     let target = open_in_memory();
     let result = import_pack(&target, &bytes, 6000).unwrap();
-    assert_eq!(snapshot(&target, &result.campaign.id), snapshot(&source, &original));
+    assert_eq!(snapshot(&target, &result.project.id), snapshot(&source, &original));
 }
 
 #[test]
 fn the_trash_comes_back_as_trash_and_can_be_restored() {
     let conn = open_in_memory();
     let original = populate(&conn);
-    let bytes = export_campaign(&conn, &original, 5000).unwrap();
-    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+    let bytes = export_project(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().project.id;
 
     let trash = crate::db::trash::list(&conn, &imported, "worldbuilding").unwrap();
     let folders: Vec<_> = trash.folders.iter().map(|f| f.name.as_str()).collect();
@@ -506,13 +506,13 @@ fn the_trash_comes_back_as_trash_and_can_be_restored() {
 fn imported_items_remember_where_they_came_from() {
     let conn = open_in_memory();
     let original = populate(&conn);
-    let bytes = export_campaign(&conn, &original, 5000).unwrap();
+    let bytes = export_project(&conn, &original, 5000).unwrap();
     let pack_id = read_pack(&bytes).unwrap().manifest.pack_id;
-    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().project.id;
 
     let rows: Vec<(String, Option<String>, Option<String>)> = {
         let mut stmt = conn
-            .prepare("SELECT name, origin_pack_id, origin_item_id FROM items WHERE campaign_id = ?1")
+            .prepare("SELECT name, origin_pack_id, origin_item_id FROM items WHERE project_id = ?1")
             .unwrap();
         stmt.query_map([&imported], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
             .unwrap()
@@ -522,10 +522,10 @@ fn imported_items_remember_where_they_came_from() {
     assert_eq!(rows.len(), 25);
     for (name, origin_pack, origin_item) in rows {
         assert_eq!(origin_pack.as_deref(), Some(pack_id.as_str()), "{name}");
-        // The origin id is the item's id in the ORIGINAL campaign.
+        // The origin id is the item's id in the ORIGINAL project.
         let original_id: String = conn
             .query_row(
-                "SELECT id FROM items WHERE campaign_id = ?1 AND name = ?2",
+                "SELECT id FROM items WHERE project_id = ?1 AND name = ?2",
                 [&original, &name],
                 |r| r.get(0),
             )
@@ -534,17 +534,17 @@ fn imported_items_remember_where_they_came_from() {
     }
     // Items made here have no origin.
     let local: i64 = conn
-        .query_row("SELECT COUNT(*) FROM items WHERE campaign_id = ?1 AND origin_pack_id IS NOT NULL", [&original], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM items WHERE project_id = ?1 AND origin_pack_id IS NOT NULL", [&original], |r| r.get(0))
         .unwrap();
     assert_eq!(local, 0);
 }
 
 #[test]
-fn the_imported_campaign_is_searchable_and_linked() {
+fn the_imported_project_is_searchable_and_linked() {
     let conn = open_in_memory();
     let original = populate(&conn);
-    let bytes = export_campaign(&conn, &original, 5000).unwrap();
-    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+    let bytes = export_project(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().project.id;
 
     let find = |text: &str| -> Vec<String> {
         search::search(&conn, &imported, text, None, 10).unwrap().into_iter().map(|i| i.name).collect()
@@ -560,12 +560,12 @@ fn the_imported_campaign_is_searchable_and_linked() {
 }
 
 #[test]
-fn a_link_field_keeps_working_in_an_imported_campaign() {
+fn a_link_field_keeps_working_in_an_imported_project() {
     let source = open_in_memory();
     let original = populate(&source);
-    let bytes = export_campaign(&source, &original, 5000).unwrap();
+    let bytes = export_project(&source, &original, 5000).unwrap();
     let target = open_in_memory();
-    let imported = import_pack(&target, &bytes, 6000).unwrap().campaign.id;
+    let imported = import_pack(&target, &bytes, 6000).unwrap().project.id;
 
     let item = |name: &str| search::search(&target, &imported, name, None, 10).unwrap().into_iter().find(|i| i.name == name).unwrap();
     let (strahd, barovia, ireena) = (item("Strahd"), item("Barovia"), item("Ireena"));
@@ -594,14 +594,14 @@ fn a_link_field_keeps_working_in_an_imported_campaign() {
 #[test]
 fn the_text_of_a_text_field_is_never_rewritten_even_if_it_looks_like_an_item_id() {
     let source = open_in_memory();
-    let camp = campaigns::create(&source, "C", 1).unwrap();
+    let camp = projects::create(&source, "C", 1).unwrap();
     let note = fields::create_definition(&source, &camp.id, "Note", "text", "", "{}", 2).unwrap();
     let a = items::create(&source, &camp.id, "worldbuilding", "document", "A", None, 3).unwrap();
     let value = format!("\"{}\"", a.id);
     fields::set_value(&source, &a.id, &note.id, &value, &ValueIndex::default(), false, 4).unwrap();
-    let bytes = export_campaign(&source, &camp.id, 5000).unwrap();
+    let bytes = export_project(&source, &camp.id, 5000).unwrap();
     let target = open_in_memory();
-    let imported = import_pack(&target, &bytes, 6000).unwrap().campaign.id;
+    let imported = import_pack(&target, &bytes, 6000).unwrap().project.id;
     let new_a = search::search(&target, &imported, "A", None, 10).unwrap().remove(0);
     let stored = fields::get_item_fields(&target, &new_a.id).unwrap().values.remove(0).value_json;
     assert_eq!(stored, value);
@@ -662,33 +662,33 @@ fn unreadable_or_orphaned_fields_are_skipped_or_renamed_with_a_warning() {
 fn importing_twice_makes_two_separate_copies() {
     let conn = open_in_memory();
     let original = populate(&conn);
-    let bytes = export_campaign(&conn, &original, 5000).unwrap();
-    let a = import_pack(&conn, &bytes, 6000).unwrap().campaign;
-    let b = import_pack(&conn, &bytes, 6001).unwrap().campaign;
+    let bytes = export_project(&conn, &original, 5000).unwrap();
+    let a = import_pack(&conn, &bytes, 6000).unwrap().project;
+    let b = import_pack(&conn, &bytes, 6001).unwrap().project;
     assert_ne!(a.id, b.id);
     assert_eq!(snapshot(&conn, &a.id), snapshot(&conn, &b.id));
-    assert_eq!(count(&conn, "campaigns"), 3);
+    assert_eq!(count(&conn, "projects"), 3);
 }
 
 #[test]
-fn the_first_import_becomes_the_open_campaign_but_later_ones_do_not_take_over() {
+fn the_first_import_becomes_the_open_project_but_later_ones_do_not_take_over() {
     let conn = open_in_memory();
     let original = populate(&conn);
-    let bytes = export_campaign(&conn, &original, 5000).unwrap();
-    assert!(settings::current_campaign(&conn).unwrap().is_none());
-    let first = import_pack(&conn, &bytes, 6000).unwrap().campaign;
-    assert_eq!(settings::current_campaign(&conn).unwrap().unwrap().id, first.id);
+    let bytes = export_project(&conn, &original, 5000).unwrap();
+    assert!(settings::current_project(&conn).unwrap().is_none());
+    let first = import_pack(&conn, &bytes, 6000).unwrap().project;
+    assert_eq!(settings::current_project(&conn).unwrap().unwrap().id, first.id);
     import_pack(&conn, &bytes, 6001).unwrap();
-    assert_eq!(settings::current_campaign(&conn).unwrap().unwrap().id, first.id);
+    assert_eq!(settings::current_project(&conn).unwrap().unwrap().id, first.id);
 }
 
 #[test]
-fn only_live_campaigns_can_be_exported() {
+fn only_live_projects_can_be_exported() {
     let conn = open_in_memory();
     let camp = populate(&conn);
-    campaigns::soft_delete(&conn, &camp, 9000).unwrap();
-    assert!(export_campaign(&conn, &camp, 9001).is_err());
-    assert!(export_campaign(&conn, "nope", 9001).is_err());
+    projects::soft_delete(&conn, &camp, 9000).unwrap();
+    assert!(export_project(&conn, &camp, 9001).is_err());
+    assert!(export_project(&conn, "nope", 9001).is_err());
 }
 
 // --------------------------------------------------------------- transport
@@ -698,7 +698,7 @@ fn a_pack_survives_the_text_transport_used_between_javascript_and_rust() {
     use super::{decode_from_transport, encode_for_transport};
     let conn = open_in_memory();
     let camp = populate(&conn);
-    let bytes = export_campaign(&conn, &camp, 5000).unwrap();
+    let bytes = export_project(&conn, &camp, 5000).unwrap();
     let text = encode_for_transport(&bytes);
     assert!(text.is_ascii(), "it has to be safe to send as text");
     assert_eq!(decode_from_transport(&text).unwrap(), bytes);
@@ -741,7 +741,7 @@ fn files_that_are_not_packs_are_refused_with_a_clear_reason() {
             other => panic!("{label}: expected NotAPack, got {other:?}"),
         }
     }
-    assert_eq!(count(&conn, "campaigns"), 0);
+    assert_eq!(count(&conn, "projects"), 0);
 }
 
 #[test]
@@ -773,7 +773,7 @@ fn a_manifest_without_a_usable_version_is_damaged() {
 fn truncated_or_garbled_packs_are_refused_without_touching_the_database() {
     let source = open_in_memory();
     let camp = populate(&source);
-    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let bytes = export_project(&source, &camp, 5000).unwrap();
 
     let conn = open_in_memory();
     assert!(import_pack(&conn, &bytes[..bytes.len() / 2], 1).is_err());
@@ -784,14 +784,14 @@ fn truncated_or_garbled_packs_are_refused_without_touching_the_database() {
         (ITEMS_FILE, b"{ not json"),
     ]);
     assert!(matches!(import_pack(&conn, &broken_json, 1), Err(PackError::Corrupt(_))));
-    assert_eq!(count(&conn, "campaigns"), 0);
+    assert_eq!(count(&conn, "projects"), 0);
 }
 
 #[test]
 fn oversized_packs_are_refused() {
     let source = open_in_memory();
     let camp = populate(&source);
-    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let bytes = export_project(&source, &camp, 5000).unwrap();
     let defaults = Limits::default();
     for limits in [
         Limits { max_entries: 3, ..defaults.clone() },
@@ -827,11 +827,11 @@ fn unknown_files_and_unknown_fields_are_ignored() {
 }
 
 #[test]
-fn a_pack_with_no_data_files_imports_as_an_empty_campaign() {
+fn a_pack_with_no_data_files_imports_as_an_empty_project() {
     let conn = open_in_memory();
     let bytes = make_zip(&[(MANIFEST_FILE, manifest_json(1).as_bytes())]);
     let result = import_pack(&conn, &bytes, 10).unwrap();
-    assert_eq!(result.campaign.name, "Test (imported)");
+    assert_eq!(result.project.name, "Test (imported)");
     assert_eq!(result.counts, Counts::default());
 }
 
@@ -896,13 +896,13 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
 
     let conn = open_in_memory();
     let result = import_parsed(&conn, &pack, 10).unwrap();
-    let camp = result.campaign.id;
+    let camp = result.project.id;
     let names = |sql: &str| -> Vec<String> { lines(&conn, sql, &camp) };
     // Blank name, unknown visibility and missing folder are fixed on the first item.
-    let first = names("SELECT name, visibility, folder_id FROM items WHERE origin_item_id = 'i1' AND campaign_id = ?1");
+    let first = names("SELECT name, visibility, folder_id FROM items WHERE origin_item_id = 'i1' AND project_id = ?1");
     assert_eq!(first, [r#"[Text("Untitled"), Text("default"), Null]"#]);
     // The invalid colour is dropped, the clashing name renamed, the orphan moved up.
-    let tag_names = names("SELECT name, parent_id IS NULL, color FROM tags WHERE campaign_id = ?1");
+    let tag_names = names("SELECT name, parent_id IS NULL, color FROM tags WHERE project_id = ?1");
     assert_eq!(
         tag_names,
         [
@@ -912,7 +912,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
         ]
     );
     // The link with a blank source_ref became a normal manual link.
-    let link_refs = names("SELECT l.source_ref FROM links l JOIN items s ON s.id = l.source_item_id WHERE s.campaign_id = ?1");
+    let link_refs = names("SELECT l.source_ref FROM links l JOIN items s ON s.id = l.source_item_id WHERE s.project_id = ?1");
     assert_eq!(link_refs, [r#"[Text("manual")]"#]);
 }
 
@@ -934,14 +934,14 @@ fn parent_loops_in_folders_and_tags_are_broken() {
     assert_eq!(result.counts.folders, 3);
     assert_eq!(result.counts.tags, 2);
     assert!(result.warnings.iter().any(|w| w.contains("loop")), "{:?}", result.warnings);
-    let camp = result.campaign.id;
+    let camp = result.project.id;
     // A loop of two is cut in exactly one place; a self-parent becomes top level.
     let roots: i64 = conn
-        .query_row("SELECT COUNT(*) FROM folders WHERE campaign_id = ?1 AND parent_id IS NULL", [&camp], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM folders WHERE project_id = ?1 AND parent_id IS NULL", [&camp], |r| r.get(0))
         .unwrap();
     assert_eq!(roots, 2);
     let tag_roots: i64 = conn
-        .query_row("SELECT COUNT(*) FROM tags WHERE campaign_id = ?1 AND parent_id IS NULL", [&camp], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM tags WHERE project_id = ?1 AND parent_id IS NULL", [&camp], |r| r.get(0))
         .unwrap();
     assert_eq!(tag_roots, 1);
 }
@@ -992,7 +992,7 @@ const GOLDEN_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/p
 fn regenerate_golden_pack() {
     let conn = open_in_memory();
     let camp = populate(&conn);
-    let bytes = export_campaign(&conn, &camp, 5000).unwrap();
+    let bytes = export_project(&conn, &camp, 5000).unwrap();
     std::fs::create_dir_all(std::path::Path::new(GOLDEN_PATH).parent().unwrap()).unwrap();
     std::fs::write(GOLDEN_PATH, bytes).unwrap();
 }
@@ -1009,12 +1009,12 @@ fn the_committed_version_1_pack_still_imports() {
 
     let conn = open_in_memory();
     let result = import_parsed(&conn, &pack, 9000).unwrap();
-    assert_eq!(result.campaign.name, "Strahd (imported)");
+    assert_eq!(result.project.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
         Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0 }
     );
-    let camp = result.campaign.id;
+    let camp = result.project.id;
 
     // Document text, search, tags, links and the nested folder all came through.
     let found = search::search(&conn, &camp, "vampire", None, 10).unwrap();
@@ -1047,38 +1047,38 @@ fn the_committed_version_1_pack_still_imports() {
 fn a_failed_import_leaves_the_database_exactly_as_it_was() {
     let source = open_in_memory();
     let camp = populate(&source);
-    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let bytes = export_project(&source, &camp, 5000).unwrap();
 
-    // Sabotage the target so the import fails PART WAY (after the campaign,
+    // Sabotage the target so the import fails PART WAY (after the project,
     // folders, tags, items, tag links and links were already written).
     let target = open_in_memory();
     target.execute_batch("DROP TABLE document_content").unwrap();
     assert!(import_pack(&target, &bytes, 6000).is_err());
-    for table in ["campaigns", "folders", "items", "tags", "item_tags", "links", "app_settings"] {
+    for table in ["projects", "folders", "items", "tags", "item_tags", "links", "app_settings"] {
         assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
     }
 }
 
 #[test]
-fn bad_files_never_create_a_campaign() {
+fn bad_files_never_create_a_project() {
     let conn = open_in_memory();
-    let before = count(&conn, "campaigns");
+    let before = count(&conn, "projects");
     let _ = import_pack(&conn, b"garbage", 1);
     let _ = import_pack(&conn, &make_zip(&[(MANIFEST_FILE, manifest_json(2).as_bytes())]), 1);
-    assert_eq!(count(&conn, "campaigns"), before);
+    assert_eq!(count(&conn, "projects"), before);
 }
 
 #[test]
 fn a_failed_import_also_rolls_back_saved_rolls() {
     let source = open_in_memory();
     let camp = populate(&source);
-    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let bytes = export_project(&source, &camp, 5000).unwrap();
 
     // Break only the LAST thing the importer writes.
     let target = open_in_memory();
     target.execute_batch("DROP TABLE saved_rolls").unwrap();
     assert!(import_pack(&target, &bytes, 6000).is_err());
-    for table in ["campaigns", "folders", "items", "tags", "document_content"] {
+    for table in ["projects", "folders", "items", "tags", "document_content"] {
         assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
     }
 }
@@ -1087,8 +1087,8 @@ fn a_failed_import_also_rolls_back_saved_rolls() {
 fn saved_rolls_keep_their_trash_state_and_stay_in_the_dice_library() {
     let conn = open_in_memory();
     let original = populate(&conn);
-    let bytes = export_campaign(&conn, &original, 5000).unwrap();
-    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+    let bytes = export_project(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().project.id;
 
     let live = items::list(&conn, &imported, "dice", None).unwrap();
     assert_eq!(live.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(), ["Attack", "Sneak attack"]);
@@ -1131,7 +1131,7 @@ fn unreadable_or_orphaned_saved_rolls_are_skipped_with_a_warning() {
 
     // The item whose details were dropped still imports (as an item without details).
     let conn = open_in_memory();
-    let camp = import_parsed(&conn, &pack, 10).unwrap().campaign.id;
+    let camp = import_parsed(&conn, &pack, 10).unwrap().project.id;
     assert_eq!(items::list(&conn, &camp, "dice", None).unwrap().len(), 2);
     assert_eq!(count(&conn, "saved_rolls"), 1);
 }
@@ -1140,8 +1140,8 @@ fn unreadable_or_orphaned_saved_rolls_are_skipped_with_a_warning() {
 fn formulas_round_trip_with_their_trash_state() {
     let conn = open_in_memory();
     let original = populate(&conn);
-    let bytes = export_campaign(&conn, &original, 5000).unwrap();
-    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+    let bytes = export_project(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().project.id;
 
     let list = formulas::list(&conn, &imported).unwrap();
     assert_eq!(list.len(), 1, "the trashed formula is not in the live list");
@@ -1184,19 +1184,19 @@ fn unreadable_or_orphaned_formulas_are_skipped_with_a_warning() {
 fn a_failed_import_also_rolls_back_formulas() {
     let source = open_in_memory();
     let camp = populate(&source);
-    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let bytes = export_project(&source, &camp, 5000).unwrap();
     let target = open_in_memory();
     target.execute_batch("DROP TABLE formulas").unwrap();
     assert!(import_pack(&target, &bytes, 6000).is_err());
-    for table in ["campaigns", "items", "saved_rolls", "document_content"] {
+    for table in ["projects", "items", "saved_rolls", "document_content"] {
         assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
     }
 }
 
 // ------------------------------------------------------------------ cards
 
-fn pool_cards(conn: &Connection, campaign: &str) -> Vec<String> {
-    let pool = items::list(conn, campaign, "cards", None)
+fn pool_cards(conn: &Connection, project: &str) -> Vec<String> {
+    let pool = items::list(conn, project, "cards", None)
         .unwrap()
         .into_iter()
         .find(|i| i.name == "Omens")
@@ -1212,8 +1212,8 @@ fn cards_pictures_and_membership_survive_a_round_trip() {
     // the trashed card and the removed member do not count.
     assert_eq!(pool_cards(&conn, &original), ["The Fool", "Two of Cups"]);
 
-    let bytes = export_campaign(&conn, &original, 5000).unwrap();
-    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+    let bytes = export_project(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().project.id;
     assert_eq!(pool_cards(&conn, &imported), ["The Fool", "Two of Cups"]);
 
     let fool = items::list(&conn, &imported, "cards", None).unwrap().into_iter().find(|i| i.name == "The Fool").unwrap();
@@ -1237,13 +1237,13 @@ fn cards_pictures_and_membership_survive_a_round_trip() {
 #[test]
 fn pictures_are_separate_files_and_many_cards_do_not_hit_the_entry_limit() {
     let conn = open_in_memory();
-    let camp = campaigns::create(&conn, "Big deck", 1).unwrap().id;
+    let camp = projects::create(&conn, "Big deck", 1).unwrap().id;
     let png = test_images::png();
     for n in 0..150 {
         let card = items::create(&conn, &camp, "cards", "card", &format!("Card {n}"), None, 10).unwrap();
         cards::set_image(&conn, &card.id, "image/png", &png, &png[..12], 11).unwrap();
     }
-    let bytes = export_campaign(&conn, &camp, 5000).unwrap();
+    let bytes = export_project(&conn, &camp, 5000).unwrap();
 
     let names: Vec<String> = {
         let mut archive = zip::ZipArchive::new(Cursor::new(&bytes)).unwrap();
@@ -1330,7 +1330,7 @@ fn bad_card_data_in_a_pack_is_skipped_with_warnings() {
 
     // What was kept imports; the cards whose pictures were dropped still exist.
     let conn = open_in_memory();
-    let camp = import_parsed(&conn, &pack, 10).unwrap().campaign.id;
+    let camp = import_parsed(&conn, &pack, 10).unwrap().project.id;
     assert_eq!(items::list(&conn, &camp, "cards", None).unwrap().len(), 5);
     assert_eq!(count(&conn, "card_images"), 1);
     assert_eq!(count(&conn, "collection_members"), 2);
@@ -1340,12 +1340,12 @@ fn bad_card_data_in_a_pack_is_skipped_with_warnings() {
 fn a_failed_import_also_rolls_back_cards() {
     let source = open_in_memory();
     let camp = populate(&source);
-    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let bytes = export_project(&source, &camp, 5000).unwrap();
     // Break only the LAST thing the importer writes.
     let target = open_in_memory();
     target.execute_batch("DROP TABLE collection_members").unwrap();
     assert!(import_pack(&target, &bytes, 6000).is_err());
-    for table in ["campaigns", "items", "card_details", "card_images", "formulas"] {
+    for table in ["projects", "items", "card_details", "card_images", "formulas"] {
         assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
     }
 }
@@ -1363,8 +1363,8 @@ fn the_committed_version_1_pack_has_no_cards_and_still_imports() {
 fn saved_draws_keep_their_notes_and_trash_state_through_a_round_trip() {
     let conn = open_in_memory();
     let original = populate(&conn);
-    let bytes = export_campaign(&conn, &original, 5000).unwrap();
-    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+    let bytes = export_project(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().project.id;
 
     let reading = items::list(&conn, &imported, "cards", None)
         .unwrap()
@@ -1414,11 +1414,11 @@ fn unreadable_or_orphaned_saved_draws_are_skipped_with_a_warning() {
 fn a_failed_import_also_rolls_back_saved_draws() {
     let source = open_in_memory();
     let camp = populate(&source);
-    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let bytes = export_project(&source, &camp, 5000).unwrap();
     let target = open_in_memory();
     target.execute_batch("DROP TABLE saved_draws").unwrap();
     assert!(import_pack(&target, &bytes, 6000).is_err());
-    for table in ["campaigns", "items", "card_details", "collection_members", "formulas"] {
+    for table in ["projects", "items", "card_details", "collection_members", "formulas"] {
         assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
     }
 }
@@ -1427,8 +1427,8 @@ fn a_failed_import_also_rolls_back_saved_draws() {
 fn decks_in_play_round_trip_with_their_trash_state() {
     let conn = open_in_memory();
     let original = populate(&conn);
-    let bytes = export_campaign(&conn, &original, 5000).unwrap();
-    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+    let bytes = export_project(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().project.id;
 
     let list = play_decks::list(&conn, &imported).unwrap();
     assert_eq!(list.len(), 1);
@@ -1443,7 +1443,7 @@ fn decks_in_play_round_trip_with_their_trash_state() {
 fn saved_draws_and_games_follow_their_cards_to_the_new_ids() {
     use serde_json::Value;
     let conn = open_in_memory();
-    let camp = campaigns::create(&conn, "Readings", 1).unwrap().id;
+    let camp = projects::create(&conn, "Readings", 1).unwrap().id;
     let fool = items::create(&conn, &camp, "cards", "card", "The Fool", None, 10).unwrap();
     let cups = items::create(&conn, &camp, "cards", "card", "Two of Cups", None, 11).unwrap();
     let deck = items::create(&conn, &camp, "cards", "deck", "Tarot", None, 12).unwrap();
@@ -1455,7 +1455,7 @@ fn saved_draws_and_games_follow_their_cards_to_the_new_ids() {
         deck.id, fool.id, cups.id
     );
     let new_draw = NewSavedDraw {
-        campaign_id: &camp, name: "Reading", folder_id: None, source_name: "Tarot", seed: 1,
+        project_id: &camp, name: "Reading", folder_id: None, source_name: "Tarot", seed: 1,
         text: "Tarot -> The Fool", result_json: &draw_json,
     };
     saved_draws::create(&conn, new_draw, 20).unwrap();
@@ -1464,13 +1464,13 @@ fn saved_draws_and_games_follow_their_cards_to_the_new_ids() {
         fool.id, cups.id
     );
     let game = NewPlayDeck {
-        campaign_id: &camp, name: "Game", folder_id: None, source_id: Some(&deck.id),
+        project_id: &camp, name: "Game", folder_id: None, source_id: Some(&deck.id),
         source_name: "Tarot", state_json: &state_json,
     };
     play_decks::create(&conn, game, 21).unwrap();
 
-    let bytes = export_campaign(&conn, &camp, 5000).unwrap();
-    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+    let bytes = export_project(&conn, &camp, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().project.id;
 
     let find = |name: &str| {
         items::list(&conn, &imported, "cards", None).unwrap().into_iter().find(|i| i.name == name).unwrap()
@@ -1497,13 +1497,13 @@ fn saved_draws_and_games_follow_their_cards_to_the_new_ids() {
     assert_eq!(state["deck"][0]["id"], new_fool.id.as_str());
     assert_eq!(state["drawn"][0]["id"], new_cups.id.as_str());
     assert_eq!(state["seed"], 5);
-    // The original campaign is untouched.
+    // The original project is untouched.
     let before: Value = serde_json::from_str(&saved_draws::get(&conn, &find_in(&conn, &camp, "Reading")).unwrap().result_json).unwrap();
     assert_eq!(before["cards"][0]["id"], fool.id.as_str());
 }
 
-fn find_in(conn: &Connection, campaign: &str, name: &str) -> String {
-    items::list(conn, campaign, "cards", None).unwrap().into_iter().find(|i| i.name == name).unwrap().id
+fn find_in(conn: &Connection, project: &str, name: &str) -> String {
+    items::list(conn, project, "cards", None).unwrap().into_iter().find(|i| i.name == name).unwrap().id
 }
 
 #[test]
@@ -1539,11 +1539,11 @@ fn unreadable_or_orphaned_games_are_skipped_with_a_warning() {
 fn a_failed_import_also_rolls_back_decks_in_play() {
     let source = open_in_memory();
     let camp = populate(&source);
-    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let bytes = export_project(&source, &camp, 5000).unwrap();
     let target = open_in_memory();
     target.execute_batch("DROP TABLE play_decks").unwrap();
     assert!(import_pack(&target, &bytes, 6000).is_err());
-    for table in ["campaigns", "items", "saved_draws", "collection_members", "formulas"] {
+    for table in ["projects", "items", "saved_draws", "collection_members", "formulas"] {
         assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
     }
 }
@@ -1552,11 +1552,11 @@ fn a_failed_import_also_rolls_back_decks_in_play() {
 fn spreads_round_trip_and_their_positions_point_at_the_imported_sources() {
     let conn = open_in_memory();
     let original = populate(&conn);
-    let bytes = export_campaign(&conn, &original, 5000).unwrap();
-    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+    let bytes = export_project(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().project.id;
 
-    let find = |campaign: &str, name: &str| {
-        items::list(&conn, campaign, "cards", None).unwrap().into_iter().find(|i| i.name == name).unwrap()
+    let find = |project: &str, name: &str| {
+        items::list(&conn, project, "cards", None).unwrap().into_iter().find(|i| i.name == name).unwrap()
     };
     let reading = find(&imported, "Strahd reading");
     let spread = spreads::get(&conn, &reading.id).unwrap();
@@ -1570,7 +1570,7 @@ fn spreads_round_trip_and_their_positions_point_at_the_imported_sources() {
         summary,
         [("Tome", Some("Tarot"), "The history"), ("Icon", Some("Omens"), ""), ("Unchosen", None, "Pick a source")]
     );
-    // The sources are the imported copies, not the original campaign's items.
+    // The sources are the imported copies, not the original project's items.
     assert_eq!(spread.positions[0].source_id.as_deref(), Some(find(&imported, "Tarot").id.as_str()));
     assert_ne!(spread.positions[0].source_id.as_deref(), Some(find(&original, "Tarot").id.as_str()));
     assert!(spread.positions.iter().all(|p| !p.source_missing));
@@ -1618,7 +1618,7 @@ fn bad_spread_data_in_a_pack_is_repaired_or_skipped_with_warnings() {
     assert!(pack.warnings.iter().any(|w| w.starts_with("2 spread position(s) pointed at a missing source")), "{:?}", pack.warnings);
 
     let conn = open_in_memory();
-    let camp = import_parsed(&conn, &pack, 10).unwrap().campaign.id;
+    let camp = import_parsed(&conn, &pack, 10).unwrap().project.id;
     let sp = items::list(&conn, &camp, "cards", None).unwrap().into_iter().find(|i| i.item_type == "spread").unwrap();
     let got = spreads::get(&conn, &sp.id).unwrap();
     assert_eq!(got.positions.len(), 10);
@@ -1630,27 +1630,27 @@ fn bad_spread_data_in_a_pack_is_repaired_or_skipped_with_warnings() {
 fn a_failed_import_also_rolls_back_spreads() {
     let source = open_in_memory();
     let camp = populate(&source);
-    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let bytes = export_project(&source, &camp, 5000).unwrap();
     let target = open_in_memory();
     target.execute_batch("DROP TABLE spread_positions").unwrap();
     assert!(import_pack(&target, &bytes, 6000).is_err());
-    for table in ["campaigns", "items", "spreads", "play_decks", "saved_draws"] {
+    for table in ["projects", "items", "spreads", "play_decks", "saved_draws"] {
         assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
     }
 }
 
 // ------------------------------------------------------------ random tables
 
-fn find_table(conn: &Connection, campaign: &str, name: &str) -> items::Item {
-    items::list(conn, campaign, "tables", None).unwrap().into_iter().find(|i| i.name == name).unwrap()
+fn find_table(conn: &Connection, project: &str, name: &str) -> items::Item {
+    items::list(conn, project, "tables", None).unwrap().into_iter().find(|i| i.name == name).unwrap()
 }
 
 #[test]
 fn tables_keep_their_settings_entries_order_weights_and_tags_through_a_round_trip() {
     let conn = open_in_memory();
     let original = populate(&conn);
-    let bytes = export_campaign(&conn, &original, 5000).unwrap();
-    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+    let bytes = export_project(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().project.id;
 
     let rumors_item = find_table(&conn, &imported, "Rumors");
     let rumors = tables::get(&conn, &rumors_item.id).unwrap();
@@ -1664,9 +1664,9 @@ fn tables_keep_their_settings_entries_order_weights_and_tags_through_a_round_tri
         ],
         "the deleted entry stays deleted"
     );
-    // Entry tags point at the imported campaign's own tags; the removed tag stays removed.
+    // Entry tags point at the imported project's own tags; the removed tag stays removed.
     let tag = tags::get(&conn, &rumors.entries[0].tag_ids[0]).unwrap();
-    assert_eq!((tag.name.as_str(), tag.campaign_id == imported), ("Faction", true));
+    assert_eq!((tag.name.as_str(), tag.project_id == imported), ("Faction", true));
     assert_eq!(rumors.entries[0].tag_ids.len(), 1);
     assert!(rumors.entries[1].tag_ids.is_empty());
 
@@ -1695,9 +1695,9 @@ fn what_was_recently_rolled_stays_on_the_device() {
     let recent_rows = |conn: &Connection| -> i64 {
         conn.query_row("SELECT COUNT(*) FROM table_recent", [], |r| r.get(0)).unwrap()
     };
-    assert_eq!(recent_rows(&conn), 1, "the sample campaign has one recent pick");
-    let bytes = export_campaign(&conn, &original, 5000).unwrap();
-    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+    assert_eq!(recent_rows(&conn), 1, "the sample project has one recent pick");
+    let bytes = export_project(&conn, &original, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().project.id;
     assert_eq!(recent_rows(&conn), 1, "importing adds no recent picks");
     let loaded = tables::load_rollable(&conn, &imported).unwrap();
     assert!(loaded.iter().all(|t| t.recent.is_empty()));
@@ -1726,10 +1726,10 @@ fn tables_with_the_same_name_are_renamed_on_import_with_a_warning() {
     assert!(pack.warnings.iter().any(|w| w.starts_with("2 table(s) had the same name")), "{:?}", pack.warnings);
 
     let conn = open_in_memory();
-    let camp = import_parsed(&conn, &pack, 10).unwrap().campaign.id;
+    let camp = import_parsed(&conn, &pack, 10).unwrap().project.id;
     // The oldest keeps its name; the later ones get numbers in order of age.
     assert_eq!(
-        lines(&conn, "SELECT name, origin_item_id FROM items WHERE campaign_id = ?1 AND deleted_at IS NULL", &camp),
+        lines(&conn, "SELECT name, origin_item_id FROM items WHERE project_id = ?1 AND deleted_at IS NULL", &camp),
         [
             r#"[Text("Names"), Text("other")]"#,
             r#"[Text("RUMORS (2)"), Text("middle")]"#,
@@ -1737,7 +1737,7 @@ fn tables_with_the_same_name_are_renamed_on_import_with_a_warning() {
             r#"[Text("rumors"), Text("early")]"#,
         ]
     );
-    // So the imported campaign follows the one-name-per-table rule.
+    // So the imported project follows the one-name-per-table rule.
     assert!(tables::list(&conn, &camp).unwrap().iter().all(|t| !t.duplicate_name));
 }
 
@@ -1803,7 +1803,7 @@ fn bad_table_data_in_a_pack_is_skipped_with_warnings() {
     assert!(said("3 tag(s) on table entries"), "{:?}", pack.warnings);
 
     let conn = open_in_memory();
-    let camp = import_parsed(&conn, &pack, 10).unwrap().campaign.id;
+    let camp = import_parsed(&conn, &pack, 10).unwrap().project.id;
     let t = tables::get(&conn, &find_table(&conn, &camp, "t").id).unwrap();
     assert_eq!((t.die_size, t.avoid_recent), (Some(20), 3));
     assert_eq!(t.entries.len(), 1);
@@ -1822,11 +1822,11 @@ fn a_pack_without_table_files_imports_with_no_tables() {
 fn a_failed_import_also_rolls_back_tables() {
     let source = open_in_memory();
     let camp = populate(&source);
-    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let bytes = export_project(&source, &camp, 5000).unwrap();
     let target = open_in_memory();
     target.execute_batch("DROP TABLE table_entry_tags").unwrap();
     assert!(import_pack(&target, &bytes, 6000).is_err());
-    for table in ["campaigns", "items", "random_tables", "table_entries", "table_recent"] {
+    for table in ["projects", "items", "random_tables", "table_entries", "table_recent"] {
         assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
     }
 }
@@ -1840,7 +1840,7 @@ fn preset_setup(conn: &Connection, id: &str) -> serde_json::Value {
 #[test]
 fn a_preset_follows_its_tables_and_tags_to_the_imported_copies() {
     let conn = open_in_memory();
-    let camp = campaigns::create(&conn, "Names", 1).unwrap().id;
+    let camp = projects::create(&conn, "Names", 1).unwrap().id;
     let prefixes = items::create(&conn, &camp, "tables", "table", "Elf prefixes", None, 2).unwrap();
     let suffixes = items::create(&conn, &camp, "tables", "table", "Elf suffixes", None, 3).unwrap();
     let elf = tags::create(&conn, &camp, None, "Elf", None, 4).unwrap();
@@ -1853,17 +1853,17 @@ fn a_preset_follows_its_tables_and_tags_to_the_imported_copies() {
     });
     let preset = name_presets::create(&conn, &camp, "Elven name", None, &setup.to_string(), 5).unwrap();
 
-    let bytes = export_campaign(&conn, &camp, 5000).unwrap();
-    let imported = import_pack(&conn, &bytes, 6000).unwrap().campaign.id;
+    let bytes = export_project(&conn, &camp, 5000).unwrap();
+    let imported = import_pack(&conn, &bytes, 6000).unwrap().project.id;
 
-    let find = |campaign: &str, name: &str| {
-        items::list(&conn, campaign, "tables", None).unwrap().into_iter().find(|i| i.name == name).unwrap()
+    let find = |project: &str, name: &str| {
+        items::list(&conn, project, "tables", None).unwrap().into_iter().find(|i| i.name == name).unwrap()
     };
     let new_preset = find(&imported, "Elven name");
     assert_ne!(new_preset.id, preset.id);
     let got = preset_setup(&conn, &new_preset.id);
 
-    // Tables and tags are the imported campaign's own; ids not in the pack and the rules are left as they were.
+    // Tables and tags are the imported project's own; ids not in the pack and the rules are left as they were.
     assert_eq!(got["sources"]["first"], json!(find(&imported, "Elf prefixes").id));
     assert_eq!(got["sources"]["last"], json!(find(&imported, "Elf suffixes").id));
     let imported_elf = tags::list(&conn, &imported).unwrap().into_iter().find(|t| t.name == "Elf").unwrap();
@@ -1879,7 +1879,7 @@ fn a_preset_follows_its_tables_and_tags_to_the_imported_copies() {
 #[test]
 fn a_smart_collections_query_follows_its_tags_folders_fields_and_items_to_the_imported_copies() {
     let conn = open_in_memory();
-    let camp = campaigns::create(&conn, "Queries", 1).unwrap().id;
+    let camp = projects::create(&conn, "Queries", 1).unwrap().id;
     let people = folders::create(&conn, &camp, "worldbuilding", None, "People", 2).unwrap();
     let elf = tags::create(&conn, &camp, None, "Elf", None, 3).unwrap();
     let home = fields::create_definition(&conn, &camp, "Home", "link", "", r#"{"many":false}"#, 4).unwrap();
@@ -1900,7 +1900,7 @@ fn a_smart_collections_query_follows_its_tags_folders_fields_and_items_to_the_im
     let collection = items::create(&conn, &camp, "worldbuilding", "smart_collection", "Calm elves", None, 7).unwrap();
     smart_collections::set_query(&conn, &collection.id, &query.to_string(), 8).unwrap();
 
-    let imported = import_pack(&conn, &export_campaign(&conn, &camp, 5000).unwrap(), 6000).unwrap().campaign.id;
+    let imported = import_pack(&conn, &export_project(&conn, &camp, 5000).unwrap(), 6000).unwrap().project.id;
     let find_item = |name: &str| items::list(&conn, &imported, "worldbuilding", None).unwrap().into_iter().find(|i| i.name == name).unwrap();
     let new_collection = find_item("Calm elves");
     assert_ne!(new_collection.id, collection.id);
@@ -1931,7 +1931,7 @@ fn a_smart_collections_query_follows_its_tags_folders_fields_and_items_to_the_im
 #[test]
 fn a_generators_template_and_fields_follow_it_to_the_imported_copies() {
     let conn = open_in_memory();
-    let camp = campaigns::create(&conn, "Generators", 1).unwrap().id;
+    let camp = projects::create(&conn, "Generators", 1).unwrap().id;
     let template = items::create(&conn, &camp, "worldbuilding", "template", "NPC", None, 2).unwrap();
     let race = fields::create_definition(&conn, &camp, "Race", "text", "", "{}", 3).unwrap();
     let definition = json!({
@@ -1946,7 +1946,7 @@ fn a_generators_template_and_fields_follow_it_to_the_imported_copies() {
     let maker = items::create(&conn, &camp, "tables", "generator", "NPC maker", None, 4).unwrap();
     generators::set_definition(&conn, &maker.id, &definition.to_string(), 5).unwrap();
 
-    let imported = import_pack(&conn, &export_campaign(&conn, &camp, 5000).unwrap(), 6000).unwrap().campaign.id;
+    let imported = import_pack(&conn, &export_project(&conn, &camp, 5000).unwrap(), 6000).unwrap().project.id;
     let new_maker = items::list(&conn, &imported, "tables", None).unwrap().into_iter().find(|i| i.name == "NPC maker").unwrap();
     assert_ne!(new_maker.id, maker.id);
     let got: serde_json::Value = serde_json::from_str(&generators::get(&conn, &new_maker.id).unwrap().definition_json).unwrap();
@@ -1984,7 +1984,7 @@ fn bad_generator_data_in_a_pack_is_skipped_with_warnings() {
     assert!(pack.warnings.iter().any(|w| w.contains("generator")), "{:?}", pack.warnings);
     let conn = open_in_memory();
     let result = import_parsed(&conn, &pack, 10).unwrap();
-    let g2 = items::list(&conn, &result.campaign.id, "tables", None).unwrap().into_iter().find(|i| i.name == "g2").unwrap();
+    let g2 = items::list(&conn, &result.project.id, "tables", None).unwrap().into_iter().find(|i| i.name == "g2").unwrap();
     assert_eq!(generators::get(&conn, &g2.id).unwrap().definition_json, generators::EMPTY_DEFINITION);
 }
 
@@ -2014,18 +2014,18 @@ fn bad_smart_collection_data_in_a_pack_is_skipped_with_warnings() {
     // Items whose query was dropped still import; they read as the empty query.
     let conn = open_in_memory();
     let result = import_parsed(&conn, &pack, 10).unwrap();
-    let s2 = items::list(&conn, &result.campaign.id, "worldbuilding", None).unwrap().into_iter().find(|i| i.name == "s2").unwrap();
+    let s2 = items::list(&conn, &result.project.id, "worldbuilding", None).unwrap().into_iter().find(|i| i.name == "s2").unwrap();
     assert_eq!(smart_collections::get(&conn, &s2.id).unwrap().query_json, smart_collections::EMPTY_QUERY);
 }
 
 #[test]
 fn a_preset_keeps_its_trash_state_and_old_packs_have_no_presets() {
     let conn = open_in_memory();
-    let camp = campaigns::create(&conn, "Names", 1).unwrap().id;
+    let camp = projects::create(&conn, "Names", 1).unwrap().id;
     let keep = name_presets::create(&conn, &camp, "Keep", None, "{}", 2).unwrap();
     let gone = name_presets::create(&conn, &camp, "Gone", None, "{}", 3).unwrap();
     items::soft_delete(&conn, &gone.id, 4).unwrap();
-    let imported = import_pack(&conn, &export_campaign(&conn, &camp, 5000).unwrap(), 6000).unwrap().campaign.id;
+    let imported = import_pack(&conn, &export_project(&conn, &camp, 5000).unwrap(), 6000).unwrap().project.id;
     let live = name_presets::list(&conn, &imported).unwrap();
     assert_eq!(live.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Keep"]);
     assert_ne!(live[0].item_id, keep.id);
@@ -2034,7 +2034,7 @@ fn a_preset_keeps_its_trash_state_and_old_packs_have_no_presets() {
     assert!(trashed.iter().all(|i| i.name != "Gone"));
     let id: String = conn
         .query_row(
-            "SELECT id FROM items WHERE campaign_id = ?1 AND name = 'Gone' AND deleted_at IS NOT NULL",
+            "SELECT id FROM items WHERE project_id = ?1 AND name = 'Gone' AND deleted_at IS NOT NULL",
             [&imported],
             |r| r.get(0),
         )
@@ -2070,7 +2070,7 @@ fn bad_preset_data_in_a_pack_is_skipped_with_warnings() {
     assert_eq!(pack.name_presets.len(), 1);
     assert!(pack.warnings.iter().any(|w| w.starts_with("5 name preset(s)")), "{:?}", pack.warnings);
     let conn = open_in_memory();
-    let camp = import_parsed(&conn, &pack, 10).unwrap().campaign.id;
+    let camp = import_parsed(&conn, &pack, 10).unwrap().project.id;
     let rows = name_presets::list(&conn, &camp).unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].setup_json, r#"{"mode":"two"}"#);
@@ -2080,11 +2080,11 @@ fn bad_preset_data_in_a_pack_is_skipped_with_warnings() {
 fn a_failed_import_also_rolls_back_presets() {
     let source = open_in_memory();
     let camp = populate(&source);
-    let bytes = export_campaign(&source, &camp, 5000).unwrap();
+    let bytes = export_project(&source, &camp, 5000).unwrap();
     let target = open_in_memory();
     target.execute_batch("DROP TABLE name_presets").unwrap();
     assert!(import_pack(&target, &bytes, 6000).is_err());
-    for table in ["campaigns", "items", "random_tables", "table_entries"] {
+    for table in ["projects", "items", "random_tables", "table_entries"] {
         assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
     }
 }
@@ -2092,18 +2092,18 @@ fn a_failed_import_also_rolls_back_presets() {
 // ------------------------------------------------------------- mentions
 
 #[test]
-fn mentions_in_document_text_follow_their_items_into_an_imported_campaign() {
+fn mentions_in_document_text_follow_their_items_into_an_imported_project() {
     let source = open_in_memory();
-    let camp = campaigns::create(&source, "Mentions", 1000).unwrap();
+    let camp = projects::create(&source, "Mentions", 1000).unwrap();
     let c = camp.id.as_str();
     let strahd = items::create(&source, c, "worldbuilding", "document", "Strahd", None, 1100).unwrap();
     let ireena = items::create(&source, c, "worldbuilding", "document", "Ireena", None, 1200).unwrap();
     let body = format!("See [Ireena](item:{}) and [a stranger](item:{}).", ireena.id, "0a1b2c3d-1111-4222-8333-444455556666");
     documents::set_body_with_links(&source, &strahd.id, &body, Some(&[ireena.id.clone()]), 1300).unwrap();
 
-    let bytes = export_campaign(&source, c, 5000).unwrap();
+    let bytes = export_project(&source, c, 5000).unwrap();
     let target = open_in_memory();
-    let imported = import_pack(&target, &bytes, 6000).unwrap().campaign.id;
+    let imported = import_pack(&target, &bytes, 6000).unwrap().project.id;
 
     let found = |name: &str| search::search(&target, &imported, name, None, 10).unwrap().remove(0);
     let (new_strahd, new_ireena) = (found("Strahd"), found("Ireena"));
@@ -2137,7 +2137,7 @@ fn remapped_body_replaces_only_known_item_addresses() {
 fn a_templates_starter_text_and_setup_survive_a_pack_round_trip() {
     use crate::db::templates;
     let source = open_in_memory();
-    let camp = campaigns::create(&source, "Templates", 1000).unwrap();
+    let camp = projects::create(&source, "Templates", 1000).unwrap();
     let c = camp.id.as_str();
     let template = items::create(&source, c, "worldbuilding", templates::TEMPLATE_TYPE, "NPC", None, 1100).unwrap();
     documents::set_body(&source, &template.id, "## Motivation\n\n", 1200).unwrap();
@@ -2146,11 +2146,11 @@ fn a_templates_starter_text_and_setup_survive_a_pack_round_trip() {
     fields::set_set_fields(&source, &people.id, &[race.id.clone()], 1320).unwrap();
     fields::apply_set(&source, &template.id, &people.id, 1330).unwrap();
 
-    let bytes = export_campaign(&source, c, 5000).unwrap();
+    let bytes = export_project(&source, c, 5000).unwrap();
     let target = open_in_memory();
     let result = import_pack(&target, &bytes, 6000).unwrap();
     assert!(result.warnings.is_empty(), "{:?}", result.warnings);
-    let imported = search::search(&target, &result.campaign.id, "NPC", None, 10).unwrap().remove(0);
+    let imported = search::search(&target, &result.project.id, "NPC", None, 10).unwrap().remove(0);
     assert_eq!(imported.item_type, templates::TEMPLATE_TYPE);
     assert_eq!(documents::get_body(&target, &imported.id).unwrap(), "## Motivation\n\n");
 
@@ -2161,12 +2161,12 @@ fn a_templates_starter_text_and_setup_survive_a_pack_round_trip() {
 }
 
 #[test]
-fn tabs_keep_working_in_an_imported_campaign() {
+fn tabs_keep_working_in_an_imported_project() {
     let source = open_in_memory();
     let original = populate(&source);
-    let bytes = export_campaign(&source, &original, 5000).unwrap();
+    let bytes = export_project(&source, &original, 5000).unwrap();
     let target = open_in_memory();
-    let imported = import_pack(&target, &bytes, 6000).unwrap().campaign.id;
+    let imported = import_pack(&target, &bytes, 6000).unwrap().project.id;
 
     let find = |name: &str| search::search(&target, &imported, name, None, 10).unwrap().into_iter().find(|i| i.name == name).unwrap();
     let (strahd, barovia, relationships) = (find("Strahd"), find("Barovia"), find("Relationships"));

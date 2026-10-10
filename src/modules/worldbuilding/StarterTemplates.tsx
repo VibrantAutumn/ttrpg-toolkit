@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { installTemplateBundle, listInstalledStarters } from "../../api/starters";
 import { toTemplateBundle, type TemplateStarterDef } from "../../lib/templates/starterTemplates";
 import { STARTER_TEMPLATES } from "../../starter/templates";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -14,35 +14,35 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * and field sets you already have with the same names are used as they are.
  */
 export function StarterTemplates() {
-  const { campaign } = useCurrentCampaign();
+  const { project } = useCurrentProject();
   const dataVersion = useDataVersion();
-  const campaignId = campaign?.id ?? null;
+  const projectId = project?.id ?? null;
   const [installed, setInstalled] = useState<readonly string[]>([]);
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [added, setAdded] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!campaignId) {
+    if (!projectId) {
       setInstalled([]);
       return;
     }
     let active = true;
-    listInstalledStarters(campaignId)
+    listInstalledStarters(projectId)
       .then((ids) => active && setInstalled(ids))
       .catch((e) => active && setError(String(e)));
     return () => {
       active = false;
     };
-  }, [campaignId, dataVersion]);
+  }, [projectId, dataVersion]);
 
   async function add(starter: TemplateStarterDef) {
-    if (!campaignId || working) return;
+    if (!projectId || working) return;
     setError(null);
     setAdded(null);
     setWorking(starter.id);
     try {
-      const result = await installTemplateBundle(campaignId, toTemplateBundle(starter));
+      const result = await installTemplateBundle(projectId, toTemplateBundle(starter));
       bumpDataVersion();
       setAdded(
         `Added ${plural(result.templates, "template")} in a “${starter.name}” folder` +
@@ -55,7 +55,7 @@ export function StarterTemplates() {
     }
   }
 
-  if (!campaignId) return null;
+  if (!projectId) return null;
 
   return (
     <div className="starter-templates">

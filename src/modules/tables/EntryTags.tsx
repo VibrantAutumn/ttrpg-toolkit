@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { createTag } from "../../api/library";
 import { addTableEntryTag, removeTableEntryTag } from "../../api/tables";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { bumpDataVersion } from "../../state/dataVersion";
 import { useSlotChoices } from "./SlotChoices";
 
 /**
- * The campaign tags on one entry, behind a "Tags (n)" button so the list stays
+ * The project tags on one entry, behind a "Tags (n)" button so the list stays
  * tidy. They are the same tags used everywhere else; rolling doesn't use them
  * yet (filtering by tag arrives with the query engine in a later phase).
  */
@@ -20,7 +20,7 @@ export function EntryTags({
   /** Called with the entry's new list of tags after a change. */
   onChanged: (entryId: string, tagIds: string[]) => void;
 }) {
-  const { campaign } = useCurrentCampaign();
+  const { project } = useCurrentProject();
   const { tags } = useSlotChoices();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -44,9 +44,9 @@ export function EntryTags({
   }
 
   async function addNew() {
-    if (!campaign || name.trim() === "") return;
+    if (!project || name.trim() === "") return;
     try {
-      const tag = await createTag(campaign.id, null, name, null);
+      const tag = await createTag(project.id, null, name, null);
       await addTableEntryTag(entryId, tag.id);
       onChanged(entryId, [...tagIds, tag.id]);
       setName("");

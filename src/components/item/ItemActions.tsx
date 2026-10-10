@@ -47,7 +47,7 @@ export function ItemActions({
   async function runTags(action: () => Promise<unknown>) {
     await run(action);
     try {
-      setAllTags(await listTags(item.campaignId));
+      setAllTags(await listTags(item.projectId));
     } catch (e) {
       setError(String(e));
     }
@@ -56,7 +56,7 @@ export function ItemActions({
   async function toggleTagEditor() {
     if (!editingTags) {
       try {
-        setAllTags(await listTags(item.campaignId));
+        setAllTags(await listTags(item.projectId));
       } catch (e) {
         setError(String(e));
         return;
@@ -109,7 +109,7 @@ export function ItemActions({
           />
         </div>
       )}
-      {editingTags && <TagEditor campaignId={item.campaignId} itemId={item.id} itemTags={tags} allTags={allTags} run={runTags} />}
+      {editingTags && <TagEditor projectId={item.projectId} itemId={item.id} itemTags={tags} allTags={allTags} run={runTags} />}
     </>
   );
 }

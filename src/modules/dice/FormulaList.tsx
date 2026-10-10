@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFormula, listFormulas, type FormulaEntry } from "../../api/dice";
 import { checkFormula, describeParseError } from "../../lib/dice/formula";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
 import { rollLog } from "../../state/rollLog";
@@ -11,10 +11,10 @@ import { rollLog } from "../../state/rollLog";
  * (the quick tools panel) leaves out the heading and the form: make formulas in the Dice tool.
  */
 export function FormulaList({ compact = false }: { compact?: boolean }) {
-  const { campaign } = useCurrentCampaign();
+  const { project } = useCurrentProject();
   const { openItem } = useNavigation();
   const dataVersion = useDataVersion();
-  const campaignId = campaign?.id ?? null;
+  const projectId = project?.id ?? null;
 
   const [formulas, setFormulas] = useState<FormulaEntry[]>([]);
   const [name, setName] = useState("");
@@ -22,18 +22,18 @@ export function FormulaList({ compact = false }: { compact?: boolean }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!campaignId) {
+    if (!projectId) {
       setFormulas([]);
       return;
     }
     let active = true;
-    listFormulas(campaignId)
+    listFormulas(projectId)
       .then((list) => active && setFormulas(list))
       .catch((e) => active && setError(String(e)));
     return () => {
       active = false;
     };
-  }, [campaignId, dataVersion]);
+  }, [projectId, dataVersion]);
 
   function rollFormula(f: FormulaEntry) {
     const outcome = rollLog.roll(f.notation, undefined, f.name);
@@ -43,14 +43,14 @@ export function FormulaList({ compact = false }: { compact?: boolean }) {
   }
 
   async function add() {
-    if (!campaignId) return;
+    if (!projectId) return;
     const check = checkFormula(notation);
     if (!check.ok) {
       setError(check.message);
       return;
     }
     try {
-      await createFormula(campaignId, name, null, check.notation);
+      await createFormula(projectId, name, null, check.notation);
       setName("");
       setNotation("");
       setError(null);
@@ -63,8 +63,8 @@ export function FormulaList({ compact = false }: { compact?: boolean }) {
   return (
     <div>
       {!compact && <h2>Formulas</h2>}
-      {!campaignId ? (
-        <p className="empty">Choose a campaign to save formulas.</p>
+      {!projectId ? (
+        <p className="empty">Choose a project to save formulas.</p>
       ) : (
         <>
           {formulas.length === 0 ? (

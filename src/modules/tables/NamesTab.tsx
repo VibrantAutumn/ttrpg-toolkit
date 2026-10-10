@@ -15,7 +15,7 @@ import {
   type NameSetup,
   type TagMatch,
 } from "../../lib/tables/nameSetup";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { useDataVersion } from "../../state/dataVersion";
 import { generateNameFromSetup } from "../../state/nameActions";
 import { deviceStorage } from "../../state/deviceStorage";
@@ -32,10 +32,10 @@ const capitalise = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
  * remembered on this device.
  */
 export function NamesTab() {
-  const { campaign } = useCurrentCampaign();
+  const { project } = useCurrentProject();
   const dataVersion = useDataVersion();
   const log = useRollLog();
-  const campaignId = campaign?.id ?? null;
+  const projectId = project?.id ?? null;
 
   const [setup, setSetup] = useState<NameSetup>(() => loadLastSetup(deviceStorage()));
   const [tables, setTables] = useState<TableSummary[]>([]);
@@ -45,14 +45,14 @@ export function NamesTab() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!campaignId) {
+    if (!projectId) {
       setTables([]);
       setTags([]);
       setPresets([]);
       return;
     }
     let active = true;
-    Promise.all([listTables(campaignId), listTags(campaignId), listNamePresets(campaignId)])
+    Promise.all([listTables(projectId), listTags(projectId), listNamePresets(projectId)])
       .then(([t, g, p]) => {
         if (!active) return;
         setTables(t);
@@ -63,7 +63,7 @@ export function NamesTab() {
     return () => {
       active = false;
     };
-  }, [campaignId, dataVersion]);
+  }, [projectId, dataVersion]);
 
   const latest = useMemo(() => log.find((e) => e.kind === "name"), [log]);
 
@@ -87,12 +87,12 @@ export function NamesTab() {
   const matchesPreset = loadedPreset !== null && savedSetup !== null && setupsEqual(setup, savedSetup);
 
   async function generate() {
-    if (!campaignId) return;
-    const outcome = await generateNameFromSetup(campaignId, setup, matchesPreset ? loadedPreset.name : null);
+    if (!projectId) return;
+    const outcome = await generateNameFromSetup(projectId, setup, matchesPreset ? loadedPreset.name : null);
     setError(outcome.ok ? null : outcome.message);
   }
 
-  if (!campaignId) return <p className="empty">Choose a campaign to generate names.</p>;
+  if (!projectId) return <p className="empty">Choose a project to generate names.</p>;
 
   const keys = partsOf(setup.mode);
   const joins: [string, "join1" | "join2"][] =
@@ -116,7 +116,7 @@ export function NamesTab() {
       </p>
 
       <PresetBar
-        campaignId={campaignId}
+        projectId={projectId}
         setup={setup}
         presets={presets}
         loadedId={presetId}

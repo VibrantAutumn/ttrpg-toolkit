@@ -20,7 +20,7 @@ fn get_live(conn: &Connection, id: &str) -> Result<Item, DbError> {
 }
 
 /// Links `source` to `target`. Doing it twice is harmless; a link that was
-/// removed earlier comes back. Both items must be live and in the same campaign.
+/// removed earlier comes back. Both items must be live and in the same project.
 pub fn add(
     conn: &Connection,
     source_id: &str,
@@ -33,8 +33,8 @@ pub fn add(
     }
     let source = get_live(conn, source_id)?;
     let target = get_live(conn, target_id)?;
-    if source.campaign_id != target.campaign_id {
-        return Err(DbError::Invalid("Items in different campaigns can't be linked."));
+    if source.project_id != target.project_id {
+        return Err(DbError::Invalid("Items in different projects can't be linked."));
     }
     conn.execute(
         "INSERT INTO links (source_item_id, target_item_id, source_ref, created_at, updated_at)
@@ -66,7 +66,7 @@ pub fn remove(
 
 /// Makes the live links from `source_id` with this `source_ref` exactly the ones to `targets`: links to
 /// anything not listed are removed, new ones are added (a removed link that is listed again comes
-/// back). A target that cannot be linked (gone, in the trash, in another campaign, or the source
+/// back). A target that cannot be linked (gone, in the trash, in another project, or the source
 /// itself) is skipped, never an error: a document may mention an item that has since been deleted.
 /// Links with other `source_ref`s are left alone. Call it inside a transaction.
 pub fn sync_source(
@@ -146,11 +146,11 @@ pub fn backlinks(conn: &Connection, item_id: &str) -> Result<Vec<Item>, DbError>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{campaigns, open_in_memory, trash};
+    use crate::db::{projects, open_in_memory, trash};
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -288,7 +288,7 @@ mod tests {
         let good = doc(&conn, &camp, "Good");
         let trashed = doc(&conn, &camp, "Trashed");
         items::soft_delete(&conn, &trashed.id, 2).unwrap();
-        let other = campaigns::create(&conn, "Other", 1).unwrap();
+        let other = projects::create(&conn, "Other", 1).unwrap();
         let foreign = doc(&conn, &other.id, "Foreign");
         let targets = vec![
             a.id.clone(),
@@ -308,7 +308,7 @@ mod tests {
         let (conn, camp) = setup();
         let a = doc(&conn, &camp, "A");
         let b = doc(&conn, &camp, "B");
-        let other = campaigns::create(&conn, "Other", 1).unwrap();
+        let other = projects::create(&conn, "Other", 1).unwrap();
         let foreign = doc(&conn, &other.id, "Foreign");
         assert!(matches!(add(&conn, &a.id, &a.id, MANUAL, 2), Err(DbError::Invalid(_))));
         assert!(matches!(add(&conn, &a.id, &foreign.id, MANUAL, 2), Err(DbError::Invalid(_))));

@@ -1,10 +1,10 @@
 //! Tauri commands: the thin layer React calls. Each one locks the shared
 //! connection and calls a tested function in `db/`. Keep logic out of here.
 //!
-//! JavaScript passes arguments in camelCase (`campaignId`); Tauri maps them to
+//! JavaScript passes arguments in camelCase (`projectId`); Tauri maps them to
 //! the snake_case names below.
 
-use crate::db::campaigns::{self, Campaign};
+use crate::db::projects::{self, Project};
 use crate::db::cards::{self, CardDetails, ImageData};
 use crate::db::collections;
 use crate::db::documents;
@@ -61,48 +61,48 @@ pub fn db_schema_version(db: Db) -> Result<u32, String> {
     with_conn(&db, |c| Ok(db::migrations::current_version(c)?))
 }
 
-// ---- Campaigns ----
+// ---- Projects ----
 
 #[tauri::command]
-pub fn list_campaigns(db: Db) -> Result<Vec<Campaign>, String> {
-    with_conn(&db, campaigns::list)
+pub fn list_projects(db: Db) -> Result<Vec<Project>, String> {
+    with_conn(&db, projects::list)
 }
 
 #[tauri::command]
-pub fn create_campaign(db: Db, name: String) -> Result<Campaign, String> {
+pub fn create_project(db: Db, name: String) -> Result<Project, String> {
     with_conn(&db, |c| {
         let now = db::now_ms();
-        let campaign = campaigns::create(c, &name, now)?;
-        // The first campaign you make becomes the one that's open.
-        settings::set_current_campaign_if_none(c, &campaign.id, now)?;
-        Ok(campaign)
+        let project = projects::create(c, &name, now)?;
+        // The first project you make becomes the one that's open.
+        settings::set_current_project_if_none(c, &project.id, now)?;
+        Ok(project)
     })
 }
 
 #[tauri::command]
-pub fn rename_campaign(db: Db, id: String, name: String) -> Result<Campaign, String> {
-    with_conn(&db, |c| campaigns::rename(c, &id, &name, db::now_ms()))
+pub fn rename_project(db: Db, id: String, name: String) -> Result<Project, String> {
+    with_conn(&db, |c| projects::rename(c, &id, &name, db::now_ms()))
 }
 
 #[tauri::command]
-pub fn delete_campaign(db: Db, id: String) -> Result<(), String> {
-    with_conn(&db, |c| campaigns::soft_delete(c, &id, db::now_ms()))
+pub fn delete_project(db: Db, id: String) -> Result<(), String> {
+    with_conn(&db, |c| projects::soft_delete(c, &id, db::now_ms()))
 }
 
 #[tauri::command]
-pub fn restore_campaign(db: Db, id: String) -> Result<Campaign, String> {
-    with_conn(&db, |c| campaigns::restore(c, &id, db::now_ms()))
+pub fn restore_project(db: Db, id: String) -> Result<Project, String> {
+    with_conn(&db, |c| projects::restore(c, &id, db::now_ms()))
 }
 
-/// The campaign open on this device, or none.
+/// The project open on this device, or none.
 #[tauri::command]
-pub fn get_current_campaign(db: Db) -> Result<Option<Campaign>, String> {
-    with_conn(&db, settings::current_campaign)
+pub fn get_current_project(db: Db) -> Result<Option<Project>, String> {
+    with_conn(&db, settings::current_project)
 }
 
 #[tauri::command]
-pub fn set_current_campaign(db: Db, id: String) -> Result<Campaign, String> {
-    with_conn(&db, |c| settings::set_current_campaign(c, &id, db::now_ms()))
+pub fn set_current_project(db: Db, id: String) -> Result<Project, String> {
+    with_conn(&db, |c| settings::set_current_project(c, &id, db::now_ms()))
 }
 
 // ---- Saved dice rolls ----
@@ -112,7 +112,7 @@ pub fn set_current_campaign(db: Db, id: String) -> Result<Campaign, String> {
 #[allow(clippy::too_many_arguments)]
 pub fn save_roll(
     db: Db,
-    campaign_id: String,
+    project_id: String,
     name: String,
     folder_id: Option<String>,
     notation: String,
@@ -122,7 +122,7 @@ pub fn save_roll(
 ) -> Result<Item, String> {
     with_conn(&db, |c| {
         let new = NewSavedRoll {
-            campaign_id: &campaign_id,
+            project_id: &project_id,
             name: &name,
             folder_id: folder_id.as_deref(),
             notation: &notation,
@@ -147,13 +147,13 @@ pub fn get_saved_roll(db: Db, item_id: String) -> Result<SavedRoll, String> {
 #[tauri::command]
 pub fn create_formula(
     db: Db,
-    campaign_id: String,
+    project_id: String,
     name: String,
     folder_id: Option<String>,
     notation: String,
 ) -> Result<Item, String> {
     with_conn(&db, |c| {
-        formulas::create(c, &campaign_id, &name, folder_id.as_deref(), &notation, db::now_ms())
+        formulas::create(c, &project_id, &name, folder_id.as_deref(), &notation, db::now_ms())
     })
 }
 
@@ -167,10 +167,10 @@ pub fn set_formula_notation(db: Db, item_id: String, notation: String) -> Result
     with_conn(&db, |c| formulas::set_notation(c, &item_id, &notation, db::now_ms()))
 }
 
-/// Every live formula in the campaign, for the roller's list.
+/// Every live formula in the project, for the roller's list.
 #[tauri::command]
-pub fn list_formulas(db: Db, campaign_id: String) -> Result<Vec<FormulaEntry>, String> {
-    with_conn(&db, |c| formulas::list(c, &campaign_id))
+pub fn list_formulas(db: Db, project_id: String) -> Result<Vec<FormulaEntry>, String> {
+    with_conn(&db, |c| formulas::list(c, &project_id))
 }
 
 // ---- Cards, sets, decks and pools ----
@@ -260,7 +260,7 @@ pub fn list_collection_candidates(db: Db, collection_id: String) -> Result<Vec<I
 #[allow(clippy::too_many_arguments)]
 pub fn save_draw(
     db: Db,
-    campaign_id: String,
+    project_id: String,
     name: String,
     folder_id: Option<String>,
     source_name: String,
@@ -270,7 +270,7 @@ pub fn save_draw(
 ) -> Result<Item, String> {
     with_conn(&db, |c| {
         let new = NewSavedDraw {
-            campaign_id: &campaign_id,
+            project_id: &project_id,
             name: &name,
             folder_id: folder_id.as_deref(),
             source_name: &source_name,
@@ -292,10 +292,10 @@ pub fn set_saved_draw_notes(db: Db, item_id: String, notes: String) -> Result<()
     with_conn(&db, |c| saved_draws::set_notes(c, &item_id, &notes, db::now_ms()))
 }
 
-/// Every set, deck and pool in the campaign (what can be drawn from).
+/// Every set, deck and pool in the project (what can be drawn from).
 #[tauri::command]
-pub fn list_collections(db: Db, campaign_id: String) -> Result<Vec<Item>, String> {
-    with_conn(&db, |c| collections::list_all(c, &campaign_id))
+pub fn list_collections(db: Db, project_id: String) -> Result<Vec<Item>, String> {
+    with_conn(&db, |c| collections::list_all(c, &project_id))
 }
 
 // ---- Decks in play ----
@@ -305,7 +305,7 @@ pub fn list_collections(db: Db, campaign_id: String) -> Result<Vec<Item>, String
 #[tauri::command]
 pub fn create_play_deck(
     db: Db,
-    campaign_id: String,
+    project_id: String,
     name: String,
     folder_id: Option<String>,
     source_id: Option<String>,
@@ -314,7 +314,7 @@ pub fn create_play_deck(
 ) -> Result<Item, String> {
     with_conn(&db, |c| {
         let new = NewPlayDeck {
-            campaign_id: &campaign_id,
+            project_id: &project_id,
             name: &name,
             folder_id: folder_id.as_deref(),
             source_id: source_id.as_deref(),
@@ -335,44 +335,44 @@ pub fn set_play_deck_state(db: Db, item_id: String, state_json: String) -> Resul
     with_conn(&db, |c| play_decks::set_state(c, &item_id, &state_json, db::now_ms()))
 }
 
-/// Every deck in play in the campaign, with how many cards are left.
+/// Every deck in play in the project, with how many cards are left.
 #[tauri::command]
-pub fn list_play_decks(db: Db, campaign_id: String) -> Result<Vec<PlayDeckEntry>, String> {
-    with_conn(&db, |c| play_decks::list(c, &campaign_id))
+pub fn list_play_decks(db: Db, project_id: String) -> Result<Vec<PlayDeckEntry>, String> {
+    with_conn(&db, |c| play_decks::list(c, &project_id))
 }
 
 // ---- Starter decks ----
 
-/// Adds a starter deck (sent as JSON text, pictures as base64) to a campaign in
+/// Adds a starter deck (sent as JSON text, pictures as base64) to a project in
 /// one all-or-nothing step. `async` so a big deck is written off the main thread.
 #[tauri::command]
 pub async fn install_card_bundle(
     db: Db<'_>,
-    campaign_id: String,
+    project_id: String,
     bundle_json: String,
 ) -> Result<InstallResult, String> {
     let bundle: starters::Bundle = serde_json::from_str(&bundle_json)
         .map_err(|_| "The starter deck's data couldn't be read.".to_string())?;
-    with_conn(&db, |c| starters::install(c, &campaign_id, &bundle, db::now_ms()))
+    with_conn(&db, |c| starters::install(c, &project_id, &bundle, db::now_ms()))
 }
 
-/// Adds a starter set of tables (and name setups using them) to a campaign in one
+/// Adds a starter set of tables (and name setups using them) to a project in one
 /// all-or-nothing step, sent as JSON text.
 #[tauri::command]
 pub async fn install_table_bundle(
     db: Db<'_>,
-    campaign_id: String,
+    project_id: String,
     bundle_json: String,
 ) -> Result<TableInstallResult, String> {
     let bundle: table_starters::TableBundle = serde_json::from_str(&bundle_json)
         .map_err(|_| "The starter's data couldn't be read.".to_string())?;
-    with_conn(&db, |c| table_starters::install(c, &campaign_id, &bundle, db::now_ms()))
+    with_conn(&db, |c| table_starters::install(c, &project_id, &bundle, db::now_ms()))
 }
 
-/// Which starter decks this campaign already has (their ids, like `starter:tarokka`).
+/// Which starter decks this project already has (their ids, like `starter:tarokka`).
 #[tauri::command]
-pub fn list_installed_starters(db: Db, campaign_id: String) -> Result<Vec<String>, String> {
-    with_conn(&db, |c| starters::installed(c, &campaign_id))
+pub fn list_installed_starters(db: Db, project_id: String) -> Result<Vec<String>, String> {
+    with_conn(&db, |c| starters::installed(c, &project_id))
 }
 
 // ---- Spreads ----
@@ -398,10 +398,10 @@ pub fn set_spread_reversals(db: Db, item_id: String, reversals: bool, percent: i
     with_conn(&db, |c| spreads::set_reversals(c, &item_id, reversals, percent, db::now_ms()))
 }
 
-/// Every spread in the campaign, and whether it is ready to draw.
+/// Every spread in the project, and whether it is ready to draw.
 #[tauri::command]
-pub fn list_spreads(db: Db, campaign_id: String) -> Result<Vec<SpreadEntry>, String> {
-    with_conn(&db, |c| spreads::list(c, &campaign_id))
+pub fn list_spreads(db: Db, project_id: String) -> Result<Vec<SpreadEntry>, String> {
+    with_conn(&db, |c| spreads::list(c, &project_id))
 }
 
 // ---- Random tables ----
@@ -464,22 +464,22 @@ pub fn remove_table_entry_tag(db: Db, entry_id: String, tag_id: String) -> Resul
     with_conn(&db, |c| tables::remove_entry_tag(c, &entry_id, &tag_id, db::now_ms()))
 }
 
-/// Every table in the campaign, with its entry count and whether its name is shared.
+/// Every table in the project, with its entry count and whether its name is shared.
 #[tauri::command]
-pub fn list_tables(db: Db, campaign_id: String) -> Result<Vec<TableSummary>, String> {
-    with_conn(&db, |c| tables::list(c, &campaign_id))
+pub fn list_tables(db: Db, project_id: String) -> Result<Vec<TableSummary>, String> {
+    with_conn(&db, |c| tables::list(c, &project_id))
 }
 
 /// Every table with its entries and recent picks, ready to roll without more lookups.
 #[tauri::command]
-pub fn load_rollable_tables(db: Db, campaign_id: String) -> Result<Vec<RollableTable>, String> {
-    with_conn(&db, |c| tables::load_rollable(c, &campaign_id))
+pub fn load_rollable_tables(db: Db, project_id: String) -> Result<Vec<RollableTable>, String> {
+    with_conn(&db, |c| tables::load_rollable(c, &project_id))
 }
 
 /// Entries whose text contains a name (candidates for rewriting slots after a rename).
 #[tauri::command]
-pub fn find_entries_mentioning(db: Db, campaign_id: String, needle: String) -> Result<Vec<EntryRef>, String> {
-    with_conn(&db, |c| tables::entries_mentioning(c, &campaign_id, &needle))
+pub fn find_entries_mentioning(db: Db, project_id: String, needle: String) -> Result<Vec<EntryRef>, String> {
+    with_conn(&db, |c| tables::entries_mentioning(c, &project_id, &needle))
 }
 
 /// Remembers the entries a roll picked, for "avoid recent".
@@ -500,13 +500,13 @@ pub fn clear_table_recent(db: Db, table_id: String) -> Result<(), String> {
 #[tauri::command]
 pub fn create_name_preset(
     db: Db,
-    campaign_id: String,
+    project_id: String,
     name: String,
     folder_id: Option<String>,
     setup_json: String,
 ) -> Result<Item, String> {
     with_conn(&db, |c| {
-        name_presets::create(c, &campaign_id, &name, folder_id.as_deref(), &setup_json, db::now_ms())
+        name_presets::create(c, &project_id, &name, folder_id.as_deref(), &setup_json, db::now_ms())
     })
 }
 
@@ -520,19 +520,19 @@ pub fn set_name_preset_setup(db: Db, item_id: String, setup_json: String) -> Res
     with_conn(&db, |c| name_presets::set_setup(c, &item_id, &setup_json, db::now_ms()))
 }
 
-/// Every name preset in the campaign, for the Names tab's list.
+/// Every name preset in the project, for the Names tab's list.
 #[tauri::command]
-pub fn list_name_presets(db: Db, campaign_id: String) -> Result<Vec<PresetEntry>, String> {
-    with_conn(&db, |c| name_presets::list(c, &campaign_id))
+pub fn list_name_presets(db: Db, project_id: String) -> Result<Vec<PresetEntry>, String> {
+    with_conn(&db, |c| name_presets::list(c, &project_id))
 }
 
 // ---- Queries and smart collections ----
 
-/// Runs a query (JSON text, read and checked by the engine) against a campaign. `only_type` keeps
+/// Runs a query (JSON text, read and checked by the engine) against a project. `only_type` keeps
 /// one kind of item. Used for the builder's live preview of a query that isn't saved yet.
 #[tauri::command]
-pub fn run_query(db: Db, campaign_id: String, query_json: String, only_type: Option<String>) -> Result<QueryResult, String> {
-    with_conn(&db, |c| query::run_json(c, &campaign_id, &query_json, db::now_ms(), only_type.as_deref()))
+pub fn run_query(db: Db, project_id: String, query_json: String, only_type: Option<String>) -> Result<QueryResult, String> {
+    with_conn(&db, |c| query::run_json(c, &project_id, &query_json, db::now_ms(), only_type.as_deref()))
 }
 
 /// A smart collection's saved query (the empty query if none is saved yet).
@@ -571,11 +571,11 @@ pub fn set_generator_definition(db: Db, item_id: String, definition_json: String
 // base64 text, never raw bytes (Android can't deliver raw request bodies; see
 // `pack::encode_for_transport`).
 
-/// The pack file for one campaign, as base64 text (JavaScript saves it where the user chooses).
+/// The pack file for one project, as base64 text (JavaScript saves it where the user chooses).
 #[tauri::command]
-pub async fn export_campaign_pack(db: Db<'_>, campaign_id: String) -> Result<String, String> {
+pub async fn export_project_pack(db: Db<'_>, project_id: String) -> Result<String, String> {
     let bytes = with_conn_pack(&db, |c| {
-        pack::export::export_campaign(c, &campaign_id, db::now_ms())
+        pack::export::export_project(c, &project_id, db::now_ms())
     })?;
     Ok(pack::encode_for_transport(&bytes))
 }
@@ -588,7 +588,7 @@ pub async fn preview_pack(data: String) -> Result<PackPreview, String> {
     Ok(pack::import::preview(&parsed))
 }
 
-/// Imports a pack (sent as base64 text) as a new campaign.
+/// Imports a pack (sent as base64 text) as a new project.
 #[tauri::command]
 pub async fn import_pack(db: Db<'_>, data: String) -> Result<ImportResult, String> {
     with_conn_pack(&db, |c| {
@@ -600,20 +600,20 @@ pub async fn import_pack(db: Db<'_>, data: String) -> Result<ImportResult, Strin
 // ---- Library: folders ----
 
 #[tauri::command]
-pub fn list_folders(db: Db, campaign_id: String, library: String) -> Result<Vec<Folder>, String> {
-    with_conn(&db, |c| folders::list(c, &campaign_id, &library))
+pub fn list_folders(db: Db, project_id: String, library: String) -> Result<Vec<Folder>, String> {
+    with_conn(&db, |c| folders::list(c, &project_id, &library))
 }
 
 #[tauri::command]
 pub fn create_folder(
     db: Db,
-    campaign_id: String,
+    project_id: String,
     library: String,
     parent_id: Option<String>,
     name: String,
 ) -> Result<Folder, String> {
     with_conn(&db, |c| {
-        folders::create(c, &campaign_id, &library, parent_id.as_deref(), &name, db::now_ms())
+        folders::create(c, &project_id, &library, parent_id.as_deref(), &name, db::now_ms())
     })
 }
 
@@ -638,24 +638,24 @@ pub fn delete_folder(db: Db, id: String) -> Result<(), String> {
 #[tauri::command]
 pub fn list_items(
     db: Db,
-    campaign_id: String,
+    project_id: String,
     library: String,
     folder_id: Option<String>,
 ) -> Result<Vec<Item>, String> {
-    with_conn(&db, |c| items::list(c, &campaign_id, &library, folder_id.as_deref()))
+    with_conn(&db, |c| items::list(c, &project_id, &library, folder_id.as_deref()))
 }
 
 #[tauri::command]
 pub fn create_item(
     db: Db,
-    campaign_id: String,
+    project_id: String,
     library: String,
     item_type: String,
     name: String,
     folder_id: Option<String>,
 ) -> Result<Item, String> {
     with_conn(&db, |c| {
-        items::create(c, &campaign_id, &library, &item_type, &name, folder_id.as_deref(), db::now_ms())
+        items::create(c, &project_id, &library, &item_type, &name, folder_id.as_deref(), db::now_ms())
     })
 }
 
@@ -761,19 +761,19 @@ pub fn move_tab(db: Db, tab_id: String, delta: i64) -> Result<(), String> {
 
 // ---- Templates ----
 
-/// Adds the starter templates (with the fields and field sets they use) to a campaign in one
+/// Adds the starter templates (with the fields and field sets they use) to a project in one
 /// all-or-nothing step, sent as JSON text.
 #[tauri::command]
-pub async fn install_template_bundle(db: Db<'_>, campaign_id: String, bundle_json: String) -> Result<TemplateInstallResult, String> {
+pub async fn install_template_bundle(db: Db<'_>, project_id: String, bundle_json: String) -> Result<TemplateInstallResult, String> {
     let bundle: template_starters::TemplateBundle = serde_json::from_str(&bundle_json)
         .map_err(|_| "The starter's data couldn't be read.".to_string())?;
-    with_conn(&db, |c| template_starters::install(c, &campaign_id, &bundle, db::now_ms()))
+    with_conn(&db, |c| template_starters::install(c, &project_id, &bundle, db::now_ms()))
 }
 
 /// Every live item of one type in a library, from every folder.
 #[tauri::command]
-pub fn list_items_of_type(db: Db, campaign_id: String, library: String, item_type: String) -> Result<Vec<Item>, String> {
-    with_conn(&db, |c| items::list_of_type(c, &campaign_id, &library, &item_type))
+pub fn list_items_of_type(db: Db, project_id: String, library: String, item_type: String) -> Result<Vec<Item>, String> {
+    with_conn(&db, |c| items::list_of_type(c, &project_id, &library, &item_type))
 }
 
 /// Makes a new document from a template (its text, tags, field sets and default values).
@@ -785,25 +785,25 @@ pub fn create_from_template(db: Db, template_id: String, name: String, folder_id
 // ---- Fields ----
 
 #[tauri::command]
-pub fn list_field_definitions(db: Db, campaign_id: String) -> Result<Vec<FieldDefinition>, String> {
-    with_conn(&db, |c| fields::list_definitions(c, &campaign_id))
+pub fn list_field_definitions(db: Db, project_id: String) -> Result<Vec<FieldDefinition>, String> {
+    with_conn(&db, |c| fields::list_definitions(c, &project_id))
 }
 
 #[tauri::command]
-pub fn list_deleted_field_definitions(db: Db, campaign_id: String) -> Result<Vec<FieldDefinition>, String> {
-    with_conn(&db, |c| fields::list_deleted_definitions(c, &campaign_id))
+pub fn list_deleted_field_definitions(db: Db, project_id: String) -> Result<Vec<FieldDefinition>, String> {
+    with_conn(&db, |c| fields::list_deleted_definitions(c, &project_id))
 }
 
 #[tauri::command]
 pub fn create_field_definition(
     db: Db,
-    campaign_id: String,
+    project_id: String,
     name: String,
     kind: String,
     description: String,
     config_json: String,
 ) -> Result<FieldDefinition, String> {
-    with_conn(&db, |c| fields::create_definition(c, &campaign_id, &name, &kind, &description, &config_json, db::now_ms()))
+    with_conn(&db, |c| fields::create_definition(c, &project_id, &name, &kind, &description, &config_json, db::now_ms()))
 }
 
 #[tauri::command]
@@ -828,18 +828,18 @@ pub fn restore_field_definition(db: Db, id: String) -> Result<FieldDefinition, S
 }
 
 #[tauri::command]
-pub fn list_field_sets(db: Db, campaign_id: String) -> Result<Vec<FieldSet>, String> {
-    with_conn(&db, |c| fields::list_sets(c, &campaign_id))
+pub fn list_field_sets(db: Db, project_id: String) -> Result<Vec<FieldSet>, String> {
+    with_conn(&db, |c| fields::list_sets(c, &project_id))
 }
 
 #[tauri::command]
-pub fn list_deleted_field_sets(db: Db, campaign_id: String) -> Result<Vec<FieldSet>, String> {
-    with_conn(&db, |c| fields::list_deleted_sets(c, &campaign_id))
+pub fn list_deleted_field_sets(db: Db, project_id: String) -> Result<Vec<FieldSet>, String> {
+    with_conn(&db, |c| fields::list_deleted_sets(c, &project_id))
 }
 
 #[tauri::command]
-pub fn create_field_set(db: Db, campaign_id: String, name: String, description: String) -> Result<FieldSet, String> {
-    with_conn(&db, |c| fields::create_set(c, &campaign_id, &name, &description, db::now_ms()))
+pub fn create_field_set(db: Db, project_id: String, name: String, description: String) -> Result<FieldSet, String> {
+    with_conn(&db, |c| fields::create_set(c, &project_id, &name, &description, db::now_ms()))
 }
 
 #[tauri::command]
@@ -942,8 +942,8 @@ pub fn remove_link(db: Db, source_item_id: String, target_item_id: String) -> Re
 // ---- Library: trash ----
 
 #[tauri::command]
-pub fn list_trash(db: Db, campaign_id: String, library: String) -> Result<Trash, String> {
-    with_conn(&db, |c| trash::list(c, &campaign_id, &library))
+pub fn list_trash(db: Db, project_id: String, library: String) -> Result<Trash, String> {
+    with_conn(&db, |c| trash::list(c, &project_id, &library))
 }
 
 #[tauri::command]
@@ -968,27 +968,27 @@ pub fn purge_folder(db: Db, id: String) -> Result<(), String> {
 
 /// Permanently deletes everything in a library's trash. Returns how many rows were removed.
 #[tauri::command]
-pub fn empty_trash(db: Db, campaign_id: String, library: String) -> Result<usize, String> {
-    with_conn(&db, |c| trash::empty(c, &campaign_id, &library, None))
+pub fn empty_trash(db: Db, project_id: String, library: String) -> Result<usize, String> {
+    with_conn(&db, |c| trash::empty(c, &project_id, &library, None))
 }
 
 // ---- Library: tags and search ----
 
 #[tauri::command]
-pub fn list_tags(db: Db, campaign_id: String) -> Result<Vec<Tag>, String> {
-    with_conn(&db, |c| tags::list(c, &campaign_id))
+pub fn list_tags(db: Db, project_id: String) -> Result<Vec<Tag>, String> {
+    with_conn(&db, |c| tags::list(c, &project_id))
 }
 
 #[tauri::command]
 pub fn create_tag(
     db: Db,
-    campaign_id: String,
+    project_id: String,
     parent_id: Option<String>,
     name: String,
     color: Option<String>,
 ) -> Result<Tag, String> {
     with_conn(&db, |c| {
-        tags::create(c, &campaign_id, parent_id.as_deref(), &name, color.as_deref(), db::now_ms())
+        tags::create(c, &project_id, parent_id.as_deref(), &name, color.as_deref(), db::now_ms())
     })
 }
 
@@ -1010,19 +1010,19 @@ pub fn remove_tag_from_item(db: Db, item_id: String, tag_id: String) -> Result<(
 
 /// Every live tag on every live item in a library (to draw tag chips in one request).
 #[tauri::command]
-pub fn list_tag_links(db: Db, campaign_id: String, library: String) -> Result<Vec<TagLink>, String> {
-    with_conn(&db, |c| tags::links_in_library(c, &campaign_id, &library))
+pub fn list_tag_links(db: Db, project_id: String, library: String) -> Result<Vec<TagLink>, String> {
+    with_conn(&db, |c| tags::links_in_library(c, &project_id, &library))
 }
 
 #[tauri::command]
 pub fn search_items(
     db: Db,
-    campaign_id: String,
+    project_id: String,
     text: String,
     library: Option<String>,
     limit: Option<u32>,
 ) -> Result<Vec<Item>, String> {
     with_conn(&db, |c| {
-        search::search(c, &campaign_id, &text, library.as_deref(), limit.unwrap_or(50))
+        search::search(c, &project_id, &text, library.as_deref(), limit.unwrap_or(50))
     })
 }

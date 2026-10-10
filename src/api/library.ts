@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export interface Folder {
   id: string;
-  campaignId: string;
+  projectId: string;
   library: string;
   parentId: string | null;
   name: string;
@@ -15,7 +15,7 @@ export interface Folder {
 
 export interface Item {
   id: string;
-  campaignId: string;
+  projectId: string;
   library: string;
   itemType: string;
   name: string;
@@ -29,7 +29,7 @@ export interface Item {
 
 export interface Tag {
   id: string;
-  campaignId: string;
+  projectId: string;
   parentId: string | null;
   name: string;
   color: string | null;
@@ -49,14 +49,14 @@ export interface Trash {
 }
 
 // Folders
-export const listFolders = (campaignId: string, library: string) =>
-  invoke<Folder[]>("list_folders", { campaignId, library });
+export const listFolders = (projectId: string, library: string) =>
+  invoke<Folder[]>("list_folders", { projectId, library });
 export const createFolder = (
-  campaignId: string,
+  projectId: string,
   library: string,
   parentId: string | null,
   name: string,
-) => invoke<Folder>("create_folder", { campaignId, library, parentId, name });
+) => invoke<Folder>("create_folder", { projectId, library, parentId, name });
 export const renameFolder = (id: string, name: string) =>
   invoke<Folder>("rename_folder", { id, name });
 export const moveFolder = (id: string, parentId: string | null) =>
@@ -65,18 +65,18 @@ export const deleteFolder = (id: string) => invoke<void>("delete_folder", { id }
 
 // Items
 export const listItems = (
-  campaignId: string,
+  projectId: string,
   library: string,
   folderId: string | null,
-) => invoke<Item[]>("list_items", { campaignId, library, folderId });
+) => invoke<Item[]>("list_items", { projectId, library, folderId });
 export const createItem = (
-  campaignId: string,
+  projectId: string,
   library: string,
   itemType: string,
   name: string,
   folderId: string | null,
 ) =>
-  invoke<Item>("create_item", { campaignId, library, itemType, name, folderId });
+  invoke<Item>("create_item", { projectId, library, itemType, name, folderId });
 export const renameItem = (id: string, name: string) =>
   invoke<Item>("rename_item", { id, name });
 export const moveItem = (id: string, folderId: string | null) =>
@@ -86,8 +86,8 @@ export const deleteItem = (id: string) => invoke<void>("delete_item", { id });
 export const getItem = (id: string) => invoke<Item>("get_item", { id });
 
 /** Every live item of one type in a library, from every folder. */
-export const listItemsOfType = (campaignId: string, library: string, itemType: string) =>
-  invoke<Item[]>("list_items_of_type", { campaignId, library, itemType });
+export const listItemsOfType = (projectId: string, library: string, itemType: string) =>
+  invoke<Item[]>("list_items_of_type", { projectId, library, itemType });
 
 /** Makes a new document from a template: its text, tags, field sets and default values. */
 export const createFromTemplate = (templateId: string, name: string, folderId: string | null) =>
@@ -120,38 +120,38 @@ export const removeLink = (sourceItemId: string, targetItemId: string) =>
   invoke<void>("remove_link", { sourceItemId, targetItemId });
 
 // Trash
-export const listTrash = (campaignId: string, library: string) =>
-  invoke<Trash>("list_trash", { campaignId, library });
+export const listTrash = (projectId: string, library: string) =>
+  invoke<Trash>("list_trash", { projectId, library });
 export const restoreItem = (id: string) => invoke<Item>("restore_item", { id });
 export const restoreFolder = (id: string) =>
   invoke<Folder>("restore_folder", { id });
 export const purgeItem = (id: string) => invoke<void>("purge_item", { id });
 export const purgeFolder = (id: string) => invoke<void>("purge_folder", { id });
-export const emptyTrash = (campaignId: string, library: string) =>
-  invoke<number>("empty_trash", { campaignId, library });
+export const emptyTrash = (projectId: string, library: string) =>
+  invoke<number>("empty_trash", { projectId, library });
 
 // Tags
-export const listTags = (campaignId: string) =>
-  invoke<Tag[]>("list_tags", { campaignId });
+export const listTags = (projectId: string) =>
+  invoke<Tag[]>("list_tags", { projectId });
 export const createTag = (
-  campaignId: string,
+  projectId: string,
   parentId: string | null,
   name: string,
   color: string | null,
-) => invoke<Tag>("create_tag", { campaignId, parentId, name, color });
+) => invoke<Tag>("create_tag", { projectId, parentId, name, color });
 export const listItemTags = (itemId: string) =>
   invoke<Tag[]>("list_item_tags", { itemId });
 export const addTagToItem = (itemId: string, tagId: string) =>
   invoke<void>("add_tag_to_item", { itemId, tagId });
 export const removeTagFromItem = (itemId: string, tagId: string) =>
   invoke<void>("remove_tag_from_item", { itemId, tagId });
-export const listTagLinks = (campaignId: string, library: string) =>
-  invoke<TagLink[]>("list_tag_links", { campaignId, library });
+export const listTagLinks = (projectId: string, library: string) =>
+  invoke<TagLink[]>("list_tag_links", { projectId, library });
 
 // Search
 export const searchItems = (
-  campaignId: string,
+  projectId: string,
   text: string,
   library: string | null,
   limit?: number,
-) => invoke<Item[]>("search_items", { campaignId, text, library, limit });
+) => invoke<Item[]>("search_items", { projectId, text, library, limit });

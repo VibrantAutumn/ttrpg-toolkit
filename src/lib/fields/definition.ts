@@ -1,6 +1,6 @@
 /**
  * Field definitions: what a field *is* (its name, kind and settings). Pure TypeScript, no
- * database; the values are in `value.ts`. A definition belongs to a campaign and is shared by
+ * database; the values are in `value.ts`. A definition belongs to a project and is shared by
  * every item that uses the field; values are stored against the definition's id, so renaming a
  * field or one of a dropdown's choices never disturbs saved values.
  *

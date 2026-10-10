@@ -1,6 +1,6 @@
 use super::*;
 use crate::db::fields::{self, ValueIndex};
-use crate::db::{campaigns, documents, folders, items, links, open_in_memory, tabs, tags};
+use crate::db::{projects, documents, folders, items, links, open_in_memory, tabs, tags};
 use serde_json::{json, Value as Json};
 use std::collections::{HashMap, HashSet};
 
@@ -17,7 +17,7 @@ struct Fx {
 impl Fx {
     fn new() -> Fx {
         let conn = open_in_memory();
-        let camp = campaigns::create(&conn, "Test", 1).unwrap().id;
+        let camp = projects::create(&conn, "Test", 1).unwrap().id;
         Fx { conn, camp, clock: 100 }
     }
     fn tick(&mut self) -> i64 {
@@ -403,7 +403,7 @@ fn an_answer_is_cut_off_at_the_limit_and_says_so() {
         let tx = fx.conn.unchecked_transaction().unwrap();
         for i in 0..(MAX_RESULTS + 3) {
             tx.execute(
-                "INSERT INTO items (id, campaign_id, library, item_type, name, created_at, updated_at) VALUES (?1, ?2, 'worldbuilding', 'document', ?3, 1, 1)",
+                "INSERT INTO items (id, project_id, library, item_type, name, created_at, updated_at) VALUES (?1, ?2, 'worldbuilding', 'document', ?3, 1, 1)",
                 rusqlite::params![format!("id-{i:05}"), fx.camp, format!("Item {i:05}")],
             )
             .unwrap();
@@ -417,10 +417,10 @@ fn an_answer_is_cut_off_at_the_limit_and_says_so() {
 }
 
 #[test]
-fn only_looks_at_its_own_campaign() {
+fn only_looks_at_its_own_project() {
     let mut fx = Fx::new();
     fx.doc("Mine");
-    let other = campaigns::create(&fx.conn, "Other", 1).unwrap().id;
+    let other = projects::create(&fx.conn, "Other", 1).unwrap().id;
     items::create(&fx.conn, &other, "worldbuilding", "document", "Theirs", None, 1).unwrap();
     assert_eq!(fx.run(q(json!([]))), ["Mine"]);
 }
@@ -693,7 +693,7 @@ impl World {
     }
 }
 
-// ---------------------------------------------------------------- random campaigns and random questions
+// ---------------------------------------------------------------- random projects and random questions
 
 struct Ids {
     folders: Vec<String>,

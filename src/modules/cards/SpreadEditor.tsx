@@ -72,7 +72,7 @@ export function SpreadEditor({ itemId }: { itemId: string }) {
     async (force: boolean) => {
       try {
         const [spread, item] = await Promise.all([getSpread(itemId), getItem(itemId)]);
-        const list = await listCollections(item.campaignId);
+        const list = await listCollections(item.projectId);
         setSources(list);
         setStored(spread);
         const fresh = draftsOf(spread);

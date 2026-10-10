@@ -4,7 +4,7 @@ import { CommandPalette } from "./components/palette/CommandPalette";
 import { QuickToolsPanel } from "./components/quick/QuickToolsPanel";
 import { StatusBar } from "./components/StatusBar";
 import { registry } from "./registry";
-import { CurrentCampaignProvider, useCurrentCampaign } from "./state/CurrentCampaign";
+import { CurrentProjectProvider, useCurrentProject } from "./state/CurrentProject";
 import { NavigationProvider } from "./state/Navigation";
 import { RenameReviewProvider } from "./state/renameReview";
 import { rollLog } from "./state/rollLog";
@@ -15,7 +15,7 @@ function Shell() {
   const tools = registry.getTools();
   const [activeId, setActiveId] = useState(tools[0]?.id);
   const active = tools.find((t) => t.id === activeId) ?? tools[0];
-  const { campaign } = useCurrentCampaign();
+  const { project } = useCurrentProject();
 
   // Items opened one after another (via links); Back pops one. Empty = showing the tool.
   const [itemStack, setItemStack] = useState<string[]>([]);
@@ -27,13 +27,13 @@ function Shell() {
   );
   const navigation = useMemo(() => ({ openItem }), [openItem]);
 
-  // Items belong to a campaign, so switching campaigns closes any open item.
-  const campaignId = campaign?.id;
+  // Items belong to a project, so switching projects closes any open item.
+  const projectId = project?.id;
   useEffect(() => {
     setItemStack([]);
-    // Rolls can be saved into a campaign, so each campaign starts with a fresh log.
+    // Rolls can be saved into a project, so each project starts with a fresh log.
     rollLog.clear();
-  }, [campaignId]);
+  }, [projectId]);
 
   function openTool(id: string) {
     setItemStack([]);
@@ -62,8 +62,8 @@ function Shell() {
     <NavigationProvider value={navigation}>
       <div className="shell">
         <StatusBar
-          onChangeCampaign={() =>
-            registry.getCommand("core.open-campaigns")?.run({ openTool, openQuickTools })
+          onChangeProject={() =>
+            registry.getCommand("core.open-projects")?.run({ openTool, openQuickTools })
           }
           onOpenPalette={() => setPaletteOpen(true)}
           onToggleQuickTools={() => setQuickOpen((open) => !open)}
@@ -108,11 +108,11 @@ function Shell() {
 
 function App() {
   return (
-    <CurrentCampaignProvider>
+    <CurrentProjectProvider>
       <RenameReviewProvider>
         <Shell />
       </RenameReviewProvider>
-    </CurrentCampaignProvider>
+    </CurrentProjectProvider>
   );
 }
 

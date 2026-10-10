@@ -1,7 +1,7 @@
 /**
  * The name generator's setup: how many parts a name has, which table each part
  * comes from, which tags the entries must carry, and how the parts are joined.
- * This file turns a setup plus the campaign's tables into something
+ * This file turns a setup plus the project's tables into something
  * `generateName` can draw from, and reads and writes a setup as text (a saved
  * preset keeps it). Pure logic: nothing here touches the database.
  */

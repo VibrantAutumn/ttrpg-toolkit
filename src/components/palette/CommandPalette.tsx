@@ -3,7 +3,7 @@ import { searchItems, type Item } from "../../api/library";
 import { matchCommands } from "../../lib/palette";
 import { registry } from "../../registry";
 import type { CommandDefinition } from "../../registry/types";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { useNavigation } from "../../state/Navigation";
 import { itemIcon, libraryLabel } from "../item/itemDisplay";
 
@@ -12,7 +12,7 @@ type Result =
   | { kind: "item"; item: Item };
 
 /**
- * Type to run a command or jump to any item in the open campaign.
+ * Type to run a command or jump to any item in the open project.
  * Up/Down + Enter on a keyboard, or tap a result. Esc or tapping outside closes it.
  */
 export function CommandPalette({
@@ -24,9 +24,9 @@ export function CommandPalette({
   onOpenTool: (toolId: string) => void;
   onOpenQuickTools: () => void;
 }) {
-  const { campaign } = useCurrentCampaign();
+  const { project } = useCurrentProject();
   const { openItem } = useNavigation();
-  const campaignId = campaign?.id ?? null;
+  const projectId = project?.id ?? null;
 
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<Item[]>([]);
@@ -35,13 +35,13 @@ export function CommandPalette({
   // Find matching items (after a short pause so we don't search on every keystroke).
   useEffect(() => {
     const text = query.trim();
-    if (!campaignId || !text) {
+    if (!projectId || !text) {
       setItems([]);
       return;
     }
     let cancelled = false;
     const timer = setTimeout(() => {
-      searchItems(campaignId, text, null, 8)
+      searchItems(projectId, text, null, 8)
         .then((found) => !cancelled && setItems(found))
         .catch(() => !cancelled && setItems([]));
     }, 150);
@@ -49,7 +49,7 @@ export function CommandPalette({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, campaignId]);
+  }, [query, projectId]);
 
   useEffect(() => setSelected(0), [query]);
 
@@ -120,7 +120,7 @@ export function CommandPalette({
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
           onKeyDown={onKeyDown}
-          placeholder={campaignId ? "Type a command or search items..." : "Type a command..."}
+          placeholder={projectId ? "Type a command or search items..." : "Type a command..."}
           aria-label="Command palette"
           aria-controls="palette-results"
           aria-activedescendant={results[active] ? `palette-option-${active}` : undefined}
@@ -148,8 +148,8 @@ export function CommandPalette({
         {results.length === 0 && query.trim() && (
           <p className="empty">Nothing matches “{query.trim()}”.</p>
         )}
-        {!campaignId && (
-          <p className="empty">Open a campaign to search its items too.</p>
+        {!projectId && (
+          <p className="empty">Open a project to search its items too.</p>
         )}
       </div>
     </div>

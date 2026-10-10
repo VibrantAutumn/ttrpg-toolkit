@@ -23,9 +23,9 @@ export interface PresetEntry {
 }
 
 /** Saves a setup as a new preset in the Tables library. */
-export const createNamePreset = (campaignId: string, name: string, folderId: string | null, setupJson: string) =>
-  invoke<Item>("create_name_preset", { campaignId, name, folderId, setupJson });
+export const createNamePreset = (projectId: string, name: string, folderId: string | null, setupJson: string) =>
+  invoke<Item>("create_name_preset", { projectId, name, folderId, setupJson });
 export const getNamePreset = (itemId: string) => invoke<NamePreset>("get_name_preset", { itemId });
 export const setNamePresetSetup = (itemId: string, setupJson: string) =>
   invoke<void>("set_name_preset_setup", { itemId, setupJson });
-export const listNamePresets = (campaignId: string) => invoke<PresetEntry[]>("list_name_presets", { campaignId });
+export const listNamePresets = (projectId: string) => invoke<PresetEntry[]>("list_name_presets", { projectId });

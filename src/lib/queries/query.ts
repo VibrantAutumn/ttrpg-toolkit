@@ -1,7 +1,7 @@
 import type { FieldKind } from "../fields/definition";
 
 /**
- * Queries: a saved question about the items in a campaign ("every document tagged NPC whose
+ * Queries: a saved question about the items in a project ("every document tagged NPC whose
  * Status is Alive"). A query is plain data, so it can be stored as JSON, carried in content packs
  * and run by the database (`src-tauri/src/db/query.rs`). Pure TypeScript.
  *

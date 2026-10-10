@@ -1,12 +1,12 @@
 //! Folders: nested groups inside one tool's library.
 
-use super::campaigns;
+use super::projects;
 use super::error::{clean_name, DbError};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 use uuid::Uuid;
 
-pub(super) const COLUMNS: &str = "id, campaign_id, library, parent_id, name, created_at, updated_at, deleted_at";
+pub(super) const COLUMNS: &str = "id, project_id, library, parent_id, name, created_at, updated_at, deleted_at";
 
 /// The folder plus everything below it (so deleting one takes its contents along).
 pub(super) const SUBTREE: &str = "WITH RECURSIVE tree(id) AS (
@@ -20,7 +20,7 @@ pub(super) const SUBTREE: &str = "WITH RECURSIVE tree(id) AS (
 #[serde(rename_all = "camelCase")]
 pub struct Folder {
     pub id: String,
-    pub campaign_id: String,
+    pub project_id: String,
     pub library: String,
     pub parent_id: Option<String>,
     pub name: String,
@@ -32,7 +32,7 @@ pub struct Folder {
 pub(super) fn from_row(row: &Row) -> rusqlite::Result<Folder> {
     Ok(Folder {
         id: row.get("id")?,
-        campaign_id: row.get("campaign_id")?,
+        project_id: row.get("project_id")?,
         library: row.get("library")?,
         parent_id: row.get("parent_id")?,
         name: row.get("name")?,
@@ -54,30 +54,30 @@ pub fn get(conn: &Connection, id: &str) -> Result<Folder, DbError> {
     })
 }
 
-/// Succeeds only if the folder is live and belongs to this campaign's library.
+/// Succeeds only if the folder is live and belongs to this project's library.
 pub fn require_live_in(
     conn: &Connection,
     folder_id: &str,
-    campaign_id: &str,
+    project_id: &str,
     library: &str,
 ) -> Result<(), DbError> {
     let found: Option<(String, String)> = conn
         .query_row(
-            "SELECT campaign_id, library FROM folders WHERE id = ?1 AND deleted_at IS NULL",
+            "SELECT project_id, library FROM folders WHERE id = ?1 AND deleted_at IS NULL",
             [folder_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
     match found {
         None => Err(DbError::NotFound),
-        Some((c, l)) if c == campaign_id && l == library => Ok(()),
+        Some((c, l)) if c == project_id && l == library => Ok(()),
         Some(_) => Err(DbError::Invalid("That folder belongs to a different library.")),
     }
 }
 
 pub fn create(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
     library: &str,
     parent_id: Option<&str>,
     name: &str,
@@ -87,27 +87,27 @@ pub fn create(
     if library.trim().is_empty() {
         return Err(DbError::Invalid("A library is required."));
     }
-    campaigns::require_live(conn, campaign_id)?;
+    projects::require_live(conn, project_id)?;
     if let Some(parent) = parent_id {
-        require_live_in(conn, parent, campaign_id, library)?;
+        require_live_in(conn, parent, project_id, library)?;
     }
     let id = Uuid::now_v7().to_string();
     conn.execute(
-        "INSERT INTO folders (id, campaign_id, library, parent_id, name, created_at, updated_at)
+        "INSERT INTO folders (id, project_id, library, parent_id, name, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
-        params![id, campaign_id, library, parent_id, name, now],
+        params![id, project_id, library, parent_id, name, now],
     )?;
     get(conn, &id)
 }
 
 /// Every live folder in a library (the front end builds the tree from `parent_id`).
-pub fn list(conn: &Connection, campaign_id: &str, library: &str) -> Result<Vec<Folder>, DbError> {
+pub fn list(conn: &Connection, project_id: &str, library: &str) -> Result<Vec<Folder>, DbError> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {COLUMNS} FROM folders
-         WHERE campaign_id = ?1 AND library = ?2 AND deleted_at IS NULL
+         WHERE project_id = ?1 AND library = ?2 AND deleted_at IS NULL
          ORDER BY name COLLATE NOCASE, created_at"
     ))?;
-    let rows = stmt.query_map(params![campaign_id, library], from_row)?;
+    let rows = stmt.query_map(params![project_id, library], from_row)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
@@ -135,7 +135,7 @@ pub fn move_to(
         return Err(DbError::NotFound);
     }
     if let Some(parent) = new_parent {
-        require_live_in(conn, parent, &folder.campaign_id, &folder.library)?;
+        require_live_in(conn, parent, &folder.project_id, &folder.library)?;
         // Walk up from the new parent; if we meet the folder being moved, it would become its own ancestor.
         let loops: i64 = conn.query_row(
             "WITH RECURSIVE up(id, parent_id) AS (
@@ -193,13 +193,13 @@ pub fn soft_delete(conn: &Connection, id: &str, now: i64) -> Result<(), DbError>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::campaigns;
+    use crate::db::projects;
     use crate::db::open_in_memory;
 
-    /// A database with one campaign; returns (connection, campaign id).
+    /// A database with one project; returns (connection, project id).
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -231,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn blank_names_and_missing_campaigns_are_rejected() {
+    fn blank_names_and_missing_projects_are_rejected() {
         let (conn, camp) = setup();
         assert!(matches!(create(&conn, &camp, "w", None, "  ", 1), Err(DbError::EmptyName)));
         assert!(matches!(create(&conn, "no-such", "w", None, "X", 1), Err(DbError::NotFound)));

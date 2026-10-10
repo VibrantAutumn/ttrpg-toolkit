@@ -1,4 +1,4 @@
-//! Content packs: export a campaign to a file and import one as a new campaign.
+//! Content packs: export a project to a file and import one as a new project.
 //! See `format.rs` for the file layout and its evolution rules.
 
 pub mod export;

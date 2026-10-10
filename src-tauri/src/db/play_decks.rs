@@ -41,7 +41,7 @@ pub struct PlayDeckEntry {
 
 /// What the caller supplies; the item itself is created here.
 pub struct NewPlayDeck<'a> {
-    pub campaign_id: &'a str,
+    pub project_id: &'a str,
     /// Item name; "<source> in play" is used if this is blank.
     pub name: &'a str,
     pub folder_id: Option<&'a str>,
@@ -79,7 +79,7 @@ pub fn create(conn: &Connection, new: NewPlayDeck, now: i64) -> Result<(Item, Pl
         "Deck in play".to_string()
     };
     let tx = conn.unchecked_transaction()?;
-    let item = items::create(&tx, new.campaign_id, LIBRARY, PLAY_TYPE, &name, new.folder_id, now)?;
+    let item = items::create(&tx, new.project_id, LIBRARY, PLAY_TYPE, &name, new.folder_id, now)?;
     tx.execute(
         "INSERT INTO play_decks (item_id, source_id, source_name, state_json, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
@@ -139,15 +139,15 @@ pub fn set_state(conn: &Connection, item_id: &str, state_json: &str, now: i64) -
     Ok(())
 }
 
-/// Every live deck in play in a campaign, most recently played first.
-pub fn list(conn: &Connection, campaign_id: &str) -> Result<Vec<PlayDeckEntry>, DbError> {
+/// Every live deck in play in a project, most recently played first.
+pub fn list(conn: &Connection, project_id: &str) -> Result<Vec<PlayDeckEntry>, DbError> {
     let mut stmt = conn.prepare(
         "SELECT i.id, i.name, p.source_name, p.state_json
          FROM play_decks p JOIN items i ON i.id = p.item_id
-         WHERE i.campaign_id = ?1 AND i.deleted_at IS NULL
+         WHERE i.project_id = ?1 AND i.deleted_at IS NULL
          ORDER BY p.updated_at DESC, i.name COLLATE NOCASE, i.created_at",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         let state: String = r.get(3)?;
         let (remaining, drawn) = counts(&state);
         Ok(PlayDeckEntry {
@@ -164,19 +164,19 @@ pub fn list(conn: &Connection, campaign_id: &str) -> Result<Vec<PlayDeckEntry>, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{campaigns, folders, open_in_memory, search, tags, trash};
+    use crate::db::{projects, folders, open_in_memory, search, tags, trash};
 
     const STATE: &str = r#"{"version":1,"deck":[{"id":"a","name":"A"},{"id":"b","name":"B"}],"drawn":[{"id":"c","name":"C","reversed":true}]}"#;
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
-    fn new<'a>(campaign: &'a str, name: &'a str) -> NewPlayDeck<'a> {
+    fn new<'a>(project: &'a str, name: &'a str) -> NewPlayDeck<'a> {
         NewPlayDeck {
-            campaign_id: campaign,
+            project_id: project,
             name,
             folder_id: None,
             source_id: Some("source-1"),
@@ -235,7 +235,7 @@ mod tests {
         let long_name = "n".repeat(MAX_SOURCE_CHARS + 1);
         n.source_name = &long_name;
         assert!(matches!(create(&conn, n, 1), Err(DbError::Invalid(_))));
-        assert!(create(&conn, new("no-such-campaign", "x"), 1).is_err());
+        assert!(create(&conn, new("no-such-project", "x"), 1).is_err());
         let items: i64 = conn.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).unwrap();
         assert_eq!(items, 0, "a failed start must not leave a half-made item");
     }
@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn list_shows_live_games_with_card_counts_most_recent_first() {
         let (conn, camp) = setup();
-        let other = campaigns::create(&conn, "Other", 2).unwrap();
+        let other = projects::create(&conn, "Other", 2).unwrap();
         let (a, _) = create(&conn, new(&camp, "Alpha"), 10).unwrap();
         let (b, _) = create(&conn, new(&camp, "Beta"), 20).unwrap();
         let gone = create(&conn, new(&camp, "Trashed"), 30).unwrap().0;
@@ -313,9 +313,9 @@ mod tests {
     fn a_game_is_found_by_name_tag_and_the_name_of_its_source() {
         let (conn, camp) = setup();
         let (item, _) = create(&conn, new(&camp, "Harrow game"), 2).unwrap();
-        let tag = tags::create(&conn, &camp, None, "Campaign", None, 3).unwrap();
+        let tag = tags::create(&conn, &camp, None, "Project", None, 3).unwrap();
         tags::add_to_item(&conn, &item.id, &tag.id, 4).unwrap();
-        for query in ["harrow", "campaign", "tarot"] {
+        for query in ["harrow", "project", "tarot"] {
             let found = search::search(&conn, &camp, query, Some("cards"), 10).unwrap();
             assert_eq!(found.len(), 1, "searching '{query}'");
         }

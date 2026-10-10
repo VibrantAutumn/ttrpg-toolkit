@@ -1,5 +1,5 @@
 //! Smart collections: saved queries. A smart collection is a library item (library `worldbuilding`,
-//! type `smart_collection`) that remembers a question about the campaign ("every NPC tagged Elf")
+//! type `smart_collection`) that remembers a question about the project ("every NPC tagged Elf")
 //! and answers it afresh every time it is opened, so it is never out of date.
 //!
 //! The query is JSON text whose shape and meaning are defined in TypeScript
@@ -85,18 +85,18 @@ pub fn set_query(conn: &Connection, item_id: &str, query_json: &str, now: i64) -
 pub fn run(conn: &Connection, item_id: &str, now: i64, only_type: Option<&str>) -> Result<QueryResult, DbError> {
     let item = require_live(conn, item_id)?;
     let saved = get(conn, item_id)?;
-    query::run_json(conn, &item.campaign_id, &saved.query_json, now, only_type)
+    query::run_json(conn, &item.project_id, &saved.query_json, now, only_type)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{campaigns, collections, open_in_memory, tags, trash};
+    use crate::db::{projects, collections, open_in_memory, tags, trash};
     use serde_json::json;
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 

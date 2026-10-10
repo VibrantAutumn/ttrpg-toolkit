@@ -20,7 +20,7 @@ type Adding = null | "menu" | "document" | "embed" | "slot";
  */
 export function TabStrip({
   parentId,
-  campaignId,
+  projectId,
   tabs,
   selected,
   onSelect,
@@ -28,7 +28,7 @@ export function TabStrip({
   canAdd,
 }: {
   parentId: string;
-  campaignId: string;
+  projectId: string;
   tabs: Tab[];
   /** `"main"` or a tab's id. */
   selected: string;
@@ -127,7 +127,7 @@ export function TabStrip({
       {adding === "embed" && (
         <div className="tab-menu">
           <LinkPicker
-            campaignId={campaignId}
+            projectId={projectId}
             excludeIds={new Set([parentId])}
             onPick={(item) => void attempt(() => addEmbedTab(parentId, "", item.id))}
             onClose={close}

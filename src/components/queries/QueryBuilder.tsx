@@ -53,14 +53,14 @@ type Change = (next: Query) => void;
  * Builds a query out of rules. The simple view is one list ("match all / any of these rules");
  * Advanced allows groups inside groups and sorting by several things.
  */
-export function QueryBuilder({ campaignId, query, catalog, onChange }: { campaignId: string; query: Query; catalog: QueryCatalog; onChange: Change }) {
+export function QueryBuilder({ projectId, query, catalog, onChange }: { projectId: string; query: Query; catalog: QueryCatalog; onChange: Change }) {
   const simple = isSimple(query);
   const [advancedOn, setAdvancedOn] = useState(!simple);
   const advanced = advancedOn || !simple;
   return (
     <div className="query-builder">
       <p className="query-summary">{describeQuery(query, catalog.names)}</p>
-      <GroupView campaignId={campaignId} query={query} catalog={catalog} onChange={onChange} path={[]} group={query.where} advanced={advanced} />
+      <GroupView projectId={projectId} query={query} catalog={catalog} onChange={onChange} path={[]} group={query.where} advanced={advanced} />
       <SortEditor query={query} catalog={catalog} onChange={onChange} advanced={advanced} />
       <label className="row">
         <input type="checkbox" checked={advanced} disabled={!simple} onChange={(e) => setAdvancedOn(e.currentTarget.checked)} />
@@ -74,7 +74,7 @@ export function QueryBuilder({ campaignId, query, catalog, onChange }: { campaig
 }
 
 function GroupView({
-  campaignId,
+  projectId,
   query,
   catalog,
   onChange,
@@ -82,7 +82,7 @@ function GroupView({
   group,
   advanced,
 }: {
-  campaignId: string;
+  projectId: string;
   query: Query;
   catalog: QueryCatalog;
   onChange: Change;
@@ -125,9 +125,9 @@ function GroupView({
           return (
             <li key={index}>
               {isGroup(node) ? (
-                <GroupView campaignId={campaignId} query={query} catalog={catalog} onChange={onChange} path={childPath} group={node} advanced={advanced} />
+                <GroupView projectId={projectId} query={query} catalog={catalog} onChange={onChange} path={childPath} group={node} advanced={advanced} />
               ) : (
-                <RuleView campaignId={campaignId} query={query} catalog={catalog} onChange={onChange} path={childPath} rule={node} />
+                <RuleView projectId={projectId} query={query} catalog={catalog} onChange={onChange} path={childPath} rule={node} />
               )}
               <div className="row query-rule-tools">
                 <button type="button" disabled={index === 0} aria-label="Move up" onClick={() => onChange(moveNode(query, childPath, -1))}>
@@ -168,7 +168,7 @@ function GroupView({
   );
 }
 
-function RuleView({ campaignId, query, catalog, onChange, path, rule }: { campaignId: string; query: Query; catalog: QueryCatalog; onChange: Change; path: Path; rule: Rule }) {
+function RuleView({ projectId, query, catalog, onChange, path, rule }: { projectId: string; query: Query; catalog: QueryCatalog; onChange: Change; path: Path; rule: Rule }) {
   const set = (change: (r: Rule) => Rule) => onChange(updateRule(query, path, change));
   const complete = isRuleComplete(rule);
   return (
@@ -190,7 +190,7 @@ function RuleView({ campaignId, query, catalog, onChange, path, rule }: { campai
           ))}
         </select>
       </div>
-      <RuleBody campaignId={campaignId} catalog={catalog} rule={rule} set={set} />
+      <RuleBody projectId={projectId} catalog={catalog} rule={rule} set={set} />
       {!complete && <p className="meta">Not finished: this rule is ignored until it is.</p>}
     </div>
   );
@@ -226,7 +226,7 @@ function NumberBox({ value, onChange, label }: { value: number; onChange: (n: nu
   );
 }
 
-function RuleBody({ campaignId, catalog, rule, set }: { campaignId: string; catalog: QueryCatalog; rule: Rule; set: (change: (r: Rule) => Rule) => void }) {
+function RuleBody({ projectId, catalog, rule, set }: { projectId: string; catalog: QueryCatalog; rule: Rule; set: (change: (r: Rule) => Rule) => void }) {
   switch (rule.kind) {
     case "itemType": {
       const types = registry.getItemTypes().map((t) => ({ id: t.id, label: `${t.icon} ${t.label}` }));
@@ -287,7 +287,7 @@ function RuleBody({ campaignId, catalog, rule, set }: { campaignId: string; cata
     case "linkedFrom":
       return (
         <ItemPick
-          campaignId={campaignId}
+          projectId={projectId}
           itemId={rule.itemId}
           name={catalog.itemNames.get(rule.itemId)}
           onPick={(item) => set((r) => ({ ...r, itemId: item.id }) as Rule)}
@@ -302,11 +302,11 @@ function RuleBody({ campaignId, catalog, rule, set }: { campaignId: string; cata
         </div>
       );
     case "field":
-      return <FieldRule campaignId={campaignId} catalog={catalog} rule={rule} set={set} />;
+      return <FieldRule projectId={projectId} catalog={catalog} rule={rule} set={set} />;
   }
 }
 
-function FieldRule({ campaignId, catalog, rule, set }: { campaignId: string; catalog: QueryCatalog; rule: Extract<Rule, { kind: "field" }>; set: (change: (r: Rule) => Rule) => void }) {
+function FieldRule({ projectId, catalog, rule, set }: { projectId: string; catalog: QueryCatalog; rule: Extract<Rule, { kind: "field" }>; set: (change: (r: Rule) => Rule) => void }) {
   const def = catalog.fields.find((d) => d.id === rule.fieldId);
   const checks = def ? testsForKind(def.kind) : [];
   const setTest = (test: FieldTest) => set((r) => ({ ...r, test }) as Rule);
@@ -341,12 +341,12 @@ function FieldRule({ campaignId, catalog, rule, set }: { campaignId: string; cat
           </select>
         )}
       </div>
-      {def && <TestEditor campaignId={campaignId} catalog={catalog} def={def} test={rule.test} onChange={setTest} />}
+      {def && <TestEditor projectId={projectId} catalog={catalog} def={def} test={rule.test} onChange={setTest} />}
     </div>
   );
 }
 
-function TestEditor({ campaignId, catalog, def, test, onChange }: { campaignId: string; catalog: QueryCatalog; def: QueryCatalog["fields"][number]; test: FieldTest; onChange: (t: FieldTest) => void }) {
+function TestEditor({ projectId, catalog, def, test, onChange }: { projectId: string; catalog: QueryCatalog; def: QueryCatalog["fields"][number]; test: FieldTest; onChange: (t: FieldTest) => void }) {
   switch (test.check) {
     case "contains":
     case "equals":
@@ -378,7 +378,7 @@ function TestEditor({ campaignId, catalog, def, test, onChange }: { campaignId: 
       return <Chips options={options} chosen={test.optionIds} onToggle={(id) => onChange({ ...test, optionIds: toggled(test.optionIds, id) })} />;
     }
     case "links":
-      return <ItemPick campaignId={campaignId} itemId={test.itemId} name={catalog.itemNames.get(test.itemId)} onPick={(item) => onChange({ ...test, itemId: item.id })} />;
+      return <ItemPick projectId={projectId} itemId={test.itemId} name={catalog.itemNames.get(test.itemId)} onPick={(item) => onChange({ ...test, itemId: item.id })} />;
     case "empty":
       return null;
   }

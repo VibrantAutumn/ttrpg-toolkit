@@ -140,7 +140,7 @@ pub fn add_document_tab(conn: &Connection, parent_id: &str, name: &str, now: i64
 /// Makes a nested document and its tab, with no checks and no transaction of its own (for callers
 /// that have done their checks and are already in one). Returns the tab's id and the new document.
 pub(super) fn insert_document_tab(conn: &Connection, parent: &Item, name: &str, now: i64) -> Result<(String, Item), DbError> {
-    let child = items::create(conn, &parent.campaign_id, &parent.library, CHILD_TYPE, name, None, now)?;
+    let child = items::create(conn, &parent.project_id, &parent.library, CHILD_TYPE, name, None, now)?;
     let id = Uuid::now_v7().to_string();
     conn.execute(
         "INSERT INTO item_tabs (id, parent_id, kind, position, child_id, created_at, updated_at)
@@ -161,12 +161,12 @@ pub(super) fn insert_embed_tab(conn: &Connection, parent_id: &str, title: &str, 
     Ok(id)
 }
 
-/// Checks an embed's target: a live item of the page's campaign, and not the page itself.
+/// Checks an embed's target: a live item of the page's project, and not the page itself.
 fn check_target(conn: &Connection, parent: &Item, target_id: Option<&str>) -> Result<(), DbError> {
     let Some(target_id) = target_id else { return Ok(()) };
     let target = live_item(conn, target_id)?;
-    if target.campaign_id != parent.campaign_id {
-        return Err(DbError::Invalid("That item is in a different campaign."));
+    if target.project_id != parent.project_id {
+        return Err(DbError::Invalid("That item is in a different project."));
     }
     if target.id == parent.id {
         return Err(DbError::Invalid("A page can't be embedded in itself."));
@@ -250,11 +250,11 @@ pub fn move_tab(conn: &Connection, tab_id: &str, delta: i64, now: i64) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{campaigns, folders, open_in_memory, search, trash};
+    use crate::db::{projects, folders, open_in_memory, search, trash};
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -365,10 +365,10 @@ mod tests {
     }
 
     #[test]
-    fn an_embed_can_only_show_a_live_item_of_the_same_campaign_other_than_its_page() {
+    fn an_embed_can_only_show_a_live_item_of_the_same_project_other_than_its_page() {
         let (conn, camp) = setup();
         let strahd = doc(&conn, &camp, "Strahd");
-        let other = campaigns::create(&conn, "Other", 1).unwrap();
+        let other = projects::create(&conn, "Other", 1).unwrap();
         let foreign = doc(&conn, &other.id, "Foreign");
         let gone = doc(&conn, &camp, "Gone");
         items::soft_delete(&conn, &gone.id, 2).unwrap();

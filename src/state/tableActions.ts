@@ -10,18 +10,18 @@ import { rollLog } from "./rollLog";
 const key = (name: string) => name.trim().toLowerCase();
 
 /**
- * Loads what a roll needs, fresh from the database: every table in the campaign
+ * Loads what a roll needs, fresh from the database: every table in the project
  * with its recent picks, the cards of the decks, sets and pools that any
  * entry draws from (only those, so a big card library isn't loaded for nothing), and the
  * documents that entity slots may pick (narrowed by the roll context).
  */
-export async function loadTableWorld(campaignId: string) {
-  const tables = await loadRollableTables(campaignId);
+export async function loadTableWorld(projectId: string) {
+  const tables = await loadRollableTables(projectId);
   const names = neededDeckNames(tables);
   let decks: RollableDeck[] = [];
   if (names.length > 0) {
     const wanted = new Set(names.map(key));
-    const sources = (await listCollections(campaignId)).filter((c) => wanted.has(key(c.name)));
+    const sources = (await listCollections(projectId)).filter((c) => wanted.has(key(c.name)));
     decks = await Promise.all(
       sources.map(async (c) => ({
         id: c.id,
@@ -30,7 +30,7 @@ export async function loadTableWorld(campaignId: string) {
       })),
     );
   }
-  const world: TableWorld = buildWorld(tables, decks, await loadEntityData(campaignId, tables));
+  const world: TableWorld = buildWorld(tables, decks, await loadEntityData(projectId, tables));
   return { tables, world };
 }
 
@@ -47,7 +47,7 @@ export async function rollTableById(tableId: string): Promise<TableLogOutcome> {
   try {
     const item = await getItem(tableId);
     if (item.deletedAt !== null) return { ok: false, message: `“${item.name}” is in the trash.` };
-    const { tables, world } = await loadTableWorld(item.campaignId);
+    const { tables, world } = await loadTableWorld(item.projectId);
     const table = tables.find((t) => t.id === tableId);
     if (!table) return { ok: false, message: `“${item.name}” isn't available any more.` };
     const outcome = rollLog.rollTable(table, world);
@@ -65,10 +65,10 @@ export async function rollTableById(tableId: string): Promise<TableLogOutcome> {
  */
 export async function rerollTableResult(
   logEntryId: string,
-  campaignId: string,
+  projectId: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
-    const { world } = await loadTableWorld(campaignId);
+    const { world } = await loadTableWorld(projectId);
     const entry = rollLog.rerollTable(logEntryId, world);
     if (!entry) return { ok: false, message: "That result can't be rerolled." };
     await recordTableRecent(entry.roll.picked);

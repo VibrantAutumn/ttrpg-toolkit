@@ -18,25 +18,25 @@ export interface QueryCatalog {
   names: QueryNames;
 }
 
-export function useQueryCatalog(campaignId: string, query: Query): QueryCatalog {
+export function useQueryCatalog(projectId: string, query: Query): QueryCatalog {
   const dataVersion = useDataVersion();
-  const { definitions } = useFieldCatalog(campaignId);
+  const { definitions } = useFieldCatalog(projectId);
   const [tags, setTags] = useState<Tag[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [itemNames, setItemNames] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     let active = true;
-    listTags(campaignId)
+    listTags(projectId)
       .then((t) => active && setTags(t))
       .catch(() => active && setTags([]));
-    Promise.all(registry.getTools().map((tool) => listFolders(campaignId, tool.id)))
+    Promise.all(registry.getTools().map((tool) => listFolders(projectId, tool.id)))
       .then((lists) => active && setFolders(lists.flat()))
       .catch(() => active && setFolders([]));
     return () => {
       active = false;
     };
-  }, [campaignId, dataVersion]);
+  }, [projectId, dataVersion]);
 
   const wanted = itemIdsIn(query).sort().join(",");
   useEffect(() => {

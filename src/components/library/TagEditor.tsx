@@ -6,15 +6,15 @@ import {
   type Tag,
 } from "../../api/library";
 
-/** Toggle the campaign's tags on one item, or create a new tag and attach it. */
+/** Toggle the project's tags on one item, or create a new tag and attach it. */
 export function TagEditor({
-  campaignId,
+  projectId,
   itemId,
   itemTags,
   allTags,
   run,
 }: {
-  campaignId: string;
+  projectId: string;
   itemId: string;
   itemTags: Tag[];
   allTags: Tag[];
@@ -55,7 +55,7 @@ export function TagEditor({
         onSubmit={(e) => {
           e.preventDefault();
           run(async () => {
-            const tag = await createTag(campaignId, null, name, null);
+            const tag = await createTag(projectId, null, name, null);
             await addTagToItem(itemId, tag.id);
             setName("");
           });

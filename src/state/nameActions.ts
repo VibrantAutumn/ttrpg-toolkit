@@ -12,12 +12,12 @@ import { rollLog } from "./rollLog";
  * Used by the Names tab, the quick tools panel and presets, so they always agree.
  */
 export async function generateNameFromSetup(
-  campaignId: string,
+  projectId: string,
   setup: NameSetup,
   label: string | null = null,
 ): Promise<NameLogOutcome> {
   try {
-    const [tables, tags] = await Promise.all([loadRollableTables(campaignId), listTags(campaignId)]);
+    const [tables, tags] = await Promise.all([loadRollableTables(projectId), listTags(projectId)]);
     const built = buildGenerator(
       setup,
       tables.map((t) => ({ id: t.id, name: t.name, entries: t.entries })),

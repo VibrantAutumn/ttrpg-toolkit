@@ -1,4 +1,4 @@
-//! Campaign storage. Functions take a plain connection and the current time,
+//! Project storage. Functions take a plain connection and the current time,
 //! so tests can run on an in-memory database with a fake clock.
 
 use rusqlite::{params, Connection, Row};
@@ -10,7 +10,7 @@ const COLUMNS: &str = "id, name, created_at, updated_at, deleted_at";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Campaign {
+pub struct Project {
     pub id: String,
     pub name: String,
     pub created_at: i64,
@@ -18,8 +18,8 @@ pub struct Campaign {
     pub deleted_at: Option<i64>,
 }
 
-fn from_row(row: &Row) -> rusqlite::Result<Campaign> {
-    Ok(Campaign {
+fn from_row(row: &Row) -> rusqlite::Result<Project> {
+    Ok(Project {
         id: row.get("id")?,
         name: row.get("name")?,
         created_at: row.get("created_at")?,
@@ -28,9 +28,9 @@ fn from_row(row: &Row) -> rusqlite::Result<Campaign> {
     })
 }
 
-fn get(conn: &Connection, id: &str) -> Result<Campaign, DbError> {
+fn get(conn: &Connection, id: &str) -> Result<Project, DbError> {
     conn.query_row(
-        &format!("SELECT {COLUMNS} FROM campaigns WHERE id = ?1"),
+        &format!("SELECT {COLUMNS} FROM projects WHERE id = ?1"),
         [id],
         from_row,
     )
@@ -40,19 +40,19 @@ fn get(conn: &Connection, id: &str) -> Result<Campaign, DbError> {
     })
 }
 
-/// The campaign, unless it is missing or in the trash.
-pub fn get_live(conn: &Connection, id: &str) -> Result<Campaign, DbError> {
-    let campaign = get(conn, id)?;
-    if campaign.deleted_at.is_some() {
+/// The project, unless it is missing or in the trash.
+pub fn get_live(conn: &Connection, id: &str) -> Result<Project, DbError> {
+    let project = get(conn, id)?;
+    if project.deleted_at.is_some() {
         return Err(DbError::NotFound);
     }
-    Ok(campaign)
+    Ok(project)
 }
 
-/// Succeeds only if the campaign exists and is not in the trash.
+/// Succeeds only if the project exists and is not in the trash.
 pub fn require_live(conn: &Connection, id: &str) -> Result<(), DbError> {
     let live: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM campaigns WHERE id = ?1 AND deleted_at IS NULL",
+        "SELECT COUNT(*) FROM projects WHERE id = ?1 AND deleted_at IS NULL",
         [id],
         |row| row.get(0),
     )?;
@@ -63,29 +63,29 @@ pub fn require_live(conn: &Connection, id: &str) -> Result<(), DbError> {
     }
 }
 
-pub fn create(conn: &Connection, name: &str, now: i64) -> Result<Campaign, DbError> {
+pub fn create(conn: &Connection, name: &str, now: i64) -> Result<Project, DbError> {
     let name = clean_name(name)?;
     let id = Uuid::now_v7().to_string();
     conn.execute(
-        "INSERT INTO campaigns (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+        "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
         params![id, name, now],
     )?;
     get(conn, &id)
 }
 
-/// Live (not deleted) campaigns, alphabetical.
-pub fn list(conn: &Connection) -> Result<Vec<Campaign>, DbError> {
+/// Live (not deleted) projects, alphabetical.
+pub fn list(conn: &Connection) -> Result<Vec<Project>, DbError> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT {COLUMNS} FROM campaigns WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE, created_at"
+        "SELECT {COLUMNS} FROM projects WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE, created_at"
     ))?;
     let rows = stmt.query_map([], from_row)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
-pub fn rename(conn: &Connection, id: &str, name: &str, now: i64) -> Result<Campaign, DbError> {
+pub fn rename(conn: &Connection, id: &str, name: &str, now: i64) -> Result<Project, DbError> {
     let name = clean_name(name)?;
     let changed = conn.execute(
-        "UPDATE campaigns SET name = ?2, updated_at = ?3 WHERE id = ?1 AND deleted_at IS NULL",
+        "UPDATE projects SET name = ?2, updated_at = ?3 WHERE id = ?1 AND deleted_at IS NULL",
         params![id, name, now],
     )?;
     if changed == 0 {
@@ -94,10 +94,10 @@ pub fn rename(conn: &Connection, id: &str, name: &str, now: i64) -> Result<Campa
     get(conn, id)
 }
 
-/// Moves a campaign to the trash. The row is kept so it can be restored.
+/// Moves a project to the trash. The row is kept so it can be restored.
 pub fn soft_delete(conn: &Connection, id: &str, now: i64) -> Result<(), DbError> {
     let changed = conn.execute(
-        "UPDATE campaigns SET deleted_at = ?2, updated_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+        "UPDATE projects SET deleted_at = ?2, updated_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
         params![id, now],
     )?;
     if changed == 0 {
@@ -106,9 +106,9 @@ pub fn soft_delete(conn: &Connection, id: &str, now: i64) -> Result<(), DbError>
     Ok(())
 }
 
-pub fn restore(conn: &Connection, id: &str, now: i64) -> Result<Campaign, DbError> {
+pub fn restore(conn: &Connection, id: &str, now: i64) -> Result<Project, DbError> {
     let changed = conn.execute(
-        "UPDATE campaigns SET deleted_at = NULL, updated_at = ?2 WHERE id = ?1 AND deleted_at IS NOT NULL",
+        "UPDATE projects SET deleted_at = NULL, updated_at = ?2 WHERE id = ?1 AND deleted_at IS NOT NULL",
         params![id, now],
     )?;
     if changed == 0 {
@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn restore_brings_a_deleted_campaign_back() {
+    fn restore_brings_a_deleted_project_back() {
         let conn = test_db();
         let c = create(&conn, "Phoenix", 1).unwrap();
         soft_delete(&conn, &c.id, 2).unwrap();
@@ -182,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn deleted_or_unknown_campaigns_cannot_be_renamed_or_deleted_again() {
+    fn deleted_or_unknown_projects_cannot_be_renamed_or_deleted_again() {
         let conn = test_db();
         let c = create(&conn, "Gone", 1).unwrap();
         soft_delete(&conn, &c.id, 2).unwrap();
@@ -192,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn restoring_a_live_campaign_is_not_found() {
+    fn restoring_a_live_project_is_not_found() {
         let conn = test_db();
         let c = create(&conn, "Alive", 1).unwrap();
         assert!(matches!(restore(&conn, &c.id, 2), Err(DbError::NotFound)));

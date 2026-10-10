@@ -4,17 +4,17 @@ import { registry } from "../../registry";
 import { itemIcon, libraryLabel } from "./itemDisplay";
 
 /**
- * Search the open campaign (every tool at once) and pick an item to link to, or
+ * Search the open project (every tool at once) and pick an item to link to, or
  * make a new item right here and link to that. Items in `excludeIds` (the item
  * itself, and ones already linked) are left out.
  */
 export function LinkPicker({
-  campaignId,
+  projectId,
   excludeIds,
   onPick,
   onClose,
 }: {
-  campaignId: string;
+  projectId: string;
   excludeIds: Set<string>;
   onPick: (item: Item) => void;
   onClose: () => void;
@@ -33,7 +33,7 @@ export function LinkPicker({
   async function createAndPick() {
     if (!chosenType || newName.trim() === "") return;
     try {
-      const made = await createItem(campaignId, chosenType.toolId, chosenType.id, newName, null);
+      const made = await createItem(projectId, chosenType.toolId, chosenType.id, newName, null);
       onPick(made);
     } catch (e) {
       setError(String(e));
@@ -48,7 +48,7 @@ export function LinkPicker({
     }
     let cancelled = false;
     const timer = setTimeout(() => {
-      searchItems(campaignId, query, null, 20)
+      searchItems(projectId, query, null, 20)
         .then((found) => !cancelled && setResults(found))
         .catch((e) => !cancelled && setError(String(e)));
     }, 200);
@@ -56,7 +56,7 @@ export function LinkPicker({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [text, campaignId]);
+  }, [text, projectId]);
 
   const choices = results.filter((i) => !excludeIds.has(i.id));
 

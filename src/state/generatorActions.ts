@@ -11,24 +11,24 @@ import { bumpDataVersion } from "./dataVersion";
 import { loadTableWorld } from "./tableActions";
 
 /** Rolls every row, reading the tables and documents fresh, and remembers the entries picked ("avoid recent"). */
-export async function runGenerator(campaignId: string, def: GeneratorDef): Promise<GeneratorRun> {
-  const { world } = await loadTableWorld(campaignId);
+export async function runGenerator(projectId: string, def: GeneratorDef): Promise<GeneratorRun> {
+  const { world } = await loadTableWorld(projectId);
   const run = generate(def, world, newSeed());
   await recordTableRecent(pickedEntries(run));
   return run;
 }
 
 /** Rolls the rows not in `keep` again. */
-export async function rerollGenerator(campaignId: string, def: GeneratorDef, run: GeneratorRun, keep: ReadonlySet<string>): Promise<GeneratorRun> {
-  const { world } = await loadTableWorld(campaignId);
+export async function rerollGenerator(projectId: string, def: GeneratorDef, run: GeneratorRun, keep: ReadonlySet<string>): Promise<GeneratorRun> {
+  const { world } = await loadTableWorld(projectId);
   const next = rerollRows(def, run, keep, world, newSeed());
   await recordTableRecent(pickedEntries(next));
   return next;
 }
 
 /** What creating the document would do, for the preview (names the template, checks every field). */
-export async function previewDocument(campaignId: string, def: GeneratorDef, run: GeneratorRun, generatorName: string): Promise<GeneratedDocument> {
-  const [fields, templateName] = await Promise.all([listFieldDefinitions(campaignId), nameOf(def.templateId)]);
+export async function previewDocument(projectId: string, def: GeneratorDef, run: GeneratorRun, generatorName: string): Promise<GeneratedDocument> {
+  const [fields, templateName] = await Promise.all([listFieldDefinitions(projectId), nameOf(def.templateId)]);
   return buildDocument(def, run, fields, templateName ? `New ${templateName}` : `New ${generatorName}`);
 }
 
@@ -49,17 +49,17 @@ export type CreateResult = { ok: true; item: Item; warnings: string[] } | { ok: 
  * plain document, then its name, the field values and the generated section of text. If a step fails
  * after the document exists, the message says so (the document is kept, never half-hidden).
  */
-export async function createFromRun(campaignId: string, def: GeneratorDef, run: GeneratorRun, generatorName: string): Promise<CreateResult> {
+export async function createFromRun(projectId: string, def: GeneratorDef, run: GeneratorRun, generatorName: string): Promise<CreateResult> {
   let item: Item | null = null;
   try {
-    const [fields, templateName] = await Promise.all([listFieldDefinitions(campaignId), nameOf(def.templateId)]);
+    const [fields, templateName] = await Promise.all([listFieldDefinitions(projectId), nameOf(def.templateId)]);
     if (def.templateId && !templateName) {
       return { ok: false, message: "This generator's template is gone or in the trash. Choose another template, or none." };
     }
     const doc = buildDocument(def, run, fields, templateName ? `New ${templateName}` : `New ${generatorName}`);
     item = def.templateId
       ? await createFromTemplate(def.templateId, doc.name, null)
-      : await createItem(campaignId, "worldbuilding", "document", doc.name, null);
+      : await createItem(projectId, "worldbuilding", "document", doc.name, null);
     for (const a of doc.fields) {
       const field = fields.find((f) => f.id === a.fieldId);
       if (field) await saveFieldValue(field, item.id, a.value, false);

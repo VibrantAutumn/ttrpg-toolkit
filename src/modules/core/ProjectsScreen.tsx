@@ -1,41 +1,41 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  Campaign,
-  createCampaign,
-  deleteCampaign,
+  Project,
+  createProject,
+  deleteProject,
   getSchemaVersion,
-  listCampaigns,
-  renameCampaign,
-  restoreCampaign,
-} from "../../api/campaigns";
+  listProjects,
+  renameProject,
+  restoreProject,
+} from "../../api/projects";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
-import { exportCampaignPack } from "../../api/packs";
+import { exportProjectPack } from "../../api/packs";
 import { packFileName } from "../../lib/packs";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { ImportPack } from "./ImportPack";
 
-export function CampaignsScreen() {
-  const current = useCurrentCampaign();
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+export function ProjectsScreen() {
+  const current = useCurrentProject();
+  const [projects, setProjects] = useState<Project[]>([]);
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [justDeleted, setJustDeleted] = useState<Campaign | null>(null);
+  const [justDeleted, setJustDeleted] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [schemaVersion, setSchemaVersion] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
-    setCampaigns(await listCampaigns());
+    setProjects(await listProjects());
   }, []);
 
-  /** Runs a change, then reloads the list and the open campaign. Shows any error from Rust. */
+  /** Runs a change, then reloads the list and the open project. Shows any error from Rust. */
   async function run(action: () => Promise<unknown>) {
     try {
       await action();
       await refresh();
-      await current.refresh(); // renames, deletes and undo can all change the open campaign
+      await current.refresh(); // renames, deletes and undo can all change the open project
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -47,16 +47,16 @@ export function CampaignsScreen() {
     getSchemaVersion().then(setSchemaVersion);
   }, [refresh]);
 
-  function startEditing(c: Campaign) {
+  function startEditing(c: Project) {
     setEditingId(c.id);
     setEditName(c.name);
   }
 
-  /** Builds the campaign's pack, asks where to save it, and writes the file. */
-  async function exportCampaign(c: Campaign) {
+  /** Builds the project's pack, asks where to save it, and writes the file. */
+  async function exportProject(c: Project) {
     setStatus(null);
     try {
-      const bytes = await exportCampaignPack(c.id);
+      const bytes = await exportProjectPack(c.id);
       const target = await save({ defaultPath: packFileName(c.name) });
       if (!target) return; // the user cancelled
       await writeFile(target, bytes);
@@ -69,14 +69,14 @@ export function CampaignsScreen() {
 
   return (
     <section>
-      <h1>Campaigns</h1>
+      <h1>Projects</h1>
 
       <form
         className="row"
         onSubmit={(e) => {
           e.preventDefault();
           run(async () => {
-            await createCampaign(newName);
+            await createProject(newName);
             setNewName("");
           });
         }}
@@ -84,8 +84,8 @@ export function CampaignsScreen() {
         <input
           value={newName}
           onChange={(e) => setNewName(e.currentTarget.value)}
-          placeholder="New campaign name..."
-          aria-label="New campaign name"
+          placeholder="New project name..."
+          aria-label="New project name"
         />
         <button type="submit">Create</button>
       </form>
@@ -102,7 +102,7 @@ export function CampaignsScreen() {
             className="link"
             onClick={() =>
               run(async () => {
-                await restoreCampaign(justDeleted.id);
+                await restoreProject(justDeleted.id);
                 setJustDeleted(null);
               })
             }
@@ -112,11 +112,11 @@ export function CampaignsScreen() {
         </p>
       )}
 
-      {campaigns.length === 0 ? (
-        <p className="empty">No campaigns yet. Create one above to get started.</p>
+      {projects.length === 0 ? (
+        <p className="empty">No projects yet. Create one above to get started.</p>
       ) : (
         <ul className="list">
-          {campaigns.map((c) => (
+          {projects.map((c) => (
             <li key={c.id}>
               {editingId === c.id ? (
                 <form
@@ -124,7 +124,7 @@ export function CampaignsScreen() {
                   onSubmit={(e) => {
                     e.preventDefault();
                     run(async () => {
-                      await renameCampaign(c.id, editName);
+                      await renameProject(c.id, editName);
                       setEditingId(null);
                     });
                   }}
@@ -143,17 +143,17 @@ export function CampaignsScreen() {
               ) : (
                 <div className="row wrap">
                   <span className="name">{c.name}</span>
-                  {current.campaign?.id === c.id ? (
+                  {current.project?.id === c.id ? (
                     <span className="badge">✓ Open</span>
                   ) : (
                     <button onClick={() => run(() => current.open(c.id))}>Open</button>
                   )}
                   <button onClick={() => startEditing(c)}>Rename</button>
-                  <button onClick={() => exportCampaign(c)}>Export</button>
+                  <button onClick={() => exportProject(c)}>Export</button>
                   <button
                     onClick={() =>
                       run(async () => {
-                        await deleteCampaign(c.id);
+                        await deleteProject(c.id);
                         setJustDeleted(c);
                       })
                     }

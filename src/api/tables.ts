@@ -6,7 +6,7 @@ export interface TableEntry {
   text: string;
   /** How many places the entry takes in the roll; 0 = never picked. */
   weight: number;
-  /** Campaign tags on the entry (ids). */
+  /** Project tags on the entry (ids). */
   tagIds: string[];
 }
 
@@ -19,7 +19,7 @@ export interface TableDetail {
   /** Skip the last N entries rolled from this table (0 = off). */
   avoidRecent: number;
   entries: TableEntry[];
-  /** Another live table in the campaign has this name (ignoring case). */
+  /** Another live table in the project has this name (ignoring case). */
   duplicateName: boolean;
   /** Slots that name this table find it (it is the oldest with that name). */
   foundBySlots: boolean;
@@ -39,7 +39,7 @@ export interface RollableTableData {
   id: string;
   name: string;
   avoidRecent: number;
-  /** Each entry carries its live campaign tags (ids). */
+  /** Each entry carries its live project tags (ids). */
   entries: { id: string; text: string; weight: number; tagIds: string[] }[];
   /** Entry ids recently rolled from this table, newest first. */
   recent: string[];
@@ -91,12 +91,12 @@ export const addTableEntryTag = (entryId: string, tagId: string) =>
 export const removeTableEntryTag = (entryId: string, tagId: string) =>
   invoke<void>("remove_table_entry_tag", { entryId, tagId });
 
-export const listTables = (campaignId: string) => invoke<TableSummary[]>("list_tables", { campaignId });
+export const listTables = (projectId: string) => invoke<TableSummary[]>("list_tables", { projectId });
 /** Every table with its entries and recent picks, oldest table first. */
-export const loadRollableTables = (campaignId: string) =>
-  invoke<RollableTableData[]>("load_rollable_tables", { campaignId });
-export const findEntriesMentioning = (campaignId: string, needle: string) =>
-  invoke<EntryRef[]>("find_entries_mentioning", { campaignId, needle });
+export const loadRollableTables = (projectId: string) =>
+  invoke<RollableTableData[]>("load_rollable_tables", { projectId });
+export const findEntriesMentioning = (projectId: string, needle: string) =>
+  invoke<EntryRef[]>("find_entries_mentioning", { projectId, needle });
 
 /** Remembers the entries a roll picked (oldest first), for "avoid recent". */
 export const recordTableRecent = (picks: PickedEntry[]) => invoke<void>("record_table_recent", { picks });

@@ -100,7 +100,7 @@ export function ItemBody({ item }: { item: Item }) {
       </ul>
       {picking ? (
         <LinkPicker
-          campaignId={item.campaignId}
+          projectId={item.projectId}
           excludeIds={new Set([item.id, ...outgoing.map((o) => o.id)])}
           onPick={(target) =>
             run(async () => {

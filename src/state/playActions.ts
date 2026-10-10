@@ -23,7 +23,7 @@ import { rollLog } from "./rollLog";
 
 /** Starts a deck in play with a copy of the cards a set, deck or pool holds right now. */
 export async function startPlayDeck(
-  source: { id: string; name: string; campaignId: string },
+  source: { id: string; name: string; projectId: string },
   name: string,
 ): Promise<Item> {
   const cards = (await resolveCollectionCards(source.id)).map((c) => ({ id: c.id, name: c.name }));
@@ -33,7 +33,7 @@ export async function startPlayDeck(
     { reversals: DEFAULT_DRAW_OPTIONS.reversals, reversalPercent: DEFAULT_DRAW_OPTIONS.reversalPercent },
     newSeed(),
   );
-  const item = await createPlayDeck(source.campaignId, name, null, source.id, source.name, serializePlayState(state));
+  const item = await createPlayDeck(source.projectId, name, null, source.id, source.name, serializePlayState(state));
   bumpDataVersion();
   return item;
 }

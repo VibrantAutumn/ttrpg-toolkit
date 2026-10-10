@@ -81,11 +81,11 @@ pub fn set_body_with_links(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{campaigns, open_in_memory, trash};
+    use crate::db::{projects, open_in_memory, trash};
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 

@@ -9,7 +9,7 @@ import {
 } from "../../api/fields";
 import { KIND_LABELS, type FieldDefinition } from "../../lib/fields/definition";
 import type { FieldSet } from "../../lib/fields/fieldSets";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useFieldCatalog } from "../../state/fieldCatalog";
 import { ConfirmButton } from "../ConfirmButton";
@@ -18,9 +18,9 @@ import { FieldSetForm } from "./FieldSetForm";
 
 /** Where fields and field sets are made and changed (Worldbuilding's Fields tab). */
 export function FieldsManager() {
-  const { campaign } = useCurrentCampaign();
-  const campaignId = campaign?.id ?? null;
-  const catalog = useFieldCatalog(campaignId);
+  const { project } = useCurrentProject();
+  const projectId = project?.id ?? null;
+  const catalog = useFieldCatalog(projectId);
   const dataVersion = useDataVersion();
   const [editingField, setEditingField] = useState<FieldDefinition | "new" | null>(null);
   const [editingSet, setEditingSet] = useState<FieldSet | "new" | null>(null);
@@ -29,9 +29,9 @@ export function FieldsManager() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!campaignId) return;
+    if (!projectId) return;
     let active = true;
-    Promise.all([listDeletedFieldDefinitions(campaignId), listDeletedFieldSets(campaignId)])
+    Promise.all([listDeletedFieldDefinitions(projectId), listDeletedFieldSets(projectId)])
       .then(([f, s]) => {
         if (!active) return;
         setDeletedFields(f);
@@ -41,7 +41,7 @@ export function FieldsManager() {
     return () => {
       active = false;
     };
-  }, [campaignId, dataVersion]);
+  }, [projectId, dataVersion]);
 
   async function run(action: () => Promise<unknown>) {
     try {
@@ -53,7 +53,7 @@ export function FieldsManager() {
     }
   }
 
-  if (!campaignId) return <p className="empty">Choose a campaign to make fields.</p>;
+  if (!projectId) return <p className="empty">Choose a project to make fields.</p>;
 
   const fieldName = (id: string) => catalog.definitions.find((d) => d.id === id)?.name;
 
@@ -70,7 +70,7 @@ export function FieldsManager() {
         {catalog.definitions.map((d) => (
           <li key={d.id}>
             {editingField && editingField !== "new" && editingField.id === d.id ? (
-              <FieldDefinitionForm campaignId={campaignId} initial={d} onDone={() => setEditingField(null)} onCancel={() => setEditingField(null)} />
+              <FieldDefinitionForm projectId={projectId} initial={d} onDone={() => setEditingField(null)} onCancel={() => setEditingField(null)} />
             ) : (
               <div className="row wrap">
                 <span className="grow">
@@ -87,7 +87,7 @@ export function FieldsManager() {
         ))}
       </ul>
       {editingField === "new" ? (
-        <FieldDefinitionForm campaignId={campaignId} initial={null} onDone={() => setEditingField(null)} onCancel={() => setEditingField(null)} />
+        <FieldDefinitionForm projectId={projectId} initial={null} onDone={() => setEditingField(null)} onCancel={() => setEditingField(null)} />
       ) : (
         <button type="button" onClick={() => setEditingField("new")}>
           New field
@@ -100,7 +100,7 @@ export function FieldsManager() {
         {catalog.sets.map((s) => (
           <li key={s.id}>
             {editingSet && editingSet !== "new" && editingSet.id === s.id ? (
-              <FieldSetForm campaignId={campaignId} initial={s} definitions={catalog.definitions} onDone={() => setEditingSet(null)} onCancel={() => setEditingSet(null)} />
+              <FieldSetForm projectId={projectId} initial={s} definitions={catalog.definitions} onDone={() => setEditingSet(null)} onCancel={() => setEditingSet(null)} />
             ) : (
               <div className="row wrap">
                 <span className="grow">
@@ -117,7 +117,7 @@ export function FieldsManager() {
         ))}
       </ul>
       {editingSet === "new" ? (
-        <FieldSetForm campaignId={campaignId} initial={null} definitions={catalog.definitions} onDone={() => setEditingSet(null)} onCancel={() => setEditingSet(null)} />
+        <FieldSetForm projectId={projectId} initial={null} definitions={catalog.definitions} onDone={() => setEditingSet(null)} onCancel={() => setEditingSet(null)} />
       ) : (
         <button type="button" onClick={() => setEditingSet("new")}>
           New field set

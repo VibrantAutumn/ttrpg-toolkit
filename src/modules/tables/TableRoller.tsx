@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { listTables, type TableSummary } from "../../api/tables";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { useDataVersion } from "../../state/dataVersion";
 import { rollTableById } from "../../state/tableActions";
 import { RollContextBar } from "./RollContextBar";
@@ -24,34 +24,34 @@ function remember(id: string) {
   }
 }
 
-/** Choose any table in the campaign and roll it; the result goes to the roll log. */
+/** Choose any table in the project and roll it; the result goes to the roll log. */
 export function TableRoller() {
-  const { campaign } = useCurrentCampaign();
+  const { project } = useCurrentProject();
   const dataVersion = useDataVersion();
-  const campaignId = campaign?.id ?? null;
+  const projectId = project?.id ?? null;
 
   const [tables, setTables] = useState<TableSummary[]>([]);
   const [chosen, setChosen] = useState(remembered);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!campaignId) {
+    if (!projectId) {
       setTables([]);
       return;
     }
     let active = true;
-    listTables(campaignId)
+    listTables(projectId)
       .then((list) => active && setTables(list))
       .catch((e) => active && setError(String(e)));
     return () => {
       active = false;
     };
-  }, [campaignId, dataVersion]);
+  }, [projectId, dataVersion]);
 
-  if (!campaignId) return <p className="empty">Choose a campaign to roll its tables.</p>;
+  if (!projectId) return <p className="empty">Choose a project to roll its tables.</p>;
   if (tables.length === 0) return <p className="empty">No tables yet. Make one in the Tables tool.</p>;
 
-  // The remembered table may be gone (deleted or in another campaign): fall back to the first.
+  // The remembered table may be gone (deleted or in another project): fall back to the first.
   const selected = tables.find((t) => t.itemId === chosen) ?? tables[0];
 
   async function roll() {

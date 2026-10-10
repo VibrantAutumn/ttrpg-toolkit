@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { describeCounts, packFileName } from "./packs";
 
 describe("packFileName", () => {
-  it("uses the campaign name with the pack extension", () => {
+  it("uses the project name with the pack extension", () => {
     expect(packFileName("Curse of Strahd")).toBe("Curse of Strahd.ttrpgpack");
   });
 
@@ -13,14 +13,14 @@ describe("packFileName", () => {
   });
 
   it("drops trailing dots and spaces (Windows rejects them)", () => {
-    expect(packFileName("Campaign...")).toBe("Campaign.ttrpgpack");
-    expect(packFileName("Campaign . ")).toBe("Campaign.ttrpgpack");
+    expect(packFileName("Project...")).toBe("Project.ttrpgpack");
+    expect(packFileName("Project . ")).toBe("Project.ttrpgpack");
   });
 
   it("falls back to a generic name when nothing usable is left", () => {
-    expect(packFileName("")).toBe("campaign.ttrpgpack");
-    expect(packFileName(' / : * ? " ')).toBe("campaign.ttrpgpack");
-    expect(packFileName("...")).toBe("campaign.ttrpgpack");
+    expect(packFileName("")).toBe("project.ttrpgpack");
+    expect(packFileName(' / : * ? " ')).toBe("project.ttrpgpack");
+    expect(packFileName("...")).toBe("project.ttrpgpack");
   });
 
   it("keeps non-English names and limits very long ones", () => {

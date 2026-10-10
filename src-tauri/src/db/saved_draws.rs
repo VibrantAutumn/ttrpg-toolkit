@@ -33,7 +33,7 @@ pub struct SavedDraw {
 
 /// What the caller supplies; the item itself is created here.
 pub struct NewSavedDraw<'a> {
-    pub campaign_id: &'a str,
+    pub project_id: &'a str,
     /// Item name; "<source> draw" is used if this is blank.
     pub name: &'a str,
     pub folder_id: Option<&'a str>,
@@ -74,7 +74,7 @@ pub fn create(conn: &Connection, new: NewSavedDraw, now: i64) -> Result<(Item, S
         "Saved draw".to_string()
     };
     let tx = conn.unchecked_transaction()?;
-    let item = items::create(&tx, new.campaign_id, LIBRARY, DRAW_TYPE, &name, new.folder_id, now)?;
+    let item = items::create(&tx, new.project_id, LIBRARY, DRAW_TYPE, &name, new.folder_id, now)?;
     tx.execute(
         "INSERT INTO saved_draws (item_id, source_name, seed, text, result_json, notes, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, '', ?6, ?6)",
@@ -141,20 +141,20 @@ pub fn set_notes(conn: &Connection, item_id: &str, notes: &str, now: i64) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{campaigns, folders, open_in_memory, search, tags, trash};
+    use crate::db::{projects, folders, open_in_memory, search, tags, trash};
 
     const JSON: &str = r#"{"sourceId":"s1","cards":[{"id":"c1","name":"The Fool","reversed":false}]}"#;
     const TEXT: &str = "Tarot → The Fool, Two of Cups (reversed)";
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
-    fn new<'a>(campaign: &'a str, name: &'a str) -> NewSavedDraw<'a> {
+    fn new<'a>(project: &'a str, name: &'a str) -> NewSavedDraw<'a> {
         NewSavedDraw {
-            campaign_id: campaign,
+            project_id: project,
             name,
             folder_id: None,
             source_name: "Tarot",
@@ -213,7 +213,7 @@ mod tests {
         let mut n = new(&camp, "x");
         n.result_json = &huge;
         assert!(matches!(create(&conn, n, 1), Err(DbError::Invalid(_))));
-        assert!(create(&conn, new("no-such-campaign", "x"), 1).is_err());
+        assert!(create(&conn, new("no-such-project", "x"), 1).is_err());
         let items: i64 = conn.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).unwrap();
         assert_eq!(items, 0, "a failed save must not leave a half-made item");
     }

@@ -76,13 +76,15 @@ pub struct Manifest {
     /// The database schema version of the app that made the pack (informational).
     pub schema_version: u32,
     pub created_at: i64,
-    pub campaign: CampaignInfo,
+    /// Stays "campaign" in the file: the pack format is versioned and never renamed.
+    #[serde(rename = "campaign")]
+    pub project: ProjectInfo,
     #[serde(default)]
     pub counts: Counts,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CampaignInfo {
+pub struct ProjectInfo {
     pub name: String,
 }
 

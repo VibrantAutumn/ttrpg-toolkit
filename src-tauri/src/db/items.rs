@@ -2,13 +2,13 @@
 //! other tool's content. Type-specific data lives in separate detail tables.
 
 use super::error::{clean_name, DbError};
-use super::{campaigns, folders};
+use super::{projects, folders};
 use rusqlite::{params, Connection, Row};
 use serde::Serialize;
 use uuid::Uuid;
 
 pub(super) const COLUMNS: &str =
-    "id, campaign_id, library, item_type, name, icon, folder_id, visibility, created_at, updated_at, deleted_at";
+    "id, project_id, library, item_type, name, icon, folder_id, visibility, created_at, updated_at, deleted_at";
 
 /// The item columns prefixed with a table alias (`i.id, i.name, ...`), for joins
 /// where bare names would be ambiguous.
@@ -24,7 +24,7 @@ pub(super) fn qualified_columns(alias: &str) -> String {
 #[serde(rename_all = "camelCase")]
 pub struct Item {
     pub id: String,
-    pub campaign_id: String,
+    pub project_id: String,
     pub library: String,
     pub item_type: String,
     pub name: String,
@@ -40,7 +40,7 @@ pub struct Item {
 pub(super) fn from_row(row: &Row) -> rusqlite::Result<Item> {
     Ok(Item {
         id: row.get("id")?,
-        campaign_id: row.get("campaign_id")?,
+        project_id: row.get("project_id")?,
         library: row.get("library")?,
         item_type: row.get("item_type")?,
         name: row.get("name")?,
@@ -66,7 +66,7 @@ pub fn get(conn: &Connection, id: &str) -> Result<Item, DbError> {
 }
 
 /// Random tables are found by name (in `[Table name]` slots), so two live tables
-/// in a campaign can't share a name, in any folder, ignoring case. Other kinds of
+/// in a project can't share a name, in any folder, ignoring case. Other kinds of
 /// item may share names freely.
 fn needs_unique_name(library: &str, item_type: &str) -> bool {
     library == "tables" && item_type == "table"
@@ -76,7 +76,7 @@ fn needs_unique_name(library: &str, item_type: &str) -> bool {
 /// kinds that need unique names. `except_id` is the item being renamed or restored.
 pub(super) fn check_name_free(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
     library: &str,
     item_type: &str,
     name: &str,
@@ -87,9 +87,9 @@ pub(super) fn check_name_free(
     }
     let taken: i64 = conn.query_row(
         "SELECT COUNT(*) FROM items
-         WHERE campaign_id = ?1 AND library = ?2 AND item_type = ?3 AND deleted_at IS NULL
+         WHERE project_id = ?1 AND library = ?2 AND item_type = ?3 AND deleted_at IS NULL
            AND name = ?4 COLLATE NOCASE AND (?5 IS NULL OR id <> ?5)",
-        params![campaign_id, library, item_type, name.trim(), except_id],
+        params![project_id, library, item_type, name.trim(), except_id],
         |r| r.get(0),
     )?;
     if taken > 0 {
@@ -100,7 +100,7 @@ pub(super) fn check_name_free(
 
 pub fn create(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
     library: &str,
     item_type: &str,
     name: &str,
@@ -111,16 +111,16 @@ pub fn create(
     if library.trim().is_empty() || item_type.trim().is_empty() {
         return Err(DbError::Invalid("An item needs a library and a type."));
     }
-    campaigns::require_live(conn, campaign_id)?;
-    check_name_free(conn, campaign_id, library, item_type, name, None)?;
+    projects::require_live(conn, project_id)?;
+    check_name_free(conn, project_id, library, item_type, name, None)?;
     if let Some(folder) = folder_id {
-        folders::require_live_in(conn, folder, campaign_id, library)?;
+        folders::require_live_in(conn, folder, project_id, library)?;
     }
     let id = Uuid::now_v7().to_string();
     conn.execute(
-        "INSERT INTO items (id, campaign_id, library, item_type, name, folder_id, created_at, updated_at)
+        "INSERT INTO items (id, project_id, library, item_type, name, folder_id, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
-        params![id, campaign_id, library, item_type, name, folder_id, now],
+        params![id, project_id, library, item_type, name, folder_id, now],
     )?;
     get(conn, &id)
 }
@@ -128,30 +128,30 @@ pub fn create(
 /// Live items directly inside `folder_id` (or at the top level when `None`).
 pub fn list(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
     library: &str,
     folder_id: Option<&str>,
 ) -> Result<Vec<Item>, DbError> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {COLUMNS} FROM items
-         WHERE campaign_id = ?1 AND library = ?2 AND folder_id IS ?3 AND deleted_at IS NULL
+         WHERE project_id = ?1 AND library = ?2 AND folder_id IS ?3 AND deleted_at IS NULL
            AND id NOT IN (SELECT child_id FROM item_tabs WHERE child_id IS NOT NULL)
          ORDER BY name COLLATE NOCASE, created_at"
     ))?;
-    let rows = stmt.query_map(params![campaign_id, library, folder_id], from_row)?;
+    let rows = stmt.query_map(params![project_id, library, folder_id], from_row)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
 /// Every live item of one type in a library, in any folder, alphabetical (for pickers such as
 /// "New from template").
-pub fn list_of_type(conn: &Connection, campaign_id: &str, library: &str, item_type: &str) -> Result<Vec<Item>, DbError> {
+pub fn list_of_type(conn: &Connection, project_id: &str, library: &str, item_type: &str) -> Result<Vec<Item>, DbError> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {COLUMNS} FROM items
-         WHERE campaign_id = ?1 AND library = ?2 AND item_type = ?3 AND deleted_at IS NULL
+         WHERE project_id = ?1 AND library = ?2 AND item_type = ?3 AND deleted_at IS NULL
            AND id NOT IN (SELECT child_id FROM item_tabs WHERE child_id IS NOT NULL)
          ORDER BY name COLLATE NOCASE, created_at"
     ))?;
-    let rows = stmt.query_map(params![campaign_id, library, item_type], from_row)?;
+    let rows = stmt.query_map(params![project_id, library, item_type], from_row)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
@@ -159,7 +159,7 @@ pub fn rename(conn: &Connection, id: &str, name: &str, now: i64) -> Result<Item,
     let name = clean_name(name)?;
     let current = get(conn, id)?;
     if current.deleted_at.is_none() {
-        check_name_free(conn, &current.campaign_id, &current.library, &current.item_type, name, Some(id))?;
+        check_name_free(conn, &current.project_id, &current.library, &current.item_type, name, Some(id))?;
     }
     let changed = conn.execute(
         "UPDATE items SET name = ?2, updated_at = ?3 WHERE id = ?1 AND deleted_at IS NULL",
@@ -183,7 +183,7 @@ pub fn move_to(
         return Err(DbError::NotFound);
     }
     if let Some(folder) = folder_id {
-        folders::require_live_in(conn, folder, &item.campaign_id, &item.library)?;
+        folders::require_live_in(conn, folder, &item.project_id, &item.library)?;
     }
     conn.execute(
         "UPDATE items SET folder_id = ?2, updated_at = ?3 WHERE id = ?1",
@@ -209,10 +209,10 @@ mod tests {
     use super::*;
     use crate::db::open_in_memory;
 
-    /// A database with one campaign; returns (connection, campaign id).
+    /// A database with one project; returns (connection, project id).
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 

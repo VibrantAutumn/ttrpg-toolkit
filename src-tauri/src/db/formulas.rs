@@ -48,7 +48,7 @@ pub fn validate(notation: &str) -> Result<(), DbError> {
 /// A blank name falls back to the notation.
 pub fn create(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
     name: &str,
     folder_id: Option<&str>,
     notation: &str,
@@ -58,7 +58,7 @@ pub fn create(
     validate(notation)?;
     let name = if name.trim().is_empty() { notation } else { name };
     let tx = conn.unchecked_transaction()?;
-    let item = items::create(&tx, campaign_id, LIBRARY, FORMULA_TYPE, name, folder_id, now)?;
+    let item = items::create(&tx, project_id, LIBRARY, FORMULA_TYPE, name, folder_id, now)?;
     tx.execute(
         "INSERT INTO formulas (item_id, notation, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
         params![item.id, notation, now],
@@ -114,15 +114,15 @@ pub fn set_notation(conn: &Connection, item_id: &str, notation: &str, now: i64) 
     Ok(())
 }
 
-/// Every live formula in a campaign (any folder), alphabetical.
-pub fn list(conn: &Connection, campaign_id: &str) -> Result<Vec<FormulaEntry>, DbError> {
+/// Every live formula in a project (any folder), alphabetical.
+pub fn list(conn: &Connection, project_id: &str) -> Result<Vec<FormulaEntry>, DbError> {
     let mut stmt = conn.prepare(
         "SELECT i.id, i.name, f.notation, i.folder_id
          FROM formulas f JOIN items i ON i.id = f.item_id
-         WHERE i.campaign_id = ?1 AND i.deleted_at IS NULL
+         WHERE i.project_id = ?1 AND i.deleted_at IS NULL
          ORDER BY i.name COLLATE NOCASE, i.created_at",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(FormulaEntry {
             item_id: r.get(0)?,
             name: r.get(1)?,
@@ -136,11 +136,11 @@ pub fn list(conn: &Connection, campaign_id: &str) -> Result<Vec<FormulaEntry>, D
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{campaigns, folders, open_in_memory, search, trash};
+    use crate::db::{projects, folders, open_in_memory, search, trash};
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -176,7 +176,7 @@ mod tests {
         let long = "1".repeat(MAX_NOTATION_CHARS + 1);
         assert!(matches!(create(&conn, &camp, "x", None, &long, 1), Err(DbError::Invalid(_))));
         create(&conn, &camp, "ok", None, &"1".repeat(MAX_NOTATION_CHARS), 1).unwrap();
-        assert!(create(&conn, "no-such-campaign", "x", None, "1d6", 1).is_err());
+        assert!(create(&conn, "no-such-project", "x", None, "1d6", 1).is_err());
         let items: i64 = conn.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).unwrap();
         assert_eq!(items, 1, "only the one good formula exists");
     }
@@ -217,8 +217,8 @@ mod tests {
         create(&conn, &camp, "Attack", None, "1d20+5", 3).unwrap();
         let gone = create(&conn, &camp, "Gone", None, "1d4", 4).unwrap();
         items::soft_delete(&conn, &gone.id, 5).unwrap();
-        // Another campaign's formulas and other kinds of items stay out.
-        let other = campaigns::create(&conn, "Other", 6).unwrap();
+        // Another project's formulas and other kinds of items stay out.
+        let other = projects::create(&conn, "Other", 6).unwrap();
         create(&conn, &other.id, "Elsewhere", None, "1d6", 7).unwrap();
         items::create(&conn, &camp, "dice", "saved_roll", "Not a formula", None, 8).unwrap();
 

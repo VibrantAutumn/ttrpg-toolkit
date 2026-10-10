@@ -1,48 +1,48 @@
-//! Export one campaign to a pack (a zip held in memory).
+//! Export one project to a pack (a zip held in memory).
 //!
 //! A backup should be complete, so trashed folders, items and tags are included
 //! (with their `deleted_at`) and come back as trash when imported.
 
 use super::format::*;
 use super::PackError;
-use crate::db::{campaigns, migrations};
+use crate::db::{projects, migrations};
 use rusqlite::{params, Connection};
 use serde::Serialize;
 use std::io::{Cursor, Write};
 use uuid::Uuid;
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 
-/// Builds the pack for a live campaign and returns the zip file's bytes.
-pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result<Vec<u8>, PackError> {
-    let campaign = campaigns::get_live(conn, campaign_id)?;
+/// Builds the pack for a live project and returns the zip file's bytes.
+pub fn export_project(conn: &Connection, project_id: &str, now: i64) -> Result<Vec<u8>, PackError> {
+    let project = projects::get_live(conn, project_id)?;
 
-    let folders = read_folders(conn, campaign_id)?;
-    let items = read_items(conn, campaign_id)?;
-    let tags = read_tags(conn, campaign_id)?;
-    let item_tags = read_item_tags(conn, campaign_id)?;
-    let links = read_links(conn, campaign_id)?;
-    let documents = read_documents(conn, campaign_id)?;
-    let saved_rolls = read_saved_rolls(conn, campaign_id)?;
-    let formulas = read_formulas(conn, campaign_id)?;
-    let card_details = read_card_details(conn, campaign_id)?;
-    let collection_members = read_collection_members(conn, campaign_id)?;
-    let card_images = read_card_images(conn, campaign_id)?;
-    let saved_draws = read_saved_draws(conn, campaign_id)?;
-    let play_decks = read_play_decks(conn, campaign_id)?;
-    let spreads = read_spreads(conn, campaign_id)?;
-    let spread_positions = read_spread_positions(conn, campaign_id)?;
-    let random_tables = read_random_tables(conn, campaign_id)?;
-    let table_entries = read_table_entries(conn, campaign_id)?;
-    let table_entry_tags = read_table_entry_tags(conn, campaign_id)?;
-    let name_presets = read_name_presets(conn, campaign_id)?;
-    let field_definitions = read_field_definitions(conn, campaign_id)?;
-    let field_sets = read_field_sets(conn, campaign_id)?;
-    let field_set_members = read_field_set_members(conn, campaign_id)?;
-    let item_field_sets = read_item_field_sets(conn, campaign_id)?;
-    let field_values = read_field_values(conn, campaign_id)?;
-    let item_tabs = read_item_tabs(conn, campaign_id)?;
-    let smart_collections = read_smart_collections(conn, campaign_id)?;
-    let generators = read_generators(conn, campaign_id)?;
+    let folders = read_folders(conn, project_id)?;
+    let items = read_items(conn, project_id)?;
+    let tags = read_tags(conn, project_id)?;
+    let item_tags = read_item_tags(conn, project_id)?;
+    let links = read_links(conn, project_id)?;
+    let documents = read_documents(conn, project_id)?;
+    let saved_rolls = read_saved_rolls(conn, project_id)?;
+    let formulas = read_formulas(conn, project_id)?;
+    let card_details = read_card_details(conn, project_id)?;
+    let collection_members = read_collection_members(conn, project_id)?;
+    let card_images = read_card_images(conn, project_id)?;
+    let saved_draws = read_saved_draws(conn, project_id)?;
+    let play_decks = read_play_decks(conn, project_id)?;
+    let spreads = read_spreads(conn, project_id)?;
+    let spread_positions = read_spread_positions(conn, project_id)?;
+    let random_tables = read_random_tables(conn, project_id)?;
+    let table_entries = read_table_entries(conn, project_id)?;
+    let table_entry_tags = read_table_entry_tags(conn, project_id)?;
+    let name_presets = read_name_presets(conn, project_id)?;
+    let field_definitions = read_field_definitions(conn, project_id)?;
+    let field_sets = read_field_sets(conn, project_id)?;
+    let field_set_members = read_field_set_members(conn, project_id)?;
+    let item_field_sets = read_item_field_sets(conn, project_id)?;
+    let field_values = read_field_values(conn, project_id)?;
+    let item_tabs = read_item_tabs(conn, project_id)?;
+    let smart_collections = read_smart_collections(conn, project_id)?;
+    let generators = read_generators(conn, project_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -51,7 +51,7 @@ pub fn export_campaign(conn: &Connection, campaign_id: &str, now: i64) -> Result
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         schema_version: migrations::current_version(conn)?,
         created_at: now,
-        campaign: CampaignInfo { name: campaign.name },
+        project: ProjectInfo { name: project.name },
         counts: Counts {
             folders: folders.len() as u32,
             items: items.len() as u32,
@@ -143,12 +143,12 @@ fn put<T: Serialize>(
         .map_err(|e| PackError::Failed(e.to_string()))
 }
 
-fn read_folders(conn: &Connection, campaign_id: &str) -> Result<Vec<FolderRecord>, PackError> {
+fn read_folders(conn: &Connection, project_id: &str) -> Result<Vec<FolderRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT id, library, parent_id, name, created_at, updated_at, deleted_at
-         FROM folders WHERE campaign_id = ?1 ORDER BY created_at, id",
+         FROM folders WHERE project_id = ?1 ORDER BY created_at, id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(FolderRecord {
             id: r.get(0)?,
             library: r.get(1)?,
@@ -162,12 +162,12 @@ fn read_folders(conn: &Connection, campaign_id: &str) -> Result<Vec<FolderRecord
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_items(conn: &Connection, campaign_id: &str) -> Result<Vec<ItemRecord>, PackError> {
+fn read_items(conn: &Connection, project_id: &str) -> Result<Vec<ItemRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT id, library, item_type, name, icon, folder_id, visibility, created_at, updated_at, deleted_at
-         FROM items WHERE campaign_id = ?1 ORDER BY created_at, id",
+         FROM items WHERE project_id = ?1 ORDER BY created_at, id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(ItemRecord {
             id: r.get(0)?,
             library: r.get(1)?,
@@ -184,12 +184,12 @@ fn read_items(conn: &Connection, campaign_id: &str) -> Result<Vec<ItemRecord>, P
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_tags(conn: &Connection, campaign_id: &str) -> Result<Vec<TagRecord>, PackError> {
+fn read_tags(conn: &Connection, project_id: &str) -> Result<Vec<TagRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT id, parent_id, name, color, created_at, updated_at, deleted_at
-         FROM tags WHERE campaign_id = ?1 ORDER BY created_at, id",
+         FROM tags WHERE project_id = ?1 ORDER BY created_at, id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(TagRecord {
             id: r.get(0)?,
             parent_id: r.get(1)?,
@@ -203,13 +203,13 @@ fn read_tags(conn: &Connection, campaign_id: &str) -> Result<Vec<TagRecord>, Pac
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_item_tags(conn: &Connection, campaign_id: &str) -> Result<Vec<ItemTagRecord>, PackError> {
+fn read_item_tags(conn: &Connection, project_id: &str) -> Result<Vec<ItemTagRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT it.item_id, it.tag_id, it.created_at, it.updated_at, it.deleted_at
          FROM item_tags it JOIN items i ON i.id = it.item_id
-         WHERE i.campaign_id = ?1 ORDER BY it.created_at, it.item_id, it.tag_id",
+         WHERE i.project_id = ?1 ORDER BY it.created_at, it.item_id, it.tag_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(ItemTagRecord {
             item_id: r.get(0)?,
             tag_id: r.get(1)?,
@@ -221,14 +221,14 @@ fn read_item_tags(conn: &Connection, campaign_id: &str) -> Result<Vec<ItemTagRec
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_links(conn: &Connection, campaign_id: &str) -> Result<Vec<LinkRecord>, PackError> {
+fn read_links(conn: &Connection, project_id: &str) -> Result<Vec<LinkRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT l.source_item_id, l.target_item_id, l.source_ref, l.created_at, l.updated_at, l.deleted_at
          FROM links l JOIN items s ON s.id = l.source_item_id
-         WHERE s.campaign_id = ?1
+         WHERE s.project_id = ?1
          ORDER BY l.created_at, l.source_item_id, l.target_item_id, l.source_ref",
     )?;
-    let rows = stmt.query_map(params![campaign_id], |r| {
+    let rows = stmt.query_map(params![project_id], |r| {
         Ok(LinkRecord {
             source_item_id: r.get(0)?,
             target_item_id: r.get(1)?,
@@ -241,13 +241,13 @@ fn read_links(conn: &Connection, campaign_id: &str) -> Result<Vec<LinkRecord>, P
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_documents(conn: &Connection, campaign_id: &str) -> Result<Vec<DocumentRecord>, PackError> {
+fn read_documents(conn: &Connection, project_id: &str) -> Result<Vec<DocumentRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT d.item_id, d.body, d.created_at, d.updated_at
          FROM document_content d JOIN items i ON i.id = d.item_id
-         WHERE i.campaign_id = ?1 ORDER BY d.created_at, d.item_id",
+         WHERE i.project_id = ?1 ORDER BY d.created_at, d.item_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(DocumentRecord {
             item_id: r.get(0)?,
             body: r.get(1)?,
@@ -258,13 +258,13 @@ fn read_documents(conn: &Connection, campaign_id: &str) -> Result<Vec<DocumentRe
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_saved_rolls(conn: &Connection, campaign_id: &str) -> Result<Vec<SavedRollRecord>, PackError> {
+fn read_saved_rolls(conn: &Connection, project_id: &str) -> Result<Vec<SavedRollRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT s.item_id, s.notation, s.seed, s.text, s.result_json, s.created_at, s.updated_at
          FROM saved_rolls s JOIN items i ON i.id = s.item_id
-         WHERE i.campaign_id = ?1 ORDER BY s.created_at, s.item_id",
+         WHERE i.project_id = ?1 ORDER BY s.created_at, s.item_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(SavedRollRecord {
             item_id: r.get(0)?,
             notation: r.get(1)?,
@@ -278,13 +278,13 @@ fn read_saved_rolls(conn: &Connection, campaign_id: &str) -> Result<Vec<SavedRol
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_formulas(conn: &Connection, campaign_id: &str) -> Result<Vec<FormulaRecord>, PackError> {
+fn read_formulas(conn: &Connection, project_id: &str) -> Result<Vec<FormulaRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT f.item_id, f.notation, f.created_at, f.updated_at
          FROM formulas f JOIN items i ON i.id = f.item_id
-         WHERE i.campaign_id = ?1 ORDER BY f.created_at, f.item_id",
+         WHERE i.project_id = ?1 ORDER BY f.created_at, f.item_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(FormulaRecord {
             item_id: r.get(0)?,
             notation: r.get(1)?,
@@ -306,13 +306,13 @@ fn put_bytes(
     zip.write_all(bytes).map_err(|e| PackError::Failed(e.to_string()))
 }
 
-fn read_card_details(conn: &Connection, campaign_id: &str) -> Result<Vec<CardDetailRecord>, PackError> {
+fn read_card_details(conn: &Connection, project_id: &str) -> Result<Vec<CardDetailRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT d.item_id, d.value, d.notes, d.created_at, d.updated_at
          FROM card_details d JOIN items i ON i.id = d.item_id
-         WHERE i.campaign_id = ?1 ORDER BY d.created_at, d.item_id",
+         WHERE i.project_id = ?1 ORDER BY d.created_at, d.item_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(CardDetailRecord {
             item_id: r.get(0)?,
             value: r.get(1)?,
@@ -326,15 +326,15 @@ fn read_card_details(conn: &Connection, campaign_id: &str) -> Result<Vec<CardDet
 
 fn read_collection_members(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
 ) -> Result<Vec<CollectionMemberRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT m.collection_id, m.member_id, m.position, m.created_at, m.updated_at, m.deleted_at
          FROM collection_members m JOIN items c ON c.id = m.collection_id
-         WHERE c.campaign_id = ?1
+         WHERE c.project_id = ?1
          ORDER BY m.collection_id, m.position, m.member_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(CollectionMemberRecord {
             collection_id: r.get(0)?,
             member_id: r.get(1)?,
@@ -358,14 +358,14 @@ fn extension_for(mime: &str) -> &'static str {
 /// Each card picture with the record that names its two files in the zip.
 fn read_card_images(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
 ) -> Result<Vec<(CardImageRecord, Vec<u8>, Vec<u8>)>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT c.item_id, c.mime, c.image, c.thumb, c.created_at, c.updated_at
          FROM card_images c JOIN items i ON i.id = c.item_id
-         WHERE i.campaign_id = ?1 ORDER BY c.created_at, c.item_id",
+         WHERE i.project_id = ?1 ORDER BY c.created_at, c.item_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         let item_id: String = r.get(0)?;
         let mime: String = r.get(1)?;
         let ext = extension_for(&mime);
@@ -382,13 +382,13 @@ fn read_card_images(
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_saved_draws(conn: &Connection, campaign_id: &str) -> Result<Vec<SavedDrawRecord>, PackError> {
+fn read_saved_draws(conn: &Connection, project_id: &str) -> Result<Vec<SavedDrawRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT s.item_id, s.source_name, s.seed, s.text, s.result_json, s.notes, s.created_at, s.updated_at
          FROM saved_draws s JOIN items i ON i.id = s.item_id
-         WHERE i.campaign_id = ?1 ORDER BY s.created_at, s.item_id",
+         WHERE i.project_id = ?1 ORDER BY s.created_at, s.item_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(SavedDrawRecord {
             item_id: r.get(0)?,
             source_name: r.get(1)?,
@@ -403,13 +403,13 @@ fn read_saved_draws(conn: &Connection, campaign_id: &str) -> Result<Vec<SavedDra
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_play_decks(conn: &Connection, campaign_id: &str) -> Result<Vec<PlayDeckRecord>, PackError> {
+fn read_play_decks(conn: &Connection, project_id: &str) -> Result<Vec<PlayDeckRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT p.item_id, p.source_id, p.source_name, p.state_json, p.created_at, p.updated_at
          FROM play_decks p JOIN items i ON i.id = p.item_id
-         WHERE i.campaign_id = ?1 ORDER BY p.created_at, p.item_id",
+         WHERE i.project_id = ?1 ORDER BY p.created_at, p.item_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(PlayDeckRecord {
             item_id: r.get(0)?,
             source_id: r.get(1)?,
@@ -422,13 +422,13 @@ fn read_play_decks(conn: &Connection, campaign_id: &str) -> Result<Vec<PlayDeckR
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_spreads(conn: &Connection, campaign_id: &str) -> Result<Vec<SpreadRecord>, PackError> {
+fn read_spreads(conn: &Connection, project_id: &str) -> Result<Vec<SpreadRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT s.item_id, s.notes, s.reversals, s.reversal_percent, s.created_at, s.updated_at
          FROM spreads s JOIN items i ON i.id = s.item_id
-         WHERE i.campaign_id = ?1 ORDER BY s.created_at, s.item_id",
+         WHERE i.project_id = ?1 ORDER BY s.created_at, s.item_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(SpreadRecord {
             item_id: r.get(0)?,
             notes: r.get(1)?,
@@ -441,13 +441,13 @@ fn read_spreads(conn: &Connection, campaign_id: &str) -> Result<Vec<SpreadRecord
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_spread_positions(conn: &Connection, campaign_id: &str) -> Result<Vec<SpreadPositionRecord>, PackError> {
+fn read_spread_positions(conn: &Connection, project_id: &str) -> Result<Vec<SpreadPositionRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT p.spread_id, p.position, p.name, p.source_id, p.meaning
          FROM spread_positions p JOIN items i ON i.id = p.spread_id
-         WHERE i.campaign_id = ?1 ORDER BY p.spread_id, p.position",
+         WHERE i.project_id = ?1 ORDER BY p.spread_id, p.position",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(SpreadPositionRecord {
             spread_id: r.get(0)?,
             position: r.get(1)?,
@@ -459,13 +459,13 @@ fn read_spread_positions(conn: &Connection, campaign_id: &str) -> Result<Vec<Spr
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_random_tables(conn: &Connection, campaign_id: &str) -> Result<Vec<RandomTableRecord>, PackError> {
+fn read_random_tables(conn: &Connection, project_id: &str) -> Result<Vec<RandomTableRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT t.item_id, t.notes, t.die_size, t.avoid_recent, t.created_at, t.updated_at
          FROM random_tables t JOIN items i ON i.id = t.item_id
-         WHERE i.campaign_id = ?1 ORDER BY t.created_at, t.item_id",
+         WHERE i.project_id = ?1 ORDER BY t.created_at, t.item_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(RandomTableRecord {
             item_id: r.get(0)?,
             notes: r.get(1)?,
@@ -479,13 +479,13 @@ fn read_random_tables(conn: &Connection, campaign_id: &str) -> Result<Vec<Random
 }
 
 /// Every entry, including deleted ones. (What was recently rolled is per-device memory and is not exported.)
-fn read_table_entries(conn: &Connection, campaign_id: &str) -> Result<Vec<TableEntryRecord>, PackError> {
+fn read_table_entries(conn: &Connection, project_id: &str) -> Result<Vec<TableEntryRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT e.id, e.table_id, e.position, e.text, e.weight, e.created_at, e.updated_at, e.deleted_at
          FROM table_entries e JOIN items i ON i.id = e.table_id
-         WHERE i.campaign_id = ?1 ORDER BY e.table_id, e.position, e.created_at, e.id",
+         WHERE i.project_id = ?1 ORDER BY e.table_id, e.position, e.created_at, e.id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(TableEntryRecord {
             id: r.get(0)?,
             table_id: r.get(1)?,
@@ -500,15 +500,15 @@ fn read_table_entries(conn: &Connection, campaign_id: &str) -> Result<Vec<TableE
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_table_entry_tags(conn: &Connection, campaign_id: &str) -> Result<Vec<TableEntryTagRecord>, PackError> {
+fn read_table_entry_tags(conn: &Connection, project_id: &str) -> Result<Vec<TableEntryTagRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT l.entry_id, l.tag_id, l.created_at, l.updated_at, l.deleted_at
          FROM table_entry_tags l
          JOIN table_entries e ON e.id = l.entry_id
          JOIN items i ON i.id = e.table_id
-         WHERE i.campaign_id = ?1 ORDER BY l.entry_id, l.tag_id",
+         WHERE i.project_id = ?1 ORDER BY l.entry_id, l.tag_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(TableEntryTagRecord {
             entry_id: r.get(0)?,
             tag_id: r.get(1)?,
@@ -520,13 +520,13 @@ fn read_table_entry_tags(conn: &Connection, campaign_id: &str) -> Result<Vec<Tab
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_item_tabs(conn: &Connection, campaign_id: &str) -> Result<Vec<ItemTabRecord>, PackError> {
+fn read_item_tabs(conn: &Connection, project_id: &str) -> Result<Vec<ItemTabRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT t.id, t.parent_id, t.kind, t.position, t.child_id, t.target_id, t.title, t.created_at, t.updated_at, t.deleted_at
          FROM item_tabs t JOIN items i ON i.id = t.parent_id
-         WHERE i.campaign_id = ?1 ORDER BY t.parent_id, t.position, t.id",
+         WHERE i.project_id = ?1 ORDER BY t.parent_id, t.position, t.id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(ItemTabRecord {
             id: r.get(0)?,
             parent_id: r.get(1)?,
@@ -543,12 +543,12 @@ fn read_item_tabs(conn: &Connection, campaign_id: &str) -> Result<Vec<ItemTabRec
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_field_definitions(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldDefinitionRecord>, PackError> {
+fn read_field_definitions(conn: &Connection, project_id: &str) -> Result<Vec<FieldDefinitionRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT id, name, kind, description, config_json, created_at, updated_at, deleted_at
-         FROM field_definitions WHERE campaign_id = ?1 ORDER BY created_at, id",
+         FROM field_definitions WHERE project_id = ?1 ORDER BY created_at, id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(FieldDefinitionRecord {
             id: r.get(0)?,
             name: r.get(1)?,
@@ -563,12 +563,12 @@ fn read_field_definitions(conn: &Connection, campaign_id: &str) -> Result<Vec<Fi
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_field_sets(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldSetRecord>, PackError> {
+fn read_field_sets(conn: &Connection, project_id: &str) -> Result<Vec<FieldSetRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT id, name, description, created_at, updated_at, deleted_at
-         FROM field_sets WHERE campaign_id = ?1 ORDER BY created_at, id",
+         FROM field_sets WHERE project_id = ?1 ORDER BY created_at, id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(FieldSetRecord {
             id: r.get(0)?,
             name: r.get(1)?,
@@ -581,13 +581,13 @@ fn read_field_sets(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldSetR
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_field_set_members(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldSetMemberRecord>, PackError> {
+fn read_field_set_members(conn: &Connection, project_id: &str) -> Result<Vec<FieldSetMemberRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT m.set_id, m.field_id, m.position, m.created_at, m.updated_at, m.deleted_at
          FROM field_set_members m JOIN field_sets s ON s.id = m.set_id
-         WHERE s.campaign_id = ?1 ORDER BY m.set_id, m.position, m.field_id",
+         WHERE s.project_id = ?1 ORDER BY m.set_id, m.position, m.field_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(FieldSetMemberRecord {
             set_id: r.get(0)?,
             field_id: r.get(1)?,
@@ -600,13 +600,13 @@ fn read_field_set_members(conn: &Connection, campaign_id: &str) -> Result<Vec<Fi
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_item_field_sets(conn: &Connection, campaign_id: &str) -> Result<Vec<ItemFieldSetRecord>, PackError> {
+fn read_item_field_sets(conn: &Connection, project_id: &str) -> Result<Vec<ItemFieldSetRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT a.item_id, a.set_id, a.position, a.created_at, a.updated_at, a.deleted_at
          FROM item_field_sets a JOIN items i ON i.id = a.item_id
-         WHERE i.campaign_id = ?1 ORDER BY a.item_id, a.position, a.set_id",
+         WHERE i.project_id = ?1 ORDER BY a.item_id, a.position, a.set_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(ItemFieldSetRecord {
             item_id: r.get(0)?,
             set_id: r.get(1)?,
@@ -619,14 +619,14 @@ fn read_item_field_sets(conn: &Connection, campaign_id: &str) -> Result<Vec<Item
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_field_values(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldValueRecord>, PackError> {
+fn read_field_values(conn: &Connection, project_id: &str) -> Result<Vec<FieldValueRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT v.item_id, v.field_id, v.value_json, v.sort_num, v.sort_text, v.search_text, v.secret,
                 v.created_at, v.updated_at, v.deleted_at
          FROM field_values v JOIN items i ON i.id = v.item_id
-         WHERE i.campaign_id = ?1 ORDER BY v.item_id, v.field_id",
+         WHERE i.project_id = ?1 ORDER BY v.item_id, v.field_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(FieldValueRecord {
             item_id: r.get(0)?,
             field_id: r.get(1)?,
@@ -643,37 +643,37 @@ fn read_field_values(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldVa
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_generators(conn: &Connection, campaign_id: &str) -> Result<Vec<GeneratorRecord>, PackError> {
+fn read_generators(conn: &Connection, project_id: &str) -> Result<Vec<GeneratorRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT g.item_id, g.definition_json, g.created_at, g.updated_at
          FROM generators g JOIN items i ON i.id = g.item_id
-         WHERE i.campaign_id = ?1 ORDER BY g.created_at, g.item_id",
+         WHERE i.project_id = ?1 ORDER BY g.created_at, g.item_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(GeneratorRecord { item_id: r.get(0)?, definition_json: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)? })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_smart_collections(conn: &Connection, campaign_id: &str) -> Result<Vec<SmartCollectionRecord>, PackError> {
+fn read_smart_collections(conn: &Connection, project_id: &str) -> Result<Vec<SmartCollectionRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT s.item_id, s.query_json, s.created_at, s.updated_at
          FROM smart_collections s JOIN items i ON i.id = s.item_id
-         WHERE i.campaign_id = ?1 ORDER BY s.created_at, s.item_id",
+         WHERE i.project_id = ?1 ORDER BY s.created_at, s.item_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(SmartCollectionRecord { item_id: r.get(0)?, query_json: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)? })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn read_name_presets(conn: &Connection, campaign_id: &str) -> Result<Vec<NamePresetRecord>, PackError> {
+fn read_name_presets(conn: &Connection, project_id: &str) -> Result<Vec<NamePresetRecord>, PackError> {
     let mut stmt = conn.prepare(
         "SELECT p.item_id, p.setup_json, p.created_at, p.updated_at
          FROM name_presets p JOIN items i ON i.id = p.item_id
-         WHERE i.campaign_id = ?1 ORDER BY p.created_at, p.item_id",
+         WHERE i.project_id = ?1 ORDER BY p.created_at, p.item_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(NamePresetRecord { item_id: r.get(0)?, setup_json: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)? })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)

@@ -129,6 +129,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "create_generators",
         sql: include_str!("../../migrations/0023_create_generators.sql"),
     },
+    Migration {
+        version: 24,
+        name: "rename_campaigns_to_projects",
+        sql: include_str!("../../migrations/0024_rename_campaigns_to_projects.sql"),
+    },
 ];
 
 #[derive(Debug)]
@@ -209,7 +214,37 @@ mod tests {
         let version = migrate(&mut conn, MIGRATIONS).unwrap();
         assert_eq!(version, MIGRATIONS.last().unwrap().version);
         assert_eq!(current_version(&conn).unwrap(), version);
-        assert!(table_exists(&conn, "campaigns"));
+        assert!(table_exists(&conn, "projects"));
+    }
+
+    #[test]
+    fn a_database_with_campaigns_becomes_one_with_projects() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", true).unwrap();
+        migrate(&mut conn, &MIGRATIONS[..23]).unwrap();
+        let exec = |sql: &str| conn.execute(sql, []).unwrap();
+        exec("INSERT INTO campaigns (id, name, created_at, updated_at) VALUES ('c', 'Strahd', 1, 1)");
+        exec("INSERT INTO folders (id, campaign_id, library, name, created_at, updated_at) VALUES ('f', 'c', 'w', 'NPCs', 1, 1)");
+        exec("INSERT INTO items (id, campaign_id, library, item_type, name, created_at, updated_at) VALUES ('i', 'c', 'w', 'document', 'Ireena', 1, 1)");
+        exec("INSERT INTO tags (id, campaign_id, name, created_at, updated_at) VALUES ('t', 'c', 'Human', 1, 1)");
+        exec("INSERT INTO field_definitions (id, campaign_id, name, kind, created_at, updated_at) VALUES ('d', 'c', 'Race', 'text', 1, 1)");
+        exec("INSERT INTO field_sets (id, campaign_id, name, created_at, updated_at) VALUES ('s', 'c', 'NPC', 1, 1)");
+        exec("INSERT INTO app_settings (key, value, updated_at) VALUES ('current_campaign_id', 'c', 1)");
+
+        assert_eq!(migrate(&mut conn, MIGRATIONS).unwrap(), MIGRATIONS.last().unwrap().version);
+
+        assert!(!table_exists(&conn, "campaigns"));
+        let text = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, String>(0)).unwrap();
+        assert_eq!(text("SELECT name FROM projects WHERE id = 'c'"), "Strahd");
+        for table in ["folders", "items", "tags", "field_definitions", "field_sets"] {
+            assert_eq!(text(&format!("SELECT project_id FROM {table}")), "c", "{table}");
+        }
+        assert_eq!(text("SELECT value FROM app_settings WHERE key = 'current_project_id'"), "c");
+        // The open project is still found, and the foreign keys point at the renamed table.
+        assert_eq!(crate::db::settings::current_project(&conn).unwrap().unwrap().name, "Strahd");
+        assert!(conn.execute("INSERT INTO items (id, project_id, library, item_type, name, created_at, updated_at) VALUES ('x', 'nope', 'w', 'document', 'X', 1, 1)", []).is_err());
+        let problems: i64 = conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| r.get(0)).unwrap();
+        assert_eq!(problems, 0);
     }
 
     #[test]

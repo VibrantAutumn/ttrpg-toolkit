@@ -9,7 +9,7 @@ import { useNavigation } from "../../state/Navigation";
 export function PlayStarter({
   source,
 }: {
-  source: { id: string; name: string; campaignId: string };
+  source: { id: string; name: string; projectId: string };
 }) {
   const { openItem } = useNavigation();
   const [name, setName] = useState("");

@@ -25,7 +25,7 @@ import type { QueryCatalog } from "./useQueryCatalog";
 const formatDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 
 /** What a smart collection finds, as a table: the name, then the columns chosen (kind, dates, any field). Read-only. */
-export function FieldTable({ campaignId, query, catalog, onChange }: { campaignId: string; query: Query; catalog: QueryCatalog; onChange: (q: Query) => void }) {
+export function FieldTable({ projectId, query, catalog, onChange }: { projectId: string; query: Query; catalog: QueryCatalog; onChange: (q: Query) => void }) {
   const { openItem } = useNavigation();
   const dataVersion = useDataVersion();
   const columns = useMemo(() => query.view?.columns ?? [], [query.view]);
@@ -44,7 +44,7 @@ export function FieldTable({ campaignId, query, catalog, onChange }: { campaignI
     let cancelled = false;
     const timer = setTimeout(() => {
       (async () => {
-        const found = await runQuery(campaignId, query);
+        const found = await runQuery(projectId, query);
         const loaded = new Map<string, Map<string, FieldValue>>();
         const linked = new Set<string>();
         for (const id of fieldIds) {
@@ -69,7 +69,7 @@ export function FieldTable({ campaignId, query, catalog, onChange }: { campaignI
     };
     // `key` and `fieldKey` stand for the query's rules/sort and the chosen fields
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, key, fieldKey, catalog.fields, dataVersion]);
+  }, [projectId, key, fieldKey, catalog.fields, dataVersion]);
 
   const ctx: TableContext = useMemo(
     () => ({ definitions: catalog.fields, values, itemName: (id) => linkNames.get(id), typeLabel: itemTypeLabel, date: formatDate }),

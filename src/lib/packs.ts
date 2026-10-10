@@ -3,18 +3,18 @@ import type { PackCounts } from "../api/packs";
 export const PACK_EXTENSION = "ttrpgpack";
 
 /**
- * A safe default file name for exporting a campaign, e.g. "Curse of Strahd.ttrpgpack".
+ * A safe default file name for exporting a project, e.g. "Curse of Strahd.ttrpgpack".
  * Characters that Windows or Android file systems reject are replaced, and
  * trailing dots/spaces (also rejected on Windows) are removed.
  */
-export function packFileName(campaignName: string): string {
-  const cleaned = campaignName
+export function packFileName(projectName: string): string {
+  const cleaned = projectName
     .replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 80)
     .replace(/[. ]+$/, "");
-  return `${cleaned || "campaign"}.${PACK_EXTENSION}`;
+  return `${cleaned || "project"}.${PACK_EXTENSION}`;
 }
 
 const plural = (n: number, one: string, many = `${one}s`) =>

@@ -2,8 +2,8 @@ import { GENERATOR_VERSION, newRowId, type GeneratorDef, type GeneratorRow } fro
 
 /**
  * Starter generators: ready-made generators that come with the app. A starter is plain data that names
- * its template and fields by name; `toDefinition` turns it into a real generator once the campaign's own
- * template and field ids are known (a template or field the campaign doesn't have is simply left out, so
+ * its template and fields by name; `toDefinition` turns it into a real generator once the project's own
+ * template and field ids are known (a template or field the project doesn't have is simply left out, so
  * the generator still works). Pure logic.
  */
 
@@ -20,7 +20,7 @@ export interface StarterGeneratorDef {
   /** Unique; also the name of the generator item made. */
   name: string;
   description: string;
-  /** The template (by name) new documents are made from, if the campaign has one by that name. */
+  /** The template (by name) new documents are made from, if the project has one by that name. */
   templateName?: string;
   rows: StarterRow[];
 }

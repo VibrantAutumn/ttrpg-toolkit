@@ -22,7 +22,7 @@ import { FieldValueEditor } from "./FieldValueEditor";
  * (kept as a mark now; sharing in Phase 9 is what keeps it off players' devices).
  */
 export function ItemFieldsPanel({ item }: { item: Item }) {
-  const catalog = useFieldCatalog(item.campaignId);
+  const catalog = useFieldCatalog(item.projectId);
   const dataVersion = useDataVersion();
   const [data, setData] = useState<ItemFieldData | null>(null);
   const [extraIds, setExtraIds] = useState<string[]>([]);
@@ -209,7 +209,7 @@ function FieldRow({
           <FieldValueEditor
             def={def}
             value={checked.value}
-            campaignId={item.campaignId}
+            projectId={item.projectId}
             itemId={item.id}
             onChange={(value) => onSave(def, value, secret)}
           />

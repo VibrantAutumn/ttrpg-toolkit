@@ -1,31 +1,31 @@
-import { useCurrentCampaign } from "../state/CurrentCampaign";
+import { useCurrentProject } from "../state/CurrentProject";
 
 /**
- * Slim bar at the top of the app. For now it shows the open campaign; later
+ * Slim bar at the top of the app. For now it shows the open project; later
  * phases add the in-game date, session, weather and party location here.
- * Clicking the campaign calls `onChangeCampaign`; Search opens the command palette
+ * Clicking the project calls `onChangeProject`; Search opens the command palette
  * (the way in on Android, where there is no Ctrl+K); Quick tools opens or closes the
  * panel of small tools (Ctrl+J on a keyboard).
  */
 export function StatusBar({
-  onChangeCampaign,
+  onChangeProject,
   onOpenPalette,
   onToggleQuickTools,
 }: {
-  onChangeCampaign: () => void;
+  onChangeProject: () => void;
   onOpenPalette: () => void;
   onToggleQuickTools: () => void;
 }) {
-  const { campaign, loading } = useCurrentCampaign();
+  const { project, loading } = useCurrentProject();
 
   return (
     <div className="status-bar">
-      <button className="link" onClick={onChangeCampaign}>
+      <button className="link" onClick={onChangeProject}>
         {loading
           ? "Loading..."
-          : campaign
-            ? `🏕️ ${campaign.name}`
-            : "No campaign open. Choose one"}
+          : project
+            ? `🏕️ ${project.name}`
+            : "No project open. Choose one"}
       </button>
       <button className="quick-button" onClick={onToggleQuickTools} aria-label="Quick tools">
         ⚡ Quick tools

@@ -1,10 +1,10 @@
-//! Fields: campaign-wide field definitions, reusable field sets, the sets applied to an item, and
+//! Fields: project-wide field definitions, reusable field sets, the sets applied to an item, and
 //! the values an item holds. Any item can have fields.
 //!
 //! What a field's settings and a value *mean* belongs to the app's TypeScript
 //! (`src/lib/fields/`), which checks every value before it is saved; this module stores them and
 //! checks what the database must be able to rely on (sizes, that JSON is JSON, that things belong
-//! to one campaign). The one kind it looks inside is a **link** field: its value is a list of item
+//! to one project). The one kind it looks inside is a **link** field: its value is a list of item
 //! ids, and saving it makes the matching rows in the `links` table (`source_ref` `field:<field id>`),
 //! so "Linked from" on the target shows the item.
 //!
@@ -44,7 +44,7 @@ pub fn link_ref(field_id: &str) -> String {
 #[serde(rename_all = "camelCase")]
 pub struct FieldDefinition {
     pub id: String,
-    pub campaign_id: String,
+    pub project_id: String,
     pub name: String,
     pub kind: String,
     pub description: String,
@@ -58,7 +58,7 @@ pub struct FieldDefinition {
 #[serde(rename_all = "camelCase")]
 pub struct FieldSet {
     pub id: String,
-    pub campaign_id: String,
+    pub project_id: String,
     pub name: String,
     pub description: String,
     /// The live fields in the set, in order.
@@ -107,12 +107,12 @@ pub struct IndexUpdate {
     pub index: ValueIndex,
 }
 
-const DEFINITION_COLUMNS: &str = "id, campaign_id, name, kind, description, config_json, created_at, updated_at, deleted_at";
+const DEFINITION_COLUMNS: &str = "id, project_id, name, kind, description, config_json, created_at, updated_at, deleted_at";
 
 fn definition_from_row(r: &Row) -> rusqlite::Result<FieldDefinition> {
     Ok(FieldDefinition {
         id: r.get(0)?,
-        campaign_id: r.get(1)?,
+        project_id: r.get(1)?,
         name: r.get(2)?,
         kind: r.get(3)?,
         description: r.get(4)?,
@@ -151,12 +151,12 @@ pub fn validate_config(config_json: &str) -> Result<(), DbError> {
     }
 }
 
-/// Is another live row of `table` ("field_definitions" or "field_sets") in this campaign already called this (ignoring case)?
-fn name_taken(conn: &Connection, table: &'static str, campaign_id: &str, name: &str, except_id: &str) -> Result<bool, DbError> {
+/// Is another live row of `table` ("field_definitions" or "field_sets") in this project already called this (ignoring case)?
+fn name_taken(conn: &Connection, table: &'static str, project_id: &str, name: &str, except_id: &str) -> Result<bool, DbError> {
     let taken: Option<i64> = conn
         .query_row(
-            &format!("SELECT 1 FROM {table} WHERE campaign_id = ?1 AND name = ?2 COLLATE NOCASE AND deleted_at IS NULL AND id <> ?3"),
-            params![campaign_id, name, except_id],
+            &format!("SELECT 1 FROM {table} WHERE project_id = ?1 AND name = ?2 COLLATE NOCASE AND deleted_at IS NULL AND id <> ?3"),
+            params![project_id, name, except_id],
             |r| r.get(0),
         )
         .optional()?;
@@ -195,7 +195,7 @@ fn live_item(conn: &Connection, id: &str) -> Result<Item, DbError> {
 
 pub fn create_definition(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
     name: &str,
     kind: &str,
     description: &str,
@@ -208,17 +208,17 @@ pub fn create_definition(
     }
     check_description(description)?;
     validate_config(config_json)?;
-    if name_taken(conn, "field_definitions", campaign_id, name, "")? {
+    if name_taken(conn, "field_definitions", project_id, name, "")? {
         return Err(DbError::Invalid("A field with that name already exists."));
     }
     let id = Uuid::now_v7().to_string();
     conn.execute(
-        "INSERT INTO field_definitions (id, campaign_id, name, kind, description, config_json, created_at, updated_at)
+        "INSERT INTO field_definitions (id, project_id, name, kind, description, config_json, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
-        params![id, campaign_id, name, kind, description, config_json, now],
+        params![id, project_id, name, kind, description, config_json, now],
     )
     .map_err(|e| match e {
-        // A campaign that doesn't exist fails the foreign key.
+        // A project that doesn't exist fails the foreign key.
         rusqlite::Error::SqliteFailure(f, _) if f.code == rusqlite::ErrorCode::ConstraintViolation => DbError::NotFound,
         other => other.into(),
     })?;
@@ -238,7 +238,7 @@ pub fn update_definition(
     check_description(description)?;
     validate_config(config_json)?;
     let def = get_definition_live(conn, id)?;
-    if name_taken(conn, "field_definitions", &def.campaign_id, name, id)? {
+    if name_taken(conn, "field_definitions", &def.project_id, name, id)? {
         return Err(DbError::Invalid("A field with that name already exists."));
     }
     conn.execute(
@@ -248,23 +248,23 @@ pub fn update_definition(
     get_definition_live(conn, id)
 }
 
-/// Live definitions in a campaign, alphabetical.
-pub fn list_definitions(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldDefinition>, DbError> {
+/// Live definitions in a project, alphabetical.
+pub fn list_definitions(conn: &Connection, project_id: &str) -> Result<Vec<FieldDefinition>, DbError> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {DEFINITION_COLUMNS} FROM field_definitions
-         WHERE campaign_id = ?1 AND deleted_at IS NULL ORDER BY name COLLATE NOCASE, created_at"
+         WHERE project_id = ?1 AND deleted_at IS NULL ORDER BY name COLLATE NOCASE, created_at"
     ))?;
-    let rows = stmt.query_map([campaign_id], definition_from_row)?;
+    let rows = stmt.query_map([project_id], definition_from_row)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
-/// Deleted definitions in a campaign (the ones that can be restored), newest deletion first.
-pub fn list_deleted_definitions(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldDefinition>, DbError> {
+/// Deleted definitions in a project (the ones that can be restored), newest deletion first.
+pub fn list_deleted_definitions(conn: &Connection, project_id: &str) -> Result<Vec<FieldDefinition>, DbError> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {DEFINITION_COLUMNS} FROM field_definitions
-         WHERE campaign_id = ?1 AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, name COLLATE NOCASE"
+         WHERE project_id = ?1 AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, name COLLATE NOCASE"
     ))?;
-    let rows = stmt.query_map([campaign_id], definition_from_row)?;
+    let rows = stmt.query_map([project_id], definition_from_row)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
@@ -291,7 +291,7 @@ pub fn restore_definition(conn: &Connection, id: &str, now: i64) -> Result<Field
     let Some(deleted_at) = def.deleted_at else {
         return Ok(def);
     };
-    if name_taken(conn, "field_definitions", &def.campaign_id, &def.name, id)? {
+    if name_taken(conn, "field_definitions", &def.project_id, &def.name, id)? {
         return Err(DbError::Invalid("Another field already has that name. Rename one of them first."));
     }
     let tx = conn.unchecked_transaction()?;
@@ -324,7 +324,7 @@ fn set_from_row(conn: &Connection, r: &Row) -> Result<FieldSet, DbError> {
     let id: String = r.get(0)?;
     Ok(FieldSet {
         field_ids: set_field_ids(conn, &id)?,
-        campaign_id: r.get(1)?,
+        project_id: r.get(1)?,
         name: r.get(2)?,
         description: r.get(3)?,
         created_at: r.get(4)?,
@@ -334,7 +334,7 @@ fn set_from_row(conn: &Connection, r: &Row) -> Result<FieldSet, DbError> {
     })
 }
 
-const SET_COLUMNS: &str = "id, campaign_id, name, description, created_at, updated_at, deleted_at";
+const SET_COLUMNS: &str = "id, project_id, name, description, created_at, updated_at, deleted_at";
 
 fn get_set_any(conn: &Connection, id: &str) -> Result<FieldSet, DbError> {
     let mut stmt = conn.prepare(&format!("SELECT {SET_COLUMNS} FROM field_sets WHERE id = ?1"))?;
@@ -353,16 +353,16 @@ fn get_set_live(conn: &Connection, id: &str) -> Result<FieldSet, DbError> {
     Ok(set)
 }
 
-pub fn create_set(conn: &Connection, campaign_id: &str, name: &str, description: &str, now: i64) -> Result<FieldSet, DbError> {
+pub fn create_set(conn: &Connection, project_id: &str, name: &str, description: &str, now: i64) -> Result<FieldSet, DbError> {
     let name = clean_field_name(name)?;
     check_description(description)?;
-    if name_taken(conn, "field_sets", campaign_id, name, "")? {
+    if name_taken(conn, "field_sets", project_id, name, "")? {
         return Err(DbError::Invalid("A field set with that name already exists."));
     }
     let id = Uuid::now_v7().to_string();
     conn.execute(
-        "INSERT INTO field_sets (id, campaign_id, name, description, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-        params![id, campaign_id, name, description, now],
+        "INSERT INTO field_sets (id, project_id, name, description, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+        params![id, project_id, name, description, now],
     )
     .map_err(|e| match e {
         rusqlite::Error::SqliteFailure(f, _) if f.code == rusqlite::ErrorCode::ConstraintViolation => DbError::NotFound,
@@ -375,7 +375,7 @@ pub fn update_set(conn: &Connection, id: &str, name: &str, description: &str, no
     let name = clean_field_name(name)?;
     check_description(description)?;
     let set = get_set_live(conn, id)?;
-    if name_taken(conn, "field_sets", &set.campaign_id, name, id)? {
+    if name_taken(conn, "field_sets", &set.project_id, name, id)? {
         return Err(DbError::Invalid("A field set with that name already exists."));
     }
     conn.execute(
@@ -386,7 +386,7 @@ pub fn update_set(conn: &Connection, id: &str, name: &str, description: &str, no
 }
 
 /// Replaces which fields are in the set, and in what order. The fields must be live and in the
-/// set's campaign, each listed once; nothing changes if any of them is refused.
+/// set's project, each listed once; nothing changes if any of them is refused.
 pub fn set_set_fields(conn: &Connection, set_id: &str, field_ids: &[String], now: i64) -> Result<FieldSet, DbError> {
     let set = get_set_live(conn, set_id)?;
     let mut seen = std::collections::HashSet::new();
@@ -395,8 +395,8 @@ pub fn set_set_fields(conn: &Connection, set_id: &str, field_ids: &[String], now
             return Err(DbError::Invalid("A field can only be in a set once."));
         }
         let def = get_definition_live(conn, field_id)?;
-        if def.campaign_id != set.campaign_id {
-            return Err(DbError::Invalid("A set can only hold fields from its own campaign."));
+        if def.project_id != set.project_id {
+            return Err(DbError::Invalid("A set can only hold fields from its own project."));
         }
     }
     let tx = conn.unchecked_transaction()?;
@@ -418,11 +418,11 @@ pub fn set_set_fields(conn: &Connection, set_id: &str, field_ids: &[String], now
     get_set_live(conn, set_id)
 }
 
-pub fn list_sets(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldSet>, DbError> {
+pub fn list_sets(conn: &Connection, project_id: &str) -> Result<Vec<FieldSet>, DbError> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT {SET_COLUMNS} FROM field_sets WHERE campaign_id = ?1 AND deleted_at IS NULL ORDER BY name COLLATE NOCASE, created_at"
+        "SELECT {SET_COLUMNS} FROM field_sets WHERE project_id = ?1 AND deleted_at IS NULL ORDER BY name COLLATE NOCASE, created_at"
     ))?;
-    let mut rows = stmt.query([campaign_id])?;
+    let mut rows = stmt.query([project_id])?;
     let mut sets = Vec::new();
     while let Some(row) = rows.next()? {
         sets.push(set_from_row(conn, row)?);
@@ -443,18 +443,18 @@ pub fn restore_set(conn: &Connection, id: &str, now: i64) -> Result<FieldSet, Db
     if set.deleted_at.is_none() {
         return Ok(set);
     }
-    if name_taken(conn, "field_sets", &set.campaign_id, &set.name, id)? {
+    if name_taken(conn, "field_sets", &set.project_id, &set.name, id)? {
         return Err(DbError::Invalid("Another field set already has that name. Rename one of them first."));
     }
     conn.execute("UPDATE field_sets SET deleted_at = NULL, updated_at = ?2 WHERE id = ?1", params![id, now])?;
     get_set_live(conn, id)
 }
 
-pub fn list_deleted_sets(conn: &Connection, campaign_id: &str) -> Result<Vec<FieldSet>, DbError> {
+pub fn list_deleted_sets(conn: &Connection, project_id: &str) -> Result<Vec<FieldSet>, DbError> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT {SET_COLUMNS} FROM field_sets WHERE campaign_id = ?1 AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, name COLLATE NOCASE"
+        "SELECT {SET_COLUMNS} FROM field_sets WHERE project_id = ?1 AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, name COLLATE NOCASE"
     ))?;
-    let mut rows = stmt.query([campaign_id])?;
+    let mut rows = stmt.query([project_id])?;
     let mut sets = Vec::new();
     while let Some(row) = rows.next()? {
         sets.push(set_from_row(conn, row)?);
@@ -469,8 +469,8 @@ pub fn list_deleted_sets(conn: &Connection, campaign_id: &str) -> Result<Vec<Fie
 pub fn apply_set(conn: &Connection, item_id: &str, set_id: &str, now: i64) -> Result<(), DbError> {
     let item = live_item(conn, item_id)?;
     let set = get_set_live(conn, set_id)?;
-    if item.campaign_id != set.campaign_id {
-        return Err(DbError::Invalid("A set can only be applied to items in its own campaign."));
+    if item.project_id != set.project_id {
+        return Err(DbError::Invalid("A set can only be applied to items in its own project."));
     }
     let already: Option<i64> = conn
         .query_row(
@@ -541,8 +541,8 @@ pub fn set_value(
 ) -> Result<(), DbError> {
     let item = live_item(conn, item_id)?;
     let def = get_definition_live(conn, field_id)?;
-    if item.campaign_id != def.campaign_id {
-        return Err(DbError::Invalid("That field belongs to a different campaign."));
+    if item.project_id != def.project_id {
+        return Err(DbError::Invalid("That field belongs to a different project."));
     }
     if value_json.len() > MAX_VALUE_BYTES || index.search_text.len() > MAX_VALUE_BYTES {
         return Err(DbError::Invalid("That value is too large to save."));
@@ -670,11 +670,11 @@ pub fn update_indexes(conn: &Connection, field_id: &str, updates: &[IndexUpdate]
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{campaigns, open_in_memory, trash};
+    use crate::db::{projects, open_in_memory, trash};
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -721,8 +721,8 @@ mod tests {
         assert!(matches!(update_definition(&conn, &other.id, "RACE", "", "{}", 4), Err(DbError::Invalid(_))));
         // Renaming a field to its own name in another case is fine.
         update_definition(&conn, &race.id, "RACE", "", "{}", 5).unwrap();
-        // Another campaign may reuse a name.
-        let second = campaigns::create(&conn, "Second", 1).unwrap();
+        // Another project may reuse a name.
+        let second = projects::create(&conn, "Second", 1).unwrap();
         def(&conn, &second.id, "Race", "text");
     }
 
@@ -738,7 +738,7 @@ mod tests {
         assert!(matches!(make("A", "text", "", "nope"), Err(DbError::Invalid(_))));
         let too_big = format!(r#"{{"x":"{}"}}"#, "y".repeat(MAX_CONFIG_BYTES));
         assert!(matches!(make("A", "text", "", &too_big), Err(DbError::Invalid(_))));
-        assert!(matches!(create_definition(&conn, "no-such-campaign", "A", "text", "", "{}", 2), Err(DbError::NotFound)));
+        assert!(matches!(create_definition(&conn, "no-such-project", "A", "text", "", "{}", 2), Err(DbError::NotFound)));
         assert!(list_definitions(&conn, &camp).unwrap().is_empty());
     }
 
@@ -807,7 +807,7 @@ mod tests {
         let (conn, camp) = setup();
         let race = def(&conn, &camp, "Race", "text");
         let a = doc(&conn, &camp, "A");
-        let other = campaigns::create(&conn, "Other", 1).unwrap();
+        let other = projects::create(&conn, "Other", 1).unwrap();
         let foreign_item = doc(&conn, &other.id, "Foreign");
         let foreign_field = def(&conn, &other.id, "Race", "text");
 
@@ -995,7 +995,7 @@ mod tests {
         let race = def(&conn, &camp, "Race", "text");
         let npc = create_set(&conn, &camp, "NPC", "", 3).unwrap();
         set_set_fields(&conn, &npc.id, &[race.id.clone()], 4).unwrap();
-        let other = campaigns::create(&conn, "Other", 1).unwrap();
+        let other = projects::create(&conn, "Other", 1).unwrap();
         let foreign = def(&conn, &other.id, "Foreign", "text");
         assert!(matches!(set_set_fields(&conn, &npc.id, &[race.id.clone(), race.id.clone()], 5), Err(DbError::Invalid(_))));
         assert!(matches!(set_set_fields(&conn, &npc.id, &[foreign.id.clone()], 5), Err(DbError::Invalid(_))));
@@ -1043,10 +1043,10 @@ mod tests {
     }
 
     #[test]
-    fn a_set_only_goes_on_live_items_of_its_own_campaign() {
+    fn a_set_only_goes_on_live_items_of_its_own_project() {
         let (conn, camp) = setup();
         let npc = create_set(&conn, &camp, "NPC", "", 3).unwrap();
-        let other = campaigns::create(&conn, "Other", 1).unwrap();
+        let other = projects::create(&conn, "Other", 1).unwrap();
         let foreign = doc(&conn, &other.id, "Foreign");
         let gone = doc(&conn, &camp, "Gone");
         items::soft_delete(&conn, &gone.id, 4).unwrap();

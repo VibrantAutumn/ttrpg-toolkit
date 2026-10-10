@@ -2,14 +2,14 @@ import { useEffect, useState } from "react";
 import { searchItems, type Item } from "../../api/library";
 import { itemIcon, libraryLabel } from "../item/itemDisplay";
 
-/** Shows the chosen item (if any) and lets the person search the campaign to choose another. */
+/** Shows the chosen item (if any) and lets the person search the project to choose another. */
 export function ItemPick({
-  campaignId,
+  projectId,
   itemId,
   name,
   onPick,
 }: {
-  campaignId: string;
+  projectId: string;
   itemId: string;
   name: string | undefined;
   onPick: (item: Item) => void;
@@ -26,7 +26,7 @@ export function ItemPick({
     }
     let cancelled = false;
     const timer = setTimeout(() => {
-      searchItems(campaignId, query, null, 12)
+      searchItems(projectId, query, null, 12)
         .then((found) => !cancelled && setResults(found))
         .catch(() => !cancelled && setResults([]));
     }, 200);
@@ -34,7 +34,7 @@ export function ItemPick({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [text, searching, campaignId]);
+  }, [text, searching, projectId]);
 
   if (!searching) {
     return (

@@ -10,7 +10,7 @@ type Stage =
   | { step: "preview"; bytes: Uint8Array; preview: PackPreview };
 
 /**
- * Import a content pack file as a new campaign: choose a file, see what's in it,
+ * Import a content pack file as a new project: choose a file, see what's in it,
  * then confirm. Nothing existing is ever changed or overwritten.
  */
 export function ImportPack({ onImported }: { onImported: (result: ImportResult) => Promise<void> }) {
@@ -42,7 +42,7 @@ export function ImportPack({ onImported }: { onImported: (result: ImportResult) 
       await onImported(result);
       const fixes = result.warnings.length;
       setMessage(
-        `Imported as “${result.campaign.name}”.` +
+        `Imported as “${result.project.name}”.` +
           (fixes > 0 ? ` ${fixes} problem${fixes === 1 ? " was" : "s were"} fixed along the way.` : ""),
       );
     } catch (e) {
@@ -62,15 +62,15 @@ export function ImportPack({ onImported }: { onImported: (result: ImportResult) 
 
       {stage.step === "preview" && (
         <section className="pack-preview" aria-label="Import preview">
-          <h2>Import “{stage.preview.campaignName}”?</h2>
+          <h2>Import “{stage.preview.projectName}”?</h2>
           <p>
             {describeCounts(stage.preview.counts)}
             {stage.preview.trashed > 0 && ` (${stage.preview.trashed} of them in the trash)`}.
           </p>
           <p className="meta">
             Made {new Date(stage.preview.createdAt).toLocaleDateString()} by app version{" "}
-            {stage.preview.appVersion}. It will be added as a new campaign called “
-            {stage.preview.campaignName} (imported)”. Nothing you already have is changed.
+            {stage.preview.appVersion}. It will be added as a new project called “
+            {stage.preview.projectName} (imported)”. Nothing you already have is changed.
           </p>
           {stage.preview.warnings.length > 0 && (
             <>
@@ -83,7 +83,7 @@ export function ImportPack({ onImported }: { onImported: (result: ImportResult) 
             </>
           )}
           <div className="row">
-            <button onClick={() => confirm(stage.bytes)}>Import as new campaign</button>
+            <button onClick={() => confirm(stage.bytes)}>Import as new project</button>
             <button onClick={() => setStage({ step: "idle" })}>Cancel</button>
           </div>
         </section>

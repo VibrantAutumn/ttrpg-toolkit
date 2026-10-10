@@ -32,7 +32,7 @@ export function CollectionEditor({ itemId, kind }: { itemId: string; kind: "set"
   const { openItem } = useNavigation();
   const dataVersion = useDataVersion();
   const [name, setName] = useState("");
-  const [campaignId, setCampaignId] = useState("");
+  const [projectId, setProjectId] = useState("");
   const [members, setMembers] = useState<Item[]>([]);
   const [cards, setCards] = useState<Item[]>([]);
   const [candidates, setCandidates] = useState<Item[]>([]);
@@ -49,7 +49,7 @@ export function CollectionEditor({ itemId, kind }: { itemId: string; kind: "set"
         listCollectionCandidates(itemId),
       ]);
       setName(item.name);
-      setCampaignId(item.campaignId);
+      setProjectId(item.projectId);
       setMembers(m);
       setCards(c);
       setCandidates(cand);
@@ -183,7 +183,7 @@ export function CollectionEditor({ itemId, kind }: { itemId: string; kind: "set"
       )}
 
       {name && <DrawPanel sourceId={itemId} sourceName={name} />}
-      {name && campaignId && <PlayStarter source={{ id: itemId, name, campaignId }} />}
+      {name && projectId && <PlayStarter source={{ id: itemId, name, projectId }} />}
     </div>
   );
 }

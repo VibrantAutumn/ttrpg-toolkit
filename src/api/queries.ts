@@ -18,8 +18,8 @@ export interface SmartCollection {
 }
 
 /** Runs a query now (also one that isn't saved). `onlyType` keeps one kind of item. */
-export const runQuery = (campaignId: string, query: Query, onlyType?: string) =>
-  invoke<QueryResult>("run_query", { campaignId, queryJson: JSON.stringify(query), onlyType: onlyType ?? null });
+export const runQuery = (projectId: string, query: Query, onlyType?: string) =>
+  invoke<QueryResult>("run_query", { projectId, queryJson: JSON.stringify(query), onlyType: onlyType ?? null });
 
 export const getSmartCollection = (itemId: string) => invoke<SmartCollection>("get_smart_collection", { itemId });
 export const setSmartCollectionQuery = (itemId: string, query: Query | string) =>

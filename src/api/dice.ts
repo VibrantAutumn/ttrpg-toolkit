@@ -16,7 +16,7 @@ export interface SavedRoll {
 
 /** Saves a finished roll as a new item in the Dice library. A blank name uses the notation. */
 export const saveRoll = (
-  campaignId: string,
+  projectId: string,
   name: string,
   folderId: string | null,
   notation: string,
@@ -24,7 +24,7 @@ export const saveRoll = (
   text: string,
   resultJson: string,
 ) =>
-  invoke<Item>("save_roll", { campaignId, name, folderId, notation, seed, text, resultJson });
+  invoke<Item>("save_roll", { projectId, name, folderId, notation, seed, text, resultJson });
 
 export const getSavedRoll = (itemId: string) =>
   invoke<SavedRoll>("get_saved_roll", { itemId });
@@ -47,16 +47,16 @@ export interface FormulaEntry {
 
 /** Saves a formula as a new Dice library item. Check the notation with `checkFormula` first. */
 export const createFormula = (
-  campaignId: string,
+  projectId: string,
   name: string,
   folderId: string | null,
   notation: string,
-) => invoke<Item>("create_formula", { campaignId, name, folderId, notation });
+) => invoke<Item>("create_formula", { projectId, name, folderId, notation });
 
 export const getFormula = (itemId: string) => invoke<Formula>("get_formula", { itemId });
 
 export const setFormulaNotation = (itemId: string, notation: string) =>
   invoke<void>("set_formula_notation", { itemId, notation });
 
-export const listFormulas = (campaignId: string) =>
-  invoke<FormulaEntry[]>("list_formulas", { campaignId });
+export const listFormulas = (projectId: string) =>
+  invoke<FormulaEntry[]>("list_formulas", { projectId });

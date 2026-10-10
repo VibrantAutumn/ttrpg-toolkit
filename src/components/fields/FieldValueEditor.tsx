@@ -18,7 +18,7 @@ export interface FieldValueEditorProps {
   def: FieldDefinition;
   /** The saved value (already checked against the field). */
   value: FieldValue;
-  campaignId: string;
+  projectId: string;
   /** The item the value belongs to (it is left out of the items a link field offers). */
   itemId: string;
   disabled?: boolean;
@@ -307,7 +307,7 @@ function ListEditor({ def, value, disabled, onChange }: Kind<"list">) {
   );
 }
 
-function LinkEditor({ def, value, campaignId, itemId, disabled, onChange }: Kind<"link">) {
+function LinkEditor({ def, value, projectId, itemId, disabled, onChange }: Kind<"link">) {
   const ids = value as string[];
   const [items, setItems] = useState<Map<string, Item>>(new Map());
   const [picking, setPicking] = useState(false);
@@ -354,7 +354,7 @@ function LinkEditor({ def, value, campaignId, itemId, disabled, onChange }: Kind
       )}
       {picking ? (
         <LinkPicker
-          campaignId={campaignId}
+          projectId={projectId}
           excludeIds={new Set([itemId, ...ids])}
           onPick={(item) => {
             setPicking(false);

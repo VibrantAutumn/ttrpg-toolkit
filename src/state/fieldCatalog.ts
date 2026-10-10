@@ -14,11 +14,11 @@ export interface FieldCatalog {
 }
 
 /**
- * The campaign's fields and field sets, kept fresh: they reload when library data changes
+ * The project's fields and field sets, kept fresh: they reload when library data changes
  * anywhere (see `state/dataVersion.ts`), so an edit in the Fields tab shows on item pages that
  * stay mounted behind it.
  */
-export function useFieldCatalog(campaignId: string | null): FieldCatalog {
+export function useFieldCatalog(projectId: string | null): FieldCatalog {
   const dataVersion = useDataVersion();
   const [definitions, setDefinitions] = useState<FieldDefinition[]>([]);
   const [sets, setSets] = useState<FieldSet[]>([]);
@@ -27,14 +27,14 @@ export function useFieldCatalog(campaignId: string | null): FieldCatalog {
   const [manual, setManual] = useState(0);
 
   useEffect(() => {
-    if (!campaignId) {
+    if (!projectId) {
       setDefinitions([]);
       setSets([]);
       setLoading(false);
       return;
     }
     let active = true;
-    Promise.all([listFieldDefinitions(campaignId), listFieldSets(campaignId)])
+    Promise.all([listFieldDefinitions(projectId), listFieldSets(projectId)])
       .then(([d, s]) => {
         if (!active) return;
         setDefinitions(d);
@@ -46,7 +46,7 @@ export function useFieldCatalog(campaignId: string | null): FieldCatalog {
     return () => {
       active = false;
     };
-  }, [campaignId, dataVersion, manual]);
+  }, [projectId, dataVersion, manual]);
 
   const reload = useCallback(async () => setManual((n) => n + 1), []);
   return { definitions, sets, loading, error, reload };

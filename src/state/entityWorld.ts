@@ -26,40 +26,40 @@ function tagQuery(tagId: string): Query {
  * Returns undefined when no slot needs documents, so ordinary rolls cost nothing extra.
  */
 export async function loadEntityData(
-  campaignId: string,
+  projectId: string,
   tables: readonly { name: string; entries: readonly { text: string }[] }[],
 ): Promise<EntityData | undefined> {
   const names = neededEntityNames(tables);
   if (names.length === 0) return undefined;
 
-  const [collections, tags] = await Promise.all([listItemsOfType(campaignId, "worldbuilding", "smart_collection"), listTags(campaignId)]);
-  const contextTags = getRollContext(campaignId);
+  const [collections, tags] = await Promise.all([listItemsOfType(projectId, "worldbuilding", "smart_collection"), listTags(projectId)]);
+  const contextTags = getRollContext(projectId);
   const query = contextQuery(contextTags);
-  const allowed = query ? new Set((await runQuery(campaignId, query)).items.map((i) => i.id)) : null;
+  const allowed = query ? new Set((await runQuery(projectId, query)).items.map((i) => i.id)) : null;
 
   const sources: EntitySource[] = [];
   for (const name of names) {
     const collection = collections.find((c) => key(c.name) === key(name));
     const tag = collection ? undefined : tags.find((t) => key(t.name) === key(name));
     if (!collection && !tag) continue;
-    const found = collection ? await runSmartCollection(collection.id) : await runQuery(campaignId, tagQuery((tag as { id: string }).id));
+    const found = collection ? await runSmartCollection(collection.id) : await runQuery(projectId, tagQuery((tag as { id: string }).id));
     const items = narrowItems(pickable(found.items), allowed);
     sources.push({ name, kind: collection ? "collection" : "tag", items: items.map((i) => ({ id: i.id, name: i.name })) });
   }
 
-  const fields = await loadFields(campaignId, tables, sources);
+  const fields = await loadFields(projectId, tables, sources);
   return { sources, fields };
 }
 
 async function loadFields(
-  campaignId: string,
+  projectId: string,
   tables: readonly { name: string; entries: readonly { text: string }[] }[],
   sources: readonly EntitySource[],
 ): Promise<LoadedField[]> {
   const fieldNames = neededFieldNames(tables);
   if (fieldNames.length === 0) return [];
   const wanted = new Set(sources.flatMap((s) => s.items.map((i) => i.id)));
-  const definitions = await listFieldDefinitions(campaignId);
+  const definitions = await listFieldDefinitions(projectId);
   const loaded: { name: string; kind: string; values: Map<string, unknown> }[] = [];
   const linked = new Set<string>();
   for (const name of fieldNames) {

@@ -2,7 +2,7 @@
  * Starter decks as plain data: what cards, sets, tags and deck to make. The
  * pictures are attached separately (`toBundle`), because loading or drawing
  * them needs the browser. Pure and tested; the Rust side (`db/starters.rs`)
- * writes the finished bundle into a campaign in one all-or-nothing step.
+ * writes the finished bundle into a project in one all-or-nothing step.
  */
 import type { PreparedImage } from "./image";
 

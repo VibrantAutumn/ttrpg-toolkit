@@ -147,8 +147,8 @@ pub fn set_positions(conn: &Connection, item_id: &str, positions: &[PositionInpu
             if source.deleted_at.is_some() {
                 return Err(DbError::Invalid("A position's source is in the trash."));
             }
-            if source.campaign_id != spread.campaign_id {
-                return Err(DbError::Invalid("A position's source is in a different campaign."));
+            if source.project_id != spread.project_id {
+                return Err(DbError::Invalid("A position's source is in a different project."));
             }
             if source.library != LIBRARY || ![SET_TYPE, DECK_TYPE, POOL_TYPE].contains(&source.item_type.as_str()) {
                 return Err(DbError::Invalid("A position can only draw from a set, deck or pool."));
@@ -207,8 +207,8 @@ pub fn set_reversals(conn: &Connection, item_id: &str, reversals: bool, percent:
     Ok(())
 }
 
-/// Every live spread in a campaign (any folder), alphabetical, and whether it can be drawn.
-pub fn list(conn: &Connection, campaign_id: &str) -> Result<Vec<SpreadEntry>, DbError> {
+/// Every live spread in a project (any folder), alphabetical, and whether it can be drawn.
+pub fn list(conn: &Connection, project_id: &str) -> Result<Vec<SpreadEntry>, DbError> {
     let mut stmt = conn.prepare(
         "SELECT i.id, i.name,
                 (SELECT COUNT(*) FROM spread_positions p WHERE p.spread_id = i.id),
@@ -216,10 +216,10 @@ pub fn list(conn: &Connection, campaign_id: &str) -> Result<Vec<SpreadEntry>, Db
                  WHERE p.spread_id = i.id AND s.deleted_at IS NULL
                    AND s.item_type IN ('set', 'deck', 'pool'))
          FROM items i
-         WHERE i.campaign_id = ?1 AND i.library = ?2 AND i.item_type = ?3 AND i.deleted_at IS NULL
+         WHERE i.project_id = ?1 AND i.library = ?2 AND i.item_type = ?3 AND i.deleted_at IS NULL
          ORDER BY i.name COLLATE NOCASE, i.created_at",
     )?;
-    let rows = stmt.query_map(params![campaign_id, LIBRARY, SPREAD_TYPE], |r| {
+    let rows = stmt.query_map(params![project_id, LIBRARY, SPREAD_TYPE], |r| {
         let (total, with_source): (i64, i64) = (r.get(2)?, r.get(3)?);
         Ok(SpreadEntry {
             item_id: r.get(0)?,
@@ -234,11 +234,11 @@ pub fn list(conn: &Connection, campaign_id: &str) -> Result<Vec<SpreadEntry>, Db
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{campaigns, folders, open_in_memory, search, tags, trash};
+    use crate::db::{projects, folders, open_in_memory, search, tags, trash};
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -318,7 +318,7 @@ mod tests {
         let s = make(&conn, &camp, SPREAD_TYPE, "Reading");
         let deck = make(&conn, &camp, DECK_TYPE, "Tarot");
         set_positions(&conn, &s.id, &three(&deck.id), 2).unwrap();
-        let other = campaigns::create(&conn, "Other", 3).unwrap();
+        let other = projects::create(&conn, "Other", 3).unwrap();
         let foreign = make(&conn, &other.id, DECK_TYPE, "Foreign");
         let card = make(&conn, &camp, "card", "A card");
         let trashed = make(&conn, &camp, DECK_TYPE, "Trashed");
@@ -333,7 +333,7 @@ mod tests {
             ("name too long", with(input(&long_name, None))),
             ("meaning too long", with(PositionInput { name: "A".into(), source_id: None, meaning: long_meaning })),
             ("source that doesn't exist", with(input("A", Some("nope")))),
-            ("source from another campaign", with(input("A", Some(&foreign.id)))),
+            ("source from another project", with(input("A", Some(&foreign.id)))),
             ("a card as the source", with(input("A", Some(&card.id)))),
             ("a trashed source", with(input("A", Some(&trashed.id)))),
             ("a set from another tool's library", with(input("A", Some(&doc.id)))),
@@ -418,7 +418,7 @@ mod tests {
     #[test]
     fn list_shows_live_spreads_and_whether_they_are_ready_to_draw() {
         let (conn, camp) = setup();
-        let other = campaigns::create(&conn, "Other", 2).unwrap();
+        let other = projects::create(&conn, "Other", 2).unwrap();
         let deck = make(&conn, &camp, DECK_TYPE, "Tarot");
         let folder = folders::create(&conn, &camp, LIBRARY, None, "Readings", 1).unwrap();
 
@@ -467,11 +467,11 @@ mod tests {
     fn a_spread_is_found_by_name_tag_notes_and_position_names() {
         let (conn, camp) = setup();
         let s = make(&conn, &camp, SPREAD_TYPE, "Strahd reading");
-        let tag = tags::create(&conn, &camp, None, "Campaign", None, 2).unwrap();
+        let tag = tags::create(&conn, &camp, None, "Project", None, 2).unwrap();
         tags::add_to_item(&conn, &s.id, &tag.id, 3).unwrap();
         set_positions(&conn, &s.id, &[input("Tome", None), input("Icon", None), input("Enemy", None)], 4).unwrap();
         set_notes(&conn, &s.id, "Read it aloud slowly", 5).unwrap();
-        for q in ["strahd", "campaign", "tome", "enemy", "aloud"] {
+        for q in ["strahd", "project", "tome", "enemy", "aloud"] {
             assert_eq!(search::search(&conn, &camp, q, Some("cards"), 10).unwrap().len(), 1, "'{q}'");
         }
         // Changing the positions or notes updates what search sees, in either order.

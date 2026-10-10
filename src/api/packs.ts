@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { base64ToBytes, bytesToBase64 } from "../lib/base64";
-import type { Campaign } from "./campaigns";
+import type { Project } from "./projects";
 
 /** Mirrors the Rust `Counts` in the pack format. */
 export interface PackCounts {
@@ -14,7 +14,7 @@ export interface PackCounts {
 
 /** What the import preview shows about a pack file. */
 export interface PackPreview {
-  campaignName: string;
+  projectName: string;
   createdAt: number;
   appVersion: string;
   formatVersion: number;
@@ -26,7 +26,7 @@ export interface PackPreview {
 }
 
 export interface ImportResult {
-  campaign: Campaign;
+  project: Project;
   counts: PackCounts;
   warnings: string[];
 }
@@ -35,14 +35,14 @@ export interface ImportResult {
 // delivers a raw request body to a command (Tauri sends JSON there), so raw
 // bytes worked on Windows but failed on the phone. One text path works everywhere.
 
-/** The pack file's contents for a campaign. Save them where the user chooses. */
-export const exportCampaignPack = async (campaignId: string) =>
-  base64ToBytes(await invoke<string>("export_campaign_pack", { campaignId }));
+/** The pack file's contents for a project. Save them where the user chooses. */
+export const exportProjectPack = async (projectId: string) =>
+  base64ToBytes(await invoke<string>("export_project_pack", { projectId }));
 
 /** Reads a pack file and describes it, without importing anything. */
 export const previewPack = (bytes: Uint8Array) =>
   invoke<PackPreview>("preview_pack", { data: bytesToBase64(bytes) });
 
-/** Imports a pack file as a new campaign. */
+/** Imports a pack file as a new project. */
 export const importPack = (bytes: Uint8Array) =>
   invoke<ImportResult>("import_pack", { data: bytesToBase64(bytes) });

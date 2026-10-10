@@ -30,7 +30,7 @@ pub struct SavedRoll {
 
 /// What the caller supplies; the item itself is created here.
 pub struct NewSavedRoll<'a> {
-    pub campaign_id: &'a str,
+    pub project_id: &'a str,
     /// Item name; the notation is used if this is blank.
     pub name: &'a str,
     pub folder_id: Option<&'a str>,
@@ -59,7 +59,7 @@ pub fn create(conn: &Connection, new: NewSavedRoll, now: i64) -> Result<(Item, S
     validate(new.notation, new.text, new.result_json)?;
     let name = if new.name.trim().is_empty() { new.notation } else { new.name };
     let tx = conn.unchecked_transaction()?;
-    let item = items::create(&tx, new.campaign_id, LIBRARY, SAVED_ROLL_TYPE, name, new.folder_id, now)?;
+    let item = items::create(&tx, new.project_id, LIBRARY, SAVED_ROLL_TYPE, name, new.folder_id, now)?;
     tx.execute(
         "INSERT INTO saved_rolls (item_id, notation, seed, text, result_json, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
@@ -104,20 +104,20 @@ pub fn get(conn: &Connection, item_id: &str) -> Result<SavedRoll, DbError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{campaigns, folders, open_in_memory, search, tags, trash};
+    use crate::db::{projects, folders, open_in_memory, search, tags, trash};
 
     const JSON: &str = r#"{"notation":"2d6+3","total":12,"terms":[]}"#;
     const TEXT: &str = "2d6+3 → [4, 5] + 3 = 12";
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
-    fn new<'a>(campaign: &'a str, name: &'a str) -> NewSavedRoll<'a> {
+    fn new<'a>(project: &'a str, name: &'a str) -> NewSavedRoll<'a> {
         NewSavedRoll {
-            campaign_id: campaign,
+            project_id: project,
             name,
             folder_id: None,
             notation: "2d6+3",
@@ -180,7 +180,7 @@ mod tests {
         n.result_json = &huge;
         assert!(matches!(create(&conn, n, 1), Err(DbError::Invalid(_))));
 
-        let missing = new("no-such-campaign", "x");
+        let missing = new("no-such-project", "x");
         assert!(create(&conn, missing, 1).is_err());
         let items: i64 = conn.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).unwrap();
         assert_eq!(items, 0, "a failed save must not leave a half-made item");

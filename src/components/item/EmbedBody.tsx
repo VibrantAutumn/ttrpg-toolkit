@@ -15,13 +15,13 @@ import { LinkPicker } from "./LinkPicker";
 export function EmbedBody({
   tab,
   parentId,
-  campaignId,
+  projectId,
   run,
   moveButtons,
 }: {
   tab: Tab;
   parentId: string;
-  campaignId: string;
+  projectId: string;
   /** Makes a change and refreshes the page. */
   run: (action: () => Promise<unknown>) => Promise<void>;
   /** Buttons to move the tab left or right, drawn in the toolbar. */
@@ -38,7 +38,7 @@ export function EmbedBody({
 
   const picker = (
     <LinkPicker
-      campaignId={campaignId}
+      projectId={projectId}
       excludeIds={new Set([parentId])}
       onPick={(item) =>
         run(async () => {

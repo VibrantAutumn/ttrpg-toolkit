@@ -20,17 +20,17 @@ pub struct Trash {
 
 /// Trashed folders and items for one library, newest first. A folder deleted
 /// together with its contents appears once; its contents are not listed separately.
-pub fn list(conn: &Connection, campaign_id: &str, library: &str) -> Result<Trash, DbError> {
+pub fn list(conn: &Connection, project_id: &str, library: &str) -> Result<Trash, DbError> {
     let folder_sql = format!(
         "SELECT {} FROM folders f
-         WHERE campaign_id = ?1 AND library = ?2 AND deleted_at IS NOT NULL
+         WHERE project_id = ?1 AND library = ?2 AND deleted_at IS NOT NULL
            AND NOT EXISTS (SELECT 1 FROM folders p WHERE p.id = f.parent_id AND p.deleted_at = f.deleted_at)
          ORDER BY deleted_at DESC, name COLLATE NOCASE",
         folders::COLUMNS
     );
     let item_sql = format!(
         "SELECT {} FROM items i
-         WHERE campaign_id = ?1 AND library = ?2 AND deleted_at IS NOT NULL
+         WHERE project_id = ?1 AND library = ?2 AND deleted_at IS NOT NULL
            AND NOT EXISTS (SELECT 1 FROM folders p WHERE p.id = i.folder_id AND p.deleted_at = i.deleted_at)
            AND NOT EXISTS (SELECT 1 FROM item_tabs t JOIN items p ON p.id = t.parent_id
                            WHERE t.child_id = i.id AND p.deleted_at = i.deleted_at)
@@ -39,11 +39,11 @@ pub fn list(conn: &Connection, campaign_id: &str, library: &str) -> Result<Trash
     );
     let mut stmt = conn.prepare(&folder_sql)?;
     let folders = stmt
-        .query_map(params![campaign_id, library], folders::from_row)?
+        .query_map(params![project_id, library], folders::from_row)?
         .collect::<Result<Vec<_>, _>>()?;
     let mut stmt = conn.prepare(&item_sql)?;
     let items = stmt
-        .query_map(params![campaign_id, library], items::from_row)?
+        .query_map(params![project_id, library], items::from_row)?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(Trash { folders, items })
 }
@@ -63,7 +63,7 @@ pub fn restore_item(conn: &Connection, id: &str, now: i64) -> Result<Item, DbErr
     let item = items::get(conn, id)?;
     if item.deleted_at.is_some() {
         // Kinds that need unique names (tables) can't come back beside a live item with the same name.
-        items::check_name_free(conn, &item.campaign_id, &item.library, &item.item_type, &item.name, Some(id))
+        items::check_name_free(conn, &item.project_id, &item.library, &item.item_type, &item.name, Some(id))
             .map_err(name_clash_on_restore)?;
     }
     let changed = conn.execute(
@@ -90,7 +90,7 @@ pub fn restore_folder(conn: &Connection, id: &str, now: i64) -> Result<Folder, D
     // Tables in the folder can't come back beside a live table with the same name.
     let coming_back: Vec<(String, String, String, String, String)> = {
         let mut stmt = conn.prepare(&format!(
-            "SELECT id, campaign_id, library, item_type, name FROM items
+            "SELECT id, project_id, library, item_type, name FROM items
              WHERE deleted_at = ?2 AND folder_id IN ({})",
             folders::SUBTREE
         ))?;
@@ -99,8 +99,8 @@ pub fn restore_folder(conn: &Connection, id: &str, now: i64) -> Result<Folder, D
         })?;
         rows.collect::<Result<Vec<_>, _>>()?
     };
-    for (item_id, campaign_id, library, item_type, name) in &coming_back {
-        items::check_name_free(conn, campaign_id, library, item_type, name, Some(item_id))
+    for (item_id, project_id, library, item_type, name) in &coming_back {
+        items::check_name_free(conn, project_id, library, item_type, name, Some(item_id))
             .map_err(name_clash_on_restore)?;
     }
     let tx = conn.unchecked_transaction()?;
@@ -171,7 +171,7 @@ pub fn purge_folder(conn: &Connection, id: &str) -> Result<(), DbError> {
 /// rows were removed.
 pub fn empty(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
     library: &str,
     deleted_before: Option<i64>,
 ) -> Result<usize, DbError> {
@@ -180,15 +180,15 @@ pub fn empty(
     // than the folder, so a folder old enough to purge never holds a newer item.
     let items = tx.execute(
         "DELETE FROM items
-         WHERE campaign_id = ?1 AND library = ?2 AND deleted_at IS NOT NULL
+         WHERE project_id = ?1 AND library = ?2 AND deleted_at IS NOT NULL
            AND (?3 IS NULL OR deleted_at < ?3)",
-        params![campaign_id, library, deleted_before],
+        params![project_id, library, deleted_before],
     )?;
     let folders = tx.execute(
         "DELETE FROM folders
-         WHERE campaign_id = ?1 AND library = ?2 AND deleted_at IS NOT NULL
+         WHERE project_id = ?1 AND library = ?2 AND deleted_at IS NOT NULL
            AND (?3 IS NULL OR deleted_at < ?3)",
-        params![campaign_id, library, deleted_before],
+        params![project_id, library, deleted_before],
     )?;
     tx.commit()?;
     Ok(items + folders)
@@ -197,11 +197,11 @@ pub fn empty(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{campaigns, open_in_memory};
+    use crate::db::{projects, open_in_memory};
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 

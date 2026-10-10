@@ -1,4 +1,4 @@
-//! Import a pack as a NEW campaign.
+//! Import a pack as a NEW project.
 //!
 //! Reading is separate from writing: `read_pack` opens the zip under safety
 //! limits, parses it, and tidies anything inconsistent (reporting each fix as a
@@ -8,7 +8,7 @@
 
 use super::format::*;
 use super::PackError;
-use crate::db::campaigns::{self, Campaign};
+use crate::db::projects::{self, Project};
 use crate::db::fields;
 use crate::db::tabs;
 use crate::db::{
@@ -122,7 +122,7 @@ pub struct ParsedCardImage {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackPreview {
-    pub campaign_name: String,
+    pub project_name: String,
     pub created_at: i64,
     pub app_version: String,
     pub format_version: u32,
@@ -135,7 +135,7 @@ pub struct PackPreview {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportResult {
-    pub campaign: Campaign,
+    pub project: Project,
     pub counts: Counts,
     pub warnings: Vec<String>,
 }
@@ -145,7 +145,7 @@ pub fn preview(pack: &ParsedPack) -> PackPreview {
         + pack.items.iter().filter(|i| i.deleted_at.is_some()).count()
         + pack.tags.iter().filter(|t| t.deleted_at.is_some()).count();
     PackPreview {
-        campaign_name: pack.manifest.campaign.name.clone(),
+        project_name: pack.manifest.project.name.clone(),
         created_at: pack.manifest.created_at,
         app_version: pack.manifest.app_version.clone(),
         format_version: pack.manifest.format_version,
@@ -946,7 +946,7 @@ fn looks_like_uuid(s: &str) -> bool {
         })
 }
 
-/// Reads a pack and imports it as a new campaign called "<name> (imported)".
+/// Reads a pack and imports it as a new project called "<name> (imported)".
 pub fn import_pack(conn: &Connection, bytes: &[u8], now: i64) -> Result<ImportResult, PackError> {
     let pack = read_pack(bytes)?;
     import_parsed(conn, &pack, now)
@@ -955,13 +955,13 @@ pub fn import_pack(conn: &Connection, bytes: &[u8], now: i64) -> Result<ImportRe
 pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<ImportResult, PackError> {
     let tx = conn.unchecked_transaction()?;
 
-    let original = pack.manifest.campaign.name.trim();
+    let original = pack.manifest.project.name.trim();
     let name = if original.is_empty() {
-        "Imported campaign".to_string()
+        "Imported project".to_string()
     } else {
         format!("{original} (imported)")
     };
-    let campaign = campaigns::create(&tx, &name, now)?;
+    let project = projects::create(&tx, &name, now)?;
 
     // Fresh ids for everything; the pack's own ids are kept only as provenance.
     let new_ids = |ids: Vec<&str>| -> HashMap<String, String> {
@@ -979,29 +979,29 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
     for f in &pack.folders {
         let parent = f.parent_id.as_ref().and_then(|p| folder_ids.get(p));
         tx.execute(
-            "INSERT INTO folders (id, campaign_id, library, parent_id, name, created_at, updated_at, deleted_at)
+            "INSERT INTO folders (id, project_id, library, parent_id, name, created_at, updated_at, deleted_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![folder_ids[&f.id], campaign.id, f.library, parent, f.name, f.created_at, f.updated_at, f.deleted_at],
+            params![folder_ids[&f.id], project.id, f.library, parent, f.name, f.created_at, f.updated_at, f.deleted_at],
         )
         .map_err(db_error)?;
     }
     for t in &pack.tags {
         let parent = t.parent_id.as_ref().and_then(|p| tag_ids.get(p));
         tx.execute(
-            "INSERT INTO tags (id, campaign_id, parent_id, name, color, created_at, updated_at, deleted_at)
+            "INSERT INTO tags (id, project_id, parent_id, name, color, created_at, updated_at, deleted_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![tag_ids[&t.id], campaign.id, parent, t.name, t.color, t.created_at, t.updated_at, t.deleted_at],
+            params![tag_ids[&t.id], project.id, parent, t.name, t.color, t.created_at, t.updated_at, t.deleted_at],
         )
         .map_err(db_error)?;
     }
     for i in &pack.items {
         let folder = i.folder_id.as_ref().and_then(|f| folder_ids.get(f));
         tx.execute(
-            "INSERT INTO items (id, campaign_id, library, item_type, name, icon, folder_id, visibility,
+            "INSERT INTO items (id, project_id, library, item_type, name, icon, folder_id, visibility,
                                 created_at, updated_at, deleted_at, origin_pack_id, origin_item_id)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
-                item_ids[&i.id], campaign.id, i.library, i.item_type, i.name, i.icon, folder, i.visibility,
+                item_ids[&i.id], project.id, i.library, i.item_type, i.name, i.icon, folder, i.visibility,
                 i.created_at, i.updated_at, i.deleted_at, pack.manifest.pack_id, i.id
             ],
         )
@@ -1196,17 +1196,17 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
 
     for d in &pack.field_definitions {
         tx.execute(
-            "INSERT INTO field_definitions (id, campaign_id, name, kind, description, config_json, created_at, updated_at, deleted_at)
+            "INSERT INTO field_definitions (id, project_id, name, kind, description, config_json, created_at, updated_at, deleted_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            params![field_ids[&d.id], campaign.id, d.name, d.kind, d.description, d.config_json, d.created_at, d.updated_at, d.deleted_at],
+            params![field_ids[&d.id], project.id, d.name, d.kind, d.description, d.config_json, d.created_at, d.updated_at, d.deleted_at],
         )
         .map_err(db_error)?;
     }
     for s in &pack.field_sets {
         tx.execute(
-            "INSERT INTO field_sets (id, campaign_id, name, description, created_at, updated_at, deleted_at)
+            "INSERT INTO field_sets (id, project_id, name, description, created_at, updated_at, deleted_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![field_set_ids[&s.id], campaign.id, s.name, s.description, s.created_at, s.updated_at, s.deleted_at],
+            params![field_set_ids[&s.id], project.id, s.name, s.description, s.created_at, s.updated_at, s.deleted_at],
         )
         .map_err(db_error)?;
     }
@@ -1260,11 +1260,11 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
         .map_err(db_error)?;
     }
 
-    settings::set_current_campaign_if_none(&tx, &campaign.id, now)?;
+    settings::set_current_project_if_none(&tx, &project.id, now)?;
     tx.commit()?;
 
     Ok(ImportResult {
-        campaign: campaigns::get_live(conn, &campaign.id)?,
+        project: projects::get_live(conn, &project.id)?,
         counts: pack.counts(),
         warnings: pack.warnings.clone(),
     })

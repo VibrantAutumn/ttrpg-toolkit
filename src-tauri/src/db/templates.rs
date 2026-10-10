@@ -105,7 +105,7 @@ pub fn create_from(
     }
 
     let tx = conn.unchecked_transaction()?;
-    let made = items::create(&tx, &template.campaign_id, LIBRARY, MADE_TYPE, name, folder_id, now)?;
+    let made = items::create(&tx, &template.project_id, LIBRARY, MADE_TYPE, name, folder_id, now)?;
     copy_content(&tx, &template, &made.id, now)?;
 
     for tab in tabs::list_tabs(&tx, template_id)? {
@@ -134,11 +134,11 @@ mod tests {
     use super::*;
     use crate::db::documents;
     use crate::db::fields::{self, ValueIndex};
-    use crate::db::{campaigns, folders, open_in_memory, search, tags};
+    use crate::db::{projects, folders, open_in_memory, search, tags};
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -287,13 +287,13 @@ mod tests {
         let (conn, camp) = setup();
         let t = template(&conn, &camp, "NPC");
         documents::set_body(&conn, &t.id, "text", 3).unwrap();
-        let items_before = count(&conn, "SELECT COUNT(*) FROM items WHERE campaign_id = ?1", &camp);
+        let items_before = count(&conn, "SELECT COUNT(*) FROM items WHERE project_id = ?1", &camp);
         // A blank name, a folder that doesn't exist, and a folder of another tool's library.
         assert!(matches!(create_from(&conn, &t.id, "  ", None, 10), Err(DbError::EmptyName)));
         assert!(matches!(create_from(&conn, &t.id, "A", Some("no-folder"), 10), Err(DbError::NotFound)));
         let wrong = folders::create(&conn, &camp, "cards", None, "Cards", 4).unwrap();
         assert!(matches!(create_from(&conn, &t.id, "A", Some(&wrong.id), 10), Err(DbError::Invalid(_))));
-        assert_eq!(count(&conn, "SELECT COUNT(*) FROM items WHERE campaign_id = ?1", &camp), items_before);
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM items WHERE project_id = ?1", &camp), items_before);
         let bodies: i64 = conn.query_row("SELECT COUNT(*) FROM document_content", [], |r| r.get(0)).unwrap();
         assert_eq!(bodies, 1); // only the template's own
     }

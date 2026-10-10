@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { listSpreads, type SpreadEntry } from "../../api/cards";
 import { RollLogList } from "../../components/results/RollLogList";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
 import { drawSpreadById } from "../../state/spreadActions";
@@ -14,29 +14,29 @@ import { SourceDraw } from "./SourceDraw";
  * recent draws are listed below.
  */
 export function DrawTab() {
-  const { campaign } = useCurrentCampaign();
+  const { project } = useCurrentProject();
   const dataVersion = useDataVersion();
   const { openItem } = useNavigation();
-  const campaignId = campaign?.id ?? null;
+  const projectId = project?.id ?? null;
   const [spreads, setSpreads] = useState<SpreadEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!campaignId) {
+    if (!projectId) {
       setSpreads([]);
       return;
     }
     let active = true;
-    listSpreads(campaignId)
+    listSpreads(projectId)
       .then((list) => active && setSpreads(list))
       .catch((e) => active && setError(String(e)));
     return () => {
       active = false;
     };
-  }, [campaignId, dataVersion]);
+  }, [projectId, dataVersion]);
 
-  if (!campaignId) {
-    return <p className="empty">No campaign is open. Tap the bar at the top to choose one.</p>;
+  if (!projectId) {
+    return <p className="empty">No project is open. Tap the bar at the top to choose one.</p>;
   }
 
   async function drawFromSpread(spreadId: string) {

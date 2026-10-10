@@ -22,12 +22,12 @@ fn fts_query(text: &str) -> Option<String> {
     }
 }
 
-/// Live items in a campaign whose name, tag names or document text match `text`,
+/// Live items in a project whose name, tag names or document text match `text`,
 /// best matches first (name matches outrank tag and field matches, which outrank text). Optionally limited to one
 /// library. Blank or punctuation-only input finds nothing.
 pub fn search(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
     text: &str,
     library: Option<&str>,
     limit: u32,
@@ -40,13 +40,13 @@ pub fn search(
         "SELECT {columns} FROM search_index
          JOIN items i ON i.id = search_index.item_id
          WHERE search_index MATCH ?1
-           AND i.campaign_id = ?2 AND i.deleted_at IS NULL
+           AND i.project_id = ?2 AND i.deleted_at IS NULL
            AND (?3 IS NULL OR i.library = ?3)
          ORDER BY bm25(search_index, 0.0, 10.0, 2.0, 1.0, 2.0), i.name COLLATE NOCASE
          LIMIT ?4"
     ))?;
     let rows = stmt.query_map(
-        params![query, campaign_id, library, limit.clamp(1, 200)],
+        params![query, project_id, library, limit.clamp(1, 200)],
         items::from_row,
     )?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -56,11 +56,11 @@ pub fn search(
 mod tests {
     use super::*;
     use crate::db::migrations::{migrate, MIGRATIONS};
-    use crate::db::{campaigns, documents, folders, open_in_memory, tags, trash};
+    use crate::db::{projects, documents, folders, open_in_memory, tags, trash};
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -209,9 +209,9 @@ mod tests {
     }
 
     #[test]
-    fn results_respect_campaign_library_and_limit() {
+    fn results_respect_project_library_and_limit() {
         let (conn, camp) = setup();
-        let other = campaigns::create(&conn, "Other", 1).unwrap();
+        let other = projects::create(&conn, "Other", 1).unwrap();
         new_item(&conn, &camp, "w", "Dragon One");
         new_item(&conn, &camp, "maps", "Dragon Map");
         new_item(&conn, &other.id, "w", "Dragon Elsewhere");
@@ -264,26 +264,47 @@ mod tests {
         assert_eq!(find(&conn, &camp, "dragon"), ["Dragon Lair", "Zebra", "Aardvark"]);
     }
 
+    /// Rows for databases still at an old schema (before migration 24 renamed campaigns to
+    /// projects), written as raw SQL because the normal helpers speak the current schema.
+    fn old_rows(conn: &Connection, item_name: &str, tag: &str) -> (String, String) {
+        conn.execute("INSERT INTO campaigns (id, name, created_at, updated_at) VALUES ('old', 'Old', 1, 1)", []).unwrap();
+        conn.execute(
+            "INSERT INTO items (id, campaign_id, library, item_type, name, created_at, updated_at)
+             VALUES ('item', 'old', 'w', 'document', ?1, 1, 1)",
+            [item_name],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO tags (id, campaign_id, name, created_at, updated_at) VALUES ('tag', 'old', ?1, 1, 1)", [tag]).unwrap();
+        conn.execute("INSERT INTO item_tags (item_id, tag_id, created_at, updated_at) VALUES ('item', 'tag', 2, 2)", []).unwrap();
+        ("old".to_string(), "item".to_string())
+    }
+
+    struct IdOnly {
+        id: String,
+    }
+
+    fn projects_stub(id: &str) -> IdOnly {
+        IdOnly { id: id.to_string() }
+    }
+
     #[test]
     fn upgrading_keeps_names_and_tags_searchable_and_adds_text_search() {
         // A database at schema version 6 (before document text existed).
         let mut conn = Connection::open_in_memory().unwrap();
         conn.pragma_update(None, "foreign_keys", true).unwrap();
         migrate(&mut conn, &MIGRATIONS[..6]).unwrap();
-        let camp = campaigns::create(&conn, "Old", 1).unwrap();
-        let item = items::create(&conn, &camp.id, "w", "document", "Ancient Scroll", None, 1).unwrap();
-        let t = tags::create(&conn, &camp.id, None, "Relic", None, 1).unwrap();
-        tags::add_to_item(&conn, &item.id, &t.id, 2).unwrap();
+        let (camp_id, item_id) = old_rows(&conn, "Ancient Scroll", "Relic");
 
         migrate(&mut conn, MIGRATIONS).unwrap();
 
-        assert_eq!(find(&conn, &camp.id, "scroll"), ["Ancient Scroll"]);
-        assert_eq!(find(&conn, &camp.id, "relic"), ["Ancient Scroll"]);
-        documents::set_body(&conn, &item.id, "Written in elvish.", 3).unwrap();
-        assert_eq!(find(&conn, &camp.id, "elvish"), ["Ancient Scroll"]);
+        let camp = camp_id;
+        assert_eq!(find(&conn, &camp, "scroll"), ["Ancient Scroll"]);
+        assert_eq!(find(&conn, &camp, "relic"), ["Ancient Scroll"]);
+        documents::set_body(&conn, &item_id, "Written in elvish.", 3).unwrap();
+        assert_eq!(find(&conn, &camp, "elvish"), ["Ancient Scroll"]);
         // New items still get indexed by the original triggers.
-        let fresh = new_item(&conn, &camp.id, "w", "Fresh");
-        assert_eq!(find(&conn, &camp.id, "fresh"), [fresh.name]);
+        let fresh = new_item(&conn, &camp, "w", "Fresh");
+        assert_eq!(find(&conn, &camp, "fresh"), [fresh.name]);
     }
 
     fn text_value(conn: &Connection, item: &str, field: &str, text: &str, now: i64) {
@@ -334,18 +355,28 @@ mod tests {
 
     #[test]
     fn upgrading_indexes_the_field_values_that_are_already_there() {
-        use crate::db::fields;
         let mut conn = Connection::open_in_memory().unwrap();
         conn.pragma_update(None, "foreign_keys", true).unwrap();
         migrate(&mut conn, &MIGRATIONS[..21]).unwrap();
-        let camp = campaigns::create(&conn, "Old", 1).unwrap();
-        let item = new_item(&conn, &camp.id, "w", "Legacy");
-        let field = fields::create_definition(&conn, &camp.id, "Motto", "text", "", "{}", 2).unwrap();
-        text_value(&conn, &item.id, &field.id, "Never yield", 3);
-        documents::set_body(&conn, &item.id, "Some old text", 4).unwrap();
-        let t = tags::create(&conn, &camp.id, None, "Heirloom", None, 5).unwrap();
-        tags::add_to_item(&conn, &item.id, &t.id, 6).unwrap();
-        assert!(find(&conn, &camp.id, "yield").is_empty(), "not searchable before the upgrade");
+        let (camp_id, item_id) = old_rows(&conn, "Legacy", "Heirloom");
+        conn.execute(
+            "INSERT INTO field_definitions (id, campaign_id, name, kind, created_at, updated_at) VALUES ('fd', 'old', 'Motto', 'text', 2, 2)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO field_values (item_id, field_id, value_json, search_text, created_at, updated_at)
+             VALUES ('item', 'fd', '\"Never yield\"', 'Never yield', 3, 3)",
+            [],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO document_content (item_id, body, created_at, updated_at) VALUES ('item', 'Some old text', 4, 4)", []).unwrap();
+        let _ = item_id;
+        let camp = projects_stub(&camp_id);
+        let before: i64 = conn
+            .query_row("SELECT COUNT(*) FROM search_index WHERE search_index MATCH 'yield'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(before, 0, "not searchable before the upgrade");
 
         migrate(&mut conn, MIGRATIONS).unwrap();
 
@@ -362,10 +393,8 @@ mod tests {
         let mut conn = Connection::open_in_memory().unwrap();
         conn.pragma_update(None, "foreign_keys", true).unwrap();
         migrate(&mut conn, &MIGRATIONS[..3]).unwrap();
-        let camp = campaigns::create(&conn, "Old", 1).unwrap();
-        let item = new_item(&conn, &camp.id, "w", "Legacy Item");
-        let t = tags::create(&conn, &camp.id, None, "Heirloom", None, 1).unwrap();
-        tags::add_to_item(&conn, &item.id, &t.id, 2).unwrap();
+        let (camp_id, _) = old_rows(&conn, "Legacy Item", "Heirloom");
+        let camp = projects_stub(&camp_id);
 
         migrate(&mut conn, MIGRATIONS).unwrap();
 

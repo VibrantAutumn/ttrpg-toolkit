@@ -4,7 +4,7 @@
 //! (`src/lib/tables/`).
 //!
 //! Entries are rows owned by their table (not items). They are ordered, carry a
-//! weight (0 = never picked) and campaign tags, and are soft-deleted so a
+//! weight (0 = never picked) and project tags, and are soft-deleted so a
 //! deletion can be undone. "Recent" picks are per-device memory for the
 //! "avoid recent" setting and are never part of content packs.
 
@@ -36,7 +36,7 @@ pub struct Entry {
     pub id: String,
     pub text: String,
     pub weight: i64,
-    /// Live campaign tags on the entry (ids).
+    /// Live project tags on the entry (ids).
     pub tag_ids: Vec<String>,
 }
 
@@ -49,7 +49,7 @@ pub struct TableDetail {
     pub avoid_recent: i64,
     /// Live entries, in order.
     pub entries: Vec<Entry>,
-    /// Another live table in the campaign has this name (ignoring case).
+    /// Another live table in the project has this name (ignoring case).
     pub duplicate_name: bool,
     /// Slots that name this table find it: it is the oldest with that name.
     pub found_by_slots: bool,
@@ -105,7 +105,7 @@ pub struct RollableEntry {
     pub id: String,
     pub text: String,
     pub weight: i64,
-    /// Live campaign tags on the entry (ids), for choosing entries by tag.
+    /// Live project tags on the entry (ids), for choosing entries by tag.
     pub tag_ids: Vec<String>,
 }
 
@@ -198,9 +198,9 @@ fn name_status(conn: &Connection, item: &Item) -> Result<(bool, bool), DbError> 
         "SELECT COUNT(*),
                 COALESCE(SUM(created_at < ?5 OR (created_at = ?5 AND id < ?4)), 0)
          FROM items
-         WHERE campaign_id = ?1 AND library = ?2 AND item_type = ?3 AND deleted_at IS NULL
+         WHERE project_id = ?1 AND library = ?2 AND item_type = ?3 AND deleted_at IS NULL
            AND name = ?6 COLLATE NOCASE AND id <> ?4",
-        params![item.campaign_id, LIBRARY, TABLE_TYPE, item.id, item.created_at, item.name],
+        params![item.project_id, LIBRARY, TABLE_TYPE, item.id, item.created_at, item.name],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
     Ok((count > 0, older == 0))
@@ -446,7 +446,7 @@ pub fn move_entry(conn: &Connection, entry_id: &str, to_index: usize, now: i64) 
     Ok(())
 }
 
-/// Puts a campaign tag on an entry. Adding it twice is harmless; one removed
+/// Puts a project tag on an entry. Adding it twice is harmless; one removed
 /// earlier comes back.
 pub fn add_entry_tag(conn: &Connection, entry_id: &str, tag_id: &str, now: i64) -> Result<(), DbError> {
     let table = require_live_entry(conn, entry_id)?;
@@ -454,8 +454,8 @@ pub fn add_entry_tag(conn: &Connection, entry_id: &str, tag_id: &str, now: i64) 
     if tag.deleted_at.is_some() {
         return Err(DbError::NotFound);
     }
-    if tag.campaign_id != table.campaign_id {
-        return Err(DbError::Invalid("That tag belongs to a different campaign."));
+    if tag.project_id != table.project_id {
+        return Err(DbError::Invalid("That tag belongs to a different project."));
     }
     conn.execute(
         "INSERT INTO table_entry_tags (entry_id, tag_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)
@@ -476,25 +476,25 @@ pub fn remove_entry_tag(conn: &Connection, entry_id: &str, tag_id: &str, now: i6
     Ok(())
 }
 
-/// Every live table in a campaign (any folder), alphabetical.
-pub fn list(conn: &Connection, campaign_id: &str) -> Result<Vec<TableSummary>, DbError> {
+/// Every live table in a project (any folder), alphabetical.
+pub fn list(conn: &Connection, project_id: &str) -> Result<Vec<TableSummary>, DbError> {
     let mut stmt = conn.prepare(
         "SELECT i.id, i.name,
                 (SELECT COUNT(*) FROM table_entries e WHERE e.table_id = i.id AND e.deleted_at IS NULL),
                 EXISTS (SELECT 1 FROM items o
-                        WHERE o.campaign_id = i.campaign_id AND o.library = i.library
+                        WHERE o.project_id = i.project_id AND o.library = i.library
                           AND o.item_type = i.item_type AND o.deleted_at IS NULL
                           AND o.name = i.name COLLATE NOCASE AND o.id <> i.id),
                 NOT EXISTS (SELECT 1 FROM items o
-                        WHERE o.campaign_id = i.campaign_id AND o.library = i.library
+                        WHERE o.project_id = i.project_id AND o.library = i.library
                           AND o.item_type = i.item_type AND o.deleted_at IS NULL
                           AND o.name = i.name COLLATE NOCASE AND o.id <> i.id
                           AND (o.created_at < i.created_at OR (o.created_at = i.created_at AND o.id < i.id)))
          FROM items i
-         WHERE i.campaign_id = ?1 AND i.library = ?2 AND i.item_type = ?3 AND i.deleted_at IS NULL
+         WHERE i.project_id = ?1 AND i.library = ?2 AND i.item_type = ?3 AND i.deleted_at IS NULL
          ORDER BY i.name COLLATE NOCASE, i.created_at, i.id",
     )?;
-    let rows = stmt.query_map(params![campaign_id, LIBRARY, TABLE_TYPE], |r| {
+    let rows = stmt.query_map(params![project_id, LIBRARY, TABLE_TYPE], |r| {
         Ok(TableSummary {
             item_id: r.get(0)?,
             name: r.get(1)?,
@@ -506,17 +506,17 @@ pub fn list(conn: &Connection, campaign_id: &str) -> Result<Vec<TableSummary>, D
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
-/// Every live table in a campaign with its live entries and recent picks, oldest
+/// Every live table in a project with its live entries and recent picks, oldest
 /// table first (so when two tables share a name the roller finds the oldest).
-pub fn load_rollable(conn: &Connection, campaign_id: &str) -> Result<Vec<RollableTable>, DbError> {
+pub fn load_rollable(conn: &Connection, project_id: &str) -> Result<Vec<RollableTable>, DbError> {
     let mut stmt = conn.prepare(
         "SELECT i.id, i.name, COALESCE(t.avoid_recent, 0)
          FROM items i LEFT JOIN random_tables t ON t.item_id = i.id
-         WHERE i.campaign_id = ?1 AND i.library = ?2 AND i.item_type = ?3 AND i.deleted_at IS NULL
+         WHERE i.project_id = ?1 AND i.library = ?2 AND i.item_type = ?3 AND i.deleted_at IS NULL
          ORDER BY i.created_at, i.id",
     )?;
     let mut tables = stmt
-        .query_map(params![campaign_id, LIBRARY, TABLE_TYPE], |r| {
+        .query_map(params![project_id, LIBRARY, TABLE_TYPE], |r| {
             Ok(RollableTable { id: r.get(0)?, name: r.get(1)?, avoid_recent: r.get(2)?, entries: vec![], recent: vec![] })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -525,11 +525,11 @@ pub fn load_rollable(conn: &Connection, campaign_id: &str) -> Result<Vec<Rollabl
     let mut stmt = conn.prepare(
         "SELECT e.table_id, e.id, e.text, e.weight
          FROM table_entries e JOIN items i ON i.id = e.table_id
-         WHERE i.campaign_id = ?1 AND i.library = ?2 AND i.item_type = ?3 AND i.deleted_at IS NULL
+         WHERE i.project_id = ?1 AND i.library = ?2 AND i.item_type = ?3 AND i.deleted_at IS NULL
            AND e.deleted_at IS NULL
          ORDER BY e.table_id, e.position, e.created_at, e.id",
     )?;
-    for row in stmt.query_map(params![campaign_id, LIBRARY, TABLE_TYPE], |r| {
+    for row in stmt.query_map(params![project_id, LIBRARY, TABLE_TYPE], |r| {
         Ok((
             r.get::<_, String>(0)?,
             RollableEntry { id: r.get(1)?, text: r.get(2)?, weight: r.get(3)?, tag_ids: vec![] },
@@ -553,11 +553,11 @@ pub fn load_rollable(conn: &Connection, campaign_id: &str) -> Result<Vec<Rollabl
          JOIN table_entries e ON e.id = l.entry_id AND e.deleted_at IS NULL
          JOIN items i ON i.id = e.table_id
          JOIN tags t ON t.id = l.tag_id AND t.deleted_at IS NULL
-         WHERE i.campaign_id = ?1 AND i.library = ?2 AND i.item_type = ?3 AND i.deleted_at IS NULL
+         WHERE i.project_id = ?1 AND i.library = ?2 AND i.item_type = ?3 AND i.deleted_at IS NULL
            AND l.deleted_at IS NULL
          ORDER BY l.created_at, l.tag_id",
     )?;
-    for row in stmt.query_map(params![campaign_id, LIBRARY, TABLE_TYPE], |r| {
+    for row in stmt.query_map(params![project_id, LIBRARY, TABLE_TYPE], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
     })? {
         let (entry_id, tag_id) = row?;
@@ -570,10 +570,10 @@ pub fn load_rollable(conn: &Connection, campaign_id: &str) -> Result<Vec<Rollabl
         "SELECT r.table_id, r.entry_id
          FROM table_recent r JOIN items i ON i.id = r.table_id
          JOIN table_entries e ON e.id = r.entry_id AND e.deleted_at IS NULL
-         WHERE i.campaign_id = ?1 AND i.library = ?2 AND i.item_type = ?3 AND i.deleted_at IS NULL
+         WHERE i.project_id = ?1 AND i.library = ?2 AND i.item_type = ?3 AND i.deleted_at IS NULL
          ORDER BY r.id DESC",
     )?;
-    for row in stmt.query_map(params![campaign_id, LIBRARY, TABLE_TYPE], |r| {
+    for row in stmt.query_map(params![project_id, LIBRARY, TABLE_TYPE], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
     })? {
         let (table_id, entry_id) = row?;
@@ -584,10 +584,10 @@ pub fn load_rollable(conn: &Connection, campaign_id: &str) -> Result<Vec<Rollabl
     Ok(tables)
 }
 
-/// Live entries in the campaign whose text contains `needle` (ignoring case):
+/// Live entries in the project whose text contains `needle` (ignoring case):
 /// the candidates for rewriting slots when a table is renamed. The app checks
 /// each one properly with its slot parser.
-pub fn entries_mentioning(conn: &Connection, campaign_id: &str, needle: &str) -> Result<Vec<EntryRef>, DbError> {
+pub fn entries_mentioning(conn: &Connection, project_id: &str, needle: &str) -> Result<Vec<EntryRef>, DbError> {
     if needle.trim().is_empty() {
         return Ok(vec![]);
     }
@@ -598,11 +598,11 @@ pub fn entries_mentioning(conn: &Connection, campaign_id: &str, needle: &str) ->
     let mut stmt = conn.prepare(
         "SELECT e.id, i.id, i.name, e.text
          FROM table_entries e JOIN items i ON i.id = e.table_id
-         WHERE i.campaign_id = ?1 AND i.library = ?2 AND i.item_type = ?3 AND i.deleted_at IS NULL
+         WHERE i.project_id = ?1 AND i.library = ?2 AND i.item_type = ?3 AND i.deleted_at IS NULL
            AND e.deleted_at IS NULL AND e.text LIKE ?4 ESCAPE '\\'
          ORDER BY i.name COLLATE NOCASE, e.position, e.created_at, e.id",
     )?;
-    let rows = stmt.query_map(params![campaign_id, LIBRARY, TABLE_TYPE, pattern], |r| {
+    let rows = stmt.query_map(params![project_id, LIBRARY, TABLE_TYPE, pattern], |r| {
         Ok(EntryRef { entry_id: r.get(0)?, table_id: r.get(1)?, table_name: r.get(2)?, text: r.get(3)? })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -648,11 +648,11 @@ pub fn clear_recent(conn: &Connection, table_id: &str) -> Result<(), DbError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{campaigns, open_in_memory, search, tags, trash};
+    use crate::db::{projects, open_in_memory, search, tags, trash};
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -826,7 +826,7 @@ mod tests {
     }
 
     #[test]
-    fn entry_tags_use_campaign_tags() {
+    fn entry_tags_use_project_tags() {
         let (conn, camp) = setup();
         let t = table(&conn, &camp, "Rumors");
         let e = add(&conn, &t.id, &["a", "b"]);
@@ -851,11 +851,11 @@ mod tests {
     }
 
     #[test]
-    fn entry_tags_must_be_live_and_from_the_same_campaign() {
+    fn entry_tags_must_be_live_and_from_the_same_project() {
         let (conn, camp) = setup();
         let t = table(&conn, &camp, "Rumors");
         let e = add(&conn, &t.id, &["a"]).remove(0);
-        let other = campaigns::create(&conn, "Other", 2).unwrap();
+        let other = projects::create(&conn, "Other", 2).unwrap();
         let foreign = tags::create(&conn, &other.id, None, "Foreign", None, 2).unwrap();
         let dead = tags::create(&conn, &camp, None, "Dead", None, 2).unwrap();
         tags::soft_delete(&conn, &dead.id, 3).unwrap();
@@ -937,8 +937,8 @@ mod tests {
         items::soft_delete(&conn, &old.id, 30).unwrap();
         let n = get(&conn, &new.id).unwrap();
         assert_eq!((n.duplicate_name, n.found_by_slots), (false, true));
-        // Tables of other campaigns with the same name don't count.
-        let other = campaigns::create(&conn, "Other", 31).unwrap();
+        // Tables of other projects with the same name don't count.
+        let other = projects::create(&conn, "Other", 31).unwrap();
         table(&conn, &other.id, "rumors");
         assert!(!get(&conn, &new.id).unwrap().duplicate_name);
     }
@@ -961,10 +961,10 @@ mod tests {
     }
 
     #[test]
-    fn the_same_name_is_fine_for_other_campaigns_other_kinds_and_trashed_tables() {
+    fn the_same_name_is_fine_for_other_projects_other_kinds_and_trashed_tables() {
         let (conn, camp) = setup();
         let first = table(&conn, &camp, "Rumors");
-        let other = campaigns::create(&conn, "Other", 2).unwrap();
+        let other = projects::create(&conn, "Other", 2).unwrap();
         table(&conn, &other.id, "Rumors");
         items::create(&conn, &camp, "worldbuilding", "document", "Rumors", None, 3).unwrap();
         items::create(&conn, &camp, LIBRARY, "other", "Rumors", None, 3).unwrap();
@@ -1132,8 +1132,8 @@ mod tests {
         assert!(entries_mentioning(&conn, &camp, "%").unwrap().len() == 1);
         assert!(entries_mentioning(&conn, &camp, "_").unwrap().len() == 1);
         assert!(entries_mentioning(&conn, &camp, "  ").unwrap().is_empty());
-        // Another campaign's entries are never returned.
-        let other = campaigns::create(&conn, "Other", 4).unwrap();
+        // Another project's entries are never returned.
+        let other = projects::create(&conn, "Other", 4).unwrap();
         assert!(entries_mentioning(&conn, &other.id, "rumors").unwrap().is_empty());
     }
 

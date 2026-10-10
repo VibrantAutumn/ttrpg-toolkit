@@ -35,12 +35,12 @@ type Of<K extends FieldKind> = Extract<FieldDefinition, { kind: K }>;
  * is saved.
  */
 export function FieldDefinitionForm({
-  campaignId,
+  projectId,
   initial,
   onDone,
   onCancel,
 }: {
-  campaignId: string;
+  projectId: string;
   initial: FieldDefinition | null;
   onDone: () => void;
   onCancel: () => void;
@@ -60,7 +60,7 @@ export function FieldDefinitionForm({
     if (found.length > 0) return setProblems(found);
     setSaving(true);
     try {
-      const saved = initial ? await updateFieldDefinition(draft) : await createFieldDefinition(campaignId, draft);
+      const saved = initial ? await updateFieldDefinition(draft) : await createFieldDefinition(projectId, draft);
       // A dropdown's values sort and search by its choices, and a removed choice clears them.
       if (initial && saved.kind === "dropdown") await refreshFieldValues(saved);
       bumpDataVersion();

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { listNamePresets, type PresetEntry } from "../../api/namePresets";
 import { loadLastSetup, parseSetup } from "../../lib/tables/nameSetup";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { useDataVersion } from "../../state/dataVersion";
 import { deviceStorage } from "../../state/deviceStorage";
 import { generateNameFromSetup } from "../../state/nameActions";
@@ -12,38 +12,38 @@ import { generateNameFromSetup } from "../../state/nameActions";
  * the Names tab.)
  */
 export function QuickNameWidget() {
-  const { campaign } = useCurrentCampaign();
+  const { project } = useCurrentProject();
   const dataVersion = useDataVersion();
-  const campaignId = campaign?.id ?? null;
+  const projectId = project?.id ?? null;
   const [presets, setPresets] = useState<PresetEntry[]>([]);
   const [chosen, setChosen] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!campaignId) {
+    if (!projectId) {
       setPresets([]);
       return;
     }
     let active = true;
-    listNamePresets(campaignId)
+    listNamePresets(projectId)
       .then((list) => active && setPresets(list))
       .catch((e) => active && setError(String(e)));
     return () => {
       active = false;
     };
-  }, [campaignId, dataVersion]);
+  }, [projectId, dataVersion]);
 
-  if (!campaignId) return <p className="empty">Choose a campaign to generate names.</p>;
+  if (!projectId) return <p className="empty">Choose a project to generate names.</p>;
 
   async function generate() {
-    if (!campaignId) return;
+    if (!projectId) return;
     const preset = presets.find((p) => p.itemId === chosen);
     const setup = preset ? parseSetup(preset.setupJson) : loadLastSetup(deviceStorage());
     if (!setup) {
       setError(`“${preset?.name}” can't be read by this version of the app.`);
       return;
     }
-    const outcome = await generateNameFromSetup(campaignId, setup, preset?.name ?? null);
+    const outcome = await generateNameFromSetup(projectId, setup, preset?.name ?? null);
     setError(outcome.ok ? null : outcome.message);
   }
 

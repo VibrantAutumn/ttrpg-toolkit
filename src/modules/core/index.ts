@@ -1,24 +1,24 @@
 import type { ModuleDefinition } from "../../registry/types";
-import { CampaignsScreen } from "./CampaignsScreen";
+import { ProjectsScreen } from "./ProjectsScreen";
 
-/** App-level features that exist in every campaign setup. */
+/** App-level features that exist in every project setup. */
 export const coreModule: ModuleDefinition = {
   id: "core",
   tools: [
     {
-      id: "campaigns",
-      label: "Campaigns",
+      id: "projects",
+      label: "Projects",
       icon: "🏕️",
       order: 0,
-      component: CampaignsScreen,
+      component: ProjectsScreen,
     },
   ],
   commands: [
     {
-      id: "core.open-campaigns",
-      label: "Go to Campaigns",
-      keywords: ["campaign", "switch", "list"],
-      run: (ctx) => ctx.openTool("campaigns"),
+      id: "core.open-projects",
+      label: "Go to Projects",
+      keywords: ["project", "switch", "list"],
+      run: (ctx) => ctx.openTool("projects"),
     },
     {
       id: "core.quick-tools",

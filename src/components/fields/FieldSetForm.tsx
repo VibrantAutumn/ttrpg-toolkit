@@ -7,13 +7,13 @@ import { bumpDataVersion } from "../../state/dataVersion";
 
 /** Makes or changes a field set: its name and which fields it holds, in order. */
 export function FieldSetForm({
-  campaignId,
+  projectId,
   initial,
   definitions,
   onDone,
   onCancel,
 }: {
-  campaignId: string;
+  projectId: string;
   initial: FieldSet | null;
   definitions: FieldDefinition[];
   onDone: () => void;
@@ -40,7 +40,7 @@ export function FieldSetForm({
     if (name.trim() === "") return setError("Give the set a name.");
     setSaving(true);
     try {
-      const set = initial ? await updateFieldSet(initial.id, name, description) : await createFieldSet(campaignId, name, description);
+      const set = initial ? await updateFieldSet(initial.id, name, description) : await createFieldSet(projectId, name, description);
       await setFieldSetFields(set.id, members);
       bumpDataVersion();
       onDone();

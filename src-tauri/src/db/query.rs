@@ -1,5 +1,5 @@
 //! The query engine: runs a saved question ("every document tagged NPC whose Status is Alive")
-//! against a campaign.
+//! against a project.
 //!
 //! The shape of a query, and what it means, is defined in TypeScript (`src/lib/queries/query.ts`);
 //! this module reads the same JSON, checks it again (a stored query can come from a content pack),
@@ -12,7 +12,7 @@
 //! connection). No value is ever pasted into the SQL text; everything the person typed is a parameter.
 //!
 //! The tests compare this module with a slow, obviously-correct evaluator (`query_tests.rs`) over
-//! thousands of random queries on random campaigns, so the SQL can't quietly disagree with the meaning.
+//! thousands of random queries on random projects, so the SQL can't quietly disagree with the meaning.
 
 use super::error::DbError;
 use super::items::{self, Item};
@@ -324,7 +324,7 @@ pub fn register_functions(conn: &Connection) -> rusqlite::Result<()> {
 
 struct Builder<'a> {
     conn: &'a Connection,
-    campaign_id: &'a str,
+    project_id: &'a str,
     now: i64,
     params: Vec<Value>,
 }
@@ -348,8 +348,8 @@ impl Builder<'_> {
         Ok(self
             .conn
             .query_row(
-                "SELECT kind FROM field_definitions WHERE id = ?1 AND campaign_id = ?2 AND deleted_at IS NULL",
-                [field_id, self.campaign_id],
+                "SELECT kind FROM field_definitions WHERE id = ?1 AND project_id = ?2 AND deleted_at IS NULL",
+                [field_id, self.project_id],
                 |r| r.get(0),
             )
             .optional()?)
@@ -545,14 +545,14 @@ pub struct QueryResult {
     pub truncated: bool,
 }
 
-/// Runs a query against one campaign. `now` is the current time in milliseconds (for "changed in
+/// Runs a query against one project. `now` is the current time in milliseconds (for "changed in
 /// the last N days"); `only_type` keeps only items of that type (a pool asks for cards).
-pub fn run(conn: &Connection, campaign_id: &str, query: &Query, now: i64, only_type: Option<&str>) -> Result<QueryResult, DbError> {
+pub fn run(conn: &Connection, project_id: &str, query: &Query, now: i64, only_type: Option<&str>) -> Result<QueryResult, DbError> {
     validate(query)?;
-    let mut b = Builder { conn, campaign_id, now, params: vec![Value::Text(campaign_id.to_string())] };
+    let mut b = Builder { conn, project_id, now, params: vec![Value::Text(project_id.to_string())] };
     let mut sql = format!(
         "SELECT {} FROM items i
-         WHERE i.campaign_id = ? AND i.deleted_at IS NULL
+         WHERE i.project_id = ? AND i.deleted_at IS NULL
            AND i.id NOT IN (SELECT child_id FROM item_tabs WHERE child_id IS NOT NULL)",
         items::qualified_columns("i")
     );
@@ -578,8 +578,8 @@ pub fn run(conn: &Connection, campaign_id: &str, query: &Query, now: i64, only_t
 }
 
 /// Reads a stored query and runs it.
-pub fn run_json(conn: &Connection, campaign_id: &str, json: &str, now: i64, only_type: Option<&str>) -> Result<QueryResult, DbError> {
-    run(conn, campaign_id, &parse(json)?, now, only_type)
+pub fn run_json(conn: &Connection, project_id: &str, json: &str, now: i64, only_type: Option<&str>) -> Result<QueryResult, DbError> {
+    run(conn, project_id, &parse(json)?, now, only_type)
 }
 
 #[cfg(test)]

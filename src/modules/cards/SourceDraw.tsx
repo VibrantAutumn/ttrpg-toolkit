@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { listCollections } from "../../api/cards";
 import type { Item } from "../../api/library";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { useDataVersion } from "../../state/dataVersion";
 import { DrawPanel } from "./DrawPanel";
 import { cardTypeIcon } from "./icons";
@@ -18,31 +18,31 @@ export function SourceDraw({
   showResult?: boolean;
   showHeading?: boolean;
 }) {
-  const { campaign } = useCurrentCampaign();
+  const { project } = useCurrentProject();
   const dataVersion = useDataVersion();
-  const campaignId = campaign?.id ?? null;
+  const projectId = project?.id ?? null;
   const [sources, setSources] = useState<Item[]>([]);
   const [chosenId, setChosenId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!campaignId) {
+    if (!projectId) {
       setSources([]);
       return;
     }
     let active = true;
-    listCollections(campaignId)
+    listCollections(projectId)
       .then((list) => active && setSources(list))
       .catch((e) => active && setError(String(e)));
     return () => {
       active = false;
     };
-  }, [campaignId, dataVersion]);
+  }, [projectId, dataVersion]);
 
   // Keep the choice valid: the first source by default, and another if it was deleted.
   const chosen = sources.find((s) => s.id === chosenId) ?? sources[0];
 
-  if (!campaignId) return <p className="empty">No campaign is open.</p>;
+  if (!projectId) return <p className="empty">No project is open.</p>;
   return (
     <div>
       {error && <p className="error">{error}</p>}

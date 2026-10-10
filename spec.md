@@ -11,11 +11,11 @@ The features are the same; the structure underneath is new. Each tool keeps its 
 - **One field system** powers document properties, stat blocks and calendar dates.
 - **One query system** (tags, fields, folders, item type) powers search, table slots, card pools, timeline lanes and widgets.
 - **One results engine** for dice, tables, card draws and generators, with a shared roll log, lock-and-reroll and "save to session".
-- **Campaign state** (current date, session, party location, weather) is shared by the calendar, maps, GM screen and sessions.
+- **Project state** (current date, session, party location, weather) is shared by the calendar, maps, GM screen and sessions.
 - **Quick tools:** dice, card draws and tables can be pulled up anywhere, by the GM and by players.
-- **Sharing by campaign,** with player spaces, per-player reveals and per-tool visibility defaults.
-- **Content packs** are one export format for backups, copying between campaigns and sharing.
-- **New:** starter content and a new-campaign wizard, a command palette, trash and restore, a player display, and a module registry for future features.
+- **Sharing by project,** with player spaces, per-player reveals and per-tool visibility defaults.
+- **Content packs** are one export format for backups, copying between projects and sharing.
+- **New:** starter content and a new-project wizard, a command palette, trash and restore, a player display, and a module registry for future features.
 
 ## Overview
 
@@ -24,7 +24,7 @@ A personal, local-first, system-agnostic TTRPG toolkit for Windows and Android, 
 **Design goals**
 
 - **Works together:** every tool uses the same tags, links, fields, queries and results, so anything can link to, roll from, or display anything else.
-- **Easy out of the box:** a new campaign is usable in a minute, with starter content and sensible defaults.
+- **Easy out of the box:** a new project is usable in a minute, with starter content and sensible defaults.
 - **Deeply customizable:** advanced options live one click away, never in the way.
 - **Room to grow:** new modules plug into the same engines without rewrites.
 
@@ -33,9 +33,9 @@ A personal, local-first, system-agnostic TTRPG toolkit for Windows and Android, 
 - **Local first, offline always.** Sync is an extra, never a requirement.
 - **No outside apps.** Everything is created in the app. Imports are optional.
 - **Simple by default, deep on demand.** Every feature has a one-click path; advanced settings sit behind an "Advanced" toggle.
-- **Separate tools, shared engines.** Each tool has its own home; tags, links, fields, queries, results and campaign state are shared underneath.
+- **Separate tools, shared engines.** Each tool has its own home; tags, links, fields, queries, results and project state are shared underneath.
 - **Data, not code, for system-specific things.** Rulesets, dice, stat blocks, tables and templates are editable data.
-- **Campaign-specific by default.** Rulesets are global; everything else lives in a campaign and moves between campaigns as content packs.
+- **Project-specific by default.** Rulesets are global; everything else lives in a project and moves between projects as content packs.
 - **Design for sync from day one, build it last.** UUIDs, timestamps and soft deletes on every record.
 
 ## At a glance
@@ -101,7 +101,7 @@ Four shared building blocks every module uses.
 | List | Actions, Abilities | Stat blocks |
 | Link | Faction: The Zhentarim | Backlinks, queries |
 | Calendar date / range | Born: 3rd of Frostfall, 1402 | Timeline, calendar |
-| Map location | Last seen: pin on the city map | Maps, campaign state |
+| Map location | Last seen: pin on the city map | Maps, project state |
 
 **Field sets** are reusable groups of fields (an "NPC" set, a ruleset's stat block). Templates and rulesets both use them.
 
@@ -122,11 +122,11 @@ Dice rolls, table rolls, card draws and generators all produce the same kind of 
 - **Mixable:** a table entry can include dice (`[2d4] goblins`), an entity slot (`[Person]`), another table, or a card draw (`[draw 1 from Tarot]`). A generator can use all of these.
 - **Seeded randomness** behind the scenes, so a result can be reproduced exactly when needed (useful for testing and for undo).
 
-## Campaign state and sessions
+## Project state and sessions
 
-Each campaign has a small shared "now" that modules read and update.
+Each project has a small shared "now" that modules read and update.
 
-- **Campaign state:** current in-game date and time, current session, party location (a map pin or region), current weather, active ruleset and calendar.
+- **Project state:** current in-game date and time, current session, party location (a map pin or region), current weather, active ruleset and calendar.
 - Shown in a slim **status bar** at the top of the app; click any part to change it.
 - **Who updates it:** the calendar (advance time), maps (travel advances the date and moves the party), weather rolls, starting or ending a session.
 - **Sessions** are documents with a real-world date, in-game start and end dates, and a log tab.
@@ -136,7 +136,7 @@ Each campaign has a small shared "now" that modules read and update.
 
 ## Rulesets and content packs
 
-**Rulesets** are global definitions of a game system. Picking one for a campaign configures stat blocks, encounters and dice together.
+**Rulesets** are global definitions of a game system. Picking one for a project configures stat blocks, encounters and dice together.
 
 A ruleset contains:
 
@@ -145,19 +145,19 @@ A ruleset contains:
 - **Dice:** saved formulas and any custom dice the system uses.
 - **Optional extras:** document templates (NPC, item) and random tables that suit the system.
 
-A campaign can use more than one ruleset (e.g. a main system plus a ship-combat subsystem).
+A project can use more than one ruleset (e.g. a main system plus a ship-combat subsystem).
 
 **Content packs** are the app's one bundle format: a zip of library items, assets and settings with a version number.
 
-- **Uses:** full backups, copying items between campaigns, and sharing rulesets, decks, tables or templates with friends.
+- **Uses:** full backups, copying items between projects, and sharing rulesets, decks, tables or templates with friends.
 - **Importing** shows a preview and asks whether to bring linked items along. Imported items remember their source, with "update from original".
 - The format is versioned, so packs from older app versions still import.
 
 ## Out of the box
 
-A new campaign should be playable within a minute.
+A new project should be playable within a minute.
 
-**New campaign wizard:** name, ruleset, calendar, and which starter packs to include. Every choice can be skipped and changed later.
+**New project wizard:** name, ruleset, calendar, and which starter packs to include. Every choice can be skipped and changed later.
 
 **Starter content (built-in packs)**
 
@@ -180,9 +180,9 @@ A new campaign should be playable within a minute.
 Everything you build with is editable, and the app itself adapts to how you run games.
 
 - **Content:** rulesets, field sets, templates, tables, generators, decks, dice, terrain, travel modes, calendars and statuses are all user-editable data.
-- **Appearance:** light/dark themes, accent color, fonts, and per-campaign themes (a gothic campaign can look different from a sci-fi one).
+- **Appearance:** light/dark themes, accent color, fonts, and per-project themes (a gothic project can look different from a sci-fi one).
 - **Layout:** resizable panels, a customizable sidebar, and saved GM screen layouts.
-- **Defaults:** per-campaign settings for things like reversal chance, repeat draws, initiative type and travel mode.
+- **Defaults:** per-project settings for things like reversal chance, repeat draws, initiative type and travel mode.
 - **Shortcuts:** editable keyboard shortcuts on Windows.
 - **Phone vs. tablet layouts** on Android, chosen automatically by screen size.
 
@@ -229,7 +229,7 @@ One dice notation used everywhere: the roller, tables, stat blocks and encounter
 - **Pools:** count successes against a target (`6d10>=8`).
 - **Exploding:** reroll and add on max or a chosen value.
 - **Fate/Fudge:** `4dF`.
-- **Custom dice:** user-defined faces, including symbols, defined in a ruleset or campaign.
+- **Custom dice:** user-defined faces, including symbols, defined in a ruleset or project.
 - **Quick buttons** for common dice, plus saved named formulas ("Attack: 1d20+5").
 - **Readable results:** shows each die, which were kept or exploded, and the total.
 
@@ -240,12 +240,12 @@ Tables roll text, dice, cards and your own documents; generators combine rolls i
 **Tables**
 
 - Entries with text, tags and weights. View, add, edit, reorder and delete freely (a deleted entry can be brought back). A weight of 0 means never picked. Weights make number ranges in entry order, like a printed table (an entry of weight 20 after 10 others covers 11-30); a table can note the printed die (d20, d100) it comes from, and says when the entries don't add up to it.
-- **Names:** a table is found by its name, so two tables in a campaign can't share a name. Renaming a table finds the slots that use the old name and offers to update them (showing each change first, with undo).
+- **Names:** a table is found by its name, so two tables in a project can't share a name. Renaming a table finds the slots that use the old name and offers to update them (showing each change first, with undo).
 - **Slots** inside an entry can roll: another table, dice, a card draw, or *(Phase 4)* **documents or other items matching a query** (`[Person] is missing [Object]`). They can be written short (`[2d4]`, `[Rumors]`, `[draw 1 from Tarot]`) or in the explicit form that always means what it says (`[dice:2d4]`, `[table:Rumors]`, `[draw:1 from Tarot]`, useful for a table called "d6"). In the editor slots appear as chips, with a plain-text mode for the raw text.
 - **Labels** reuse a roll: `[Person as A] ... [A]`. **Field references** pull data: `[A.Faction]` *(Phase 4, once documents have fields)*.
 - **Unique picks** (`[3 unique Rumors]`), **avoid recent** results (skip the last N entries rolled from a table; remembered on the device, and relaxed with a note when every entry would be skipped), and a depth limit on nesting. A slot that can't be rolled (a deleted table, a deck with too few cards) shows a warning in the result instead of stopping the roll.
 - **Lock and reroll** any slot of a result.
-- **Tag filtering:** entries carry the campaign's tags. The name generator already filters by them: all of the chosen tags by default, or any one of them, and a tag nested under a chosen tag counts. Filtering other rolls by tag arrives with the query system *(Phase 4)*.
+- **Tag filtering:** entries carry the project's tags. The name generator already filters by them: all of the chosen tags by default, or any one of them, and a tag nested under a chosen tag counts. Filtering other rolls by tag arrives with the query system *(Phase 4)*.
 
 **Name generator:** one tool, not a list of generators, working like the dice roller and card draw.
 
@@ -255,7 +255,7 @@ Tables roll text, dice, cards and your own documents; generators combine rolls i
 - Lock a part and reroll the rest. Save a result back to a table, or to a new one.
 - **Presets** save a whole setup ("Elven name", "Place name") as an item in the Tables library; the last setup used is remembered on the device. Also available in the quick tools panel.
 
-**Roll context:** a query applied to the whole roll and its nested slots (only documents tagged Sword Coast). Can default to the party's current region from campaign state. *(Phase 4)*
+**Roll context:** a query applied to the whole roll and its nested slots (only documents tagged Sword Coast). Can default to the party's current region from project state. *(Phase 4)*
 
 **Generators** *(Phase 4)*
 
@@ -265,7 +265,7 @@ Tables roll text, dice, cards and your own documents; generators combine rolls i
 
 ## Tool: Encounters
 
-An encounter library for building and running combat (or chases, heists, anything turn-based) under the campaign's ruleset.
+An encounter library for building and running combat (or chases, heists, anything turn-based) under the project's ruleset.
 
 - **Placement:** encounters live in their own library and can be embedded in documents and placed on map pins.
 - **Initiative:** individual, group (sides alternate), or popcorn. Set by the ruleset, changeable per encounter.
@@ -287,7 +287,7 @@ A map library; each map annotates an uploaded image with layers, links and trave
 - **Terrain and road types:** user-defined, each with a speed multiplier.
 - **Travel modes:** saved base speeds, with optional per-terrain overrides (ships can't cross land).
 - **Travel time:** shortest route along roads, or a custom path saved as an offroad path. Speed changes with terrain.
-- **Campaign state:** a "party here" marker; confirming a trip moves it and advances the date. The trip can trigger a weather roll or a random encounter table per day.
+- **Project state:** a "party here" marker; confirming a trip moves it and advances the date. The trip can trigger a weather roll or a random encounter table per day.
 
 ## Tool: Calendar and timeline
 
@@ -296,7 +296,7 @@ Calendars are built in the app; timelines show anything with a date.
 **Calendars**
 
 - Days, weeks, months, years, leap rules, eras, seasons, and any number of moons with their own cycles.
-- A campaign can hold **several calendars** (an elven and a human one). One is the **main calendar** that drives the campaign date; dates can be shown converted between calendars.
+- A project can hold **several calendars** (an elven and a human one). One is the **main calendar** that drives the project date; dates can be shown converted between calendars.
 - **Weather:** generated per day from season and region climate, using weather tables you can edit.
 - **Month view** with events, moon phases, holidays and DM notes.
 - Fantasy Calendar import: optional, low priority.
@@ -310,24 +310,24 @@ Calendars are built in the app; timelines show anything with a date.
 **Timelines**
 
 - Live in the library and can be embedded in documents.
-- Zoom from centuries to days, centered on the campaign's current date.
+- Zoom from centuries to days, centered on the project's current date.
 - **Lanes** set by a field or tag (one lane per faction), using the shared query system.
-- Several timelines can exist (world history, a single campaign arc), each with its own filter.
+- Several timelines can exist (world history, a single project arc), each with its own filter.
 
 ## GM screen, quick tools and player display
 
 Widgets are built once and appear in two places: the GM screen and the quick tools panel.
 
-**Widgets:** dice roller, card draw, random table or generator, roll log, quick notes, pinned documents, current encounter, campaign state (date, weather, location), and a smart collection ("NPCs in this town"). Every tool can provide widgets, so new tools show up automatically.
+**Widgets:** dice roller, card draw, random table or generator, roll log, quick notes, pinned documents, current encounter, project state (date, weather, location), and a smart collection ("NPCs in this town"). Every tool can provide widgets, so new tools show up automatically.
 
-**GM screen:** saved layouts of resizable widgets per campaign (combat, social, travel).
+**GM screen:** saved layouts of resizable widgets per project (combat, social, travel).
 
 **Quick tools:** a panel you can open from anywhere in the app.
 
 - **Windows:** a floating or side panel, opened by button or shortcut (e.g. Ctrl+D for dice), and pinnable while you browse.
 - **Android:** a bottom sheet that slides over the current screen.
 - You choose which widgets appear. Defaults: dice, card draw, random tables, roll log, quick notes.
-- **Players get quick tools too.** The GM chooses per campaign which ones (dice on by default). Player rolls appear in the shared roll log; the GM can always roll secretly.
+- **Players get quick tools too.** The GM chooses per project which ones (dice on by default). Player rolls appear in the shared roll log; the GM can always roll secretly.
 
 **Player display:** a second window (TV or second monitor) showing what you choose to share.
 
@@ -337,15 +337,15 @@ Widgets are built once and appear in two places: the GM screen and the quick too
 
 ## Sync, sharing and permissions
 
-Self-hosted sync for you and your friends, shared by campaign, with GM-only secrets and per-player reveals. Built last; designed for from the start.
+Self-hosted sync for you and your friends, shared by project, with GM-only secrets and per-player reveals. Built last; designed for from the start.
 
 - **Sync:** your data syncs across your devices through a server you run. Fully offline-capable; catches up on reconnect.
-- **Sharing unit:** the campaign. You invite someone as a **GM** (sees and edits everything) or a **player**.
+- **Sharing unit:** the project. You invite someone as a **GM** (sees and edits everything) or a **player**.
 - **What players can edit:**
   - their own **player space** (character, notes, handouts received), which they control;
   - specific items the GM assigns to them (e.g. the party cartographer editing the world map).
   - Everything else is view-only.
-- **Visibility defaults per tool,** changeable in campaign settings. Suggested: documents and maps visible; encounters, generators, tables and GM screen layouts secret.
+- **Visibility defaults per tool,** changeable in project settings. Suggested: documents and maps visible; encounters, generators, tables and GM screen layouts secret.
 - **Secrets** at several levels: whole item, document block or field, and map layer.
 - **Reveals:** reveal anything to all players or to **specific players** (it arrives as a handout in their space). A later one-click "reveal to all".
 - **Security rule:** secret content is never sent to a player's device, not just hidden.
@@ -364,7 +364,7 @@ New features plug in as modules instead of rewiring the app.
 - command palette actions and search results
 - content pack data
 
-**Safe data changes:** the database has a schema version and step-by-step migrations, so updates never break existing campaigns. Content packs carry a version too.
+**Safe data changes:** the database has a schema version and step-by-step migrations, so updates never break existing projects. Content packs carry a version too.
 
 **Ideas this structure supports later** (not planned, just possible):
 
@@ -379,15 +379,15 @@ New features plug in as modules instead of rewiring the app.
 
 Nine phases, each usable at the table. Shared engines are **designed** in Phase 1 but each is **built out** only when the first tool needs it, so the foundation stays small.
 
-1. **Foundation:** app shell, SQLite with migrations, module registry, campaigns, library framework (folders, tags, search, trash), links and backlinks, a plain document editor, basic command palette, content pack export/import (backups). A test build running on Android.
+1. **Foundation:** app shell, SQLite with migrations, module registry, projects, library framework (folders, tags, search, trash), links and backlinks, a plain document editor, basic command palette, content pack export/import (backups). A test build running on Android.
 2. **Dice, results and cards:** dice notation, results engine and roll log, widget framework and quick tools panel, deck library, cards, sets, pools, draws, spreads, decks in play. Starter tarot and playing-card decks.
 3. **Random tables:** tables with weights and number ranges, nesting, dice and card slots, labels, unique picks, avoid recent, entry tags, a slot-chip editor, rename-with-update, and the name generator (draws from chosen tables, tag filter, presets). Starter tables. *(Done.)*
 4. **Worldbuilding:** rich text editor, nested document tabs, fields and field sets, templates, queries and smart collections, field views, global search. Then entity slots, roll context and generators. Starter templates. *(Built; awaiting testing.)*
 5. **Rulesets and encounters:** ruleset editor, stat blocks, encounter library and runner, first version of the player display. Starter rulesets.
-6. **Time:** calendar builder, multiple calendars, campaign state and status bar, sessions, weather, events, timelines.
+6. **Time:** calendar builder, multiple calendars, project state and status bar, sessions, weather, events, timelines.
 7. **Maps:** map library, layers, pins, regions, nested maps, roads, terrain, travel modes, travel time, party marker.
-8. **GM screen and polish:** GM screen layouts, embeds of every tool in documents, new campaign wizard, themes, fog of war, animations.
-9. **Sync and sharing:** server, device sync, campaign sharing, player spaces, visibility defaults, per-player reveals, view-as-player, player quick tools.
+8. **GM screen and polish:** GM screen layouts, embeds of every tool in documents, new project wizard, themes, fog of war, animations.
+9. **Sync and sharing:** server, device sync, project sharing, player spaces, visibility defaults, per-player reveals, view-as-player, player quick tools.
 
 At a few hours a week, phases take several weeks to a few months each. Phases 1, 4, 7 and 9 are the largest.
 

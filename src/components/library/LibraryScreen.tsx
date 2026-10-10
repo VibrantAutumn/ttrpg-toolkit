@@ -23,7 +23,7 @@ import {
   type Trash,
 } from "../../api/library";
 import type { ItemTypeDefinition } from "../../registry/types";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { useNavigation } from "../../state/Navigation";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useRenameItem } from "../../state/renameReview";
@@ -41,7 +41,7 @@ interface Notice {
 
 /**
  * The generic library screen any tool can use: folders, items, tags, search
- * and trash for one `library` (the owning tool's id), in the open campaign.
+ * and trash for one `library` (the owning tool's id), in the open project.
  */
 export function LibraryScreen({
   library,
@@ -58,10 +58,10 @@ export function LibraryScreen({
   /** False for libraries whose items are made elsewhere (e.g. saved rolls): hides the "New item" form. */
   allowNewItems?: boolean;
 }) {
-  const { campaign, loading } = useCurrentCampaign();
+  const { project, loading } = useCurrentProject();
   const { openItem } = useNavigation();
   const renameReviewed = useRenameItem();
-  const campaignId = campaign?.id ?? null;
+  const projectId = project?.id ?? null;
   // Changes made elsewhere (an item's page, saving a roll) make this list reload.
   const dataVersion = useDataVersion();
 
@@ -87,13 +87,13 @@ export function LibraryScreen({
   const [newItemType, setNewItemType] = useState(creatableTypes[0]?.id ?? "");
 
   const reload = useCallback(async () => {
-    if (!campaignId) return;
+    if (!projectId) return;
     const [f, i, t, l, tr] = await Promise.all([
-      listFolders(campaignId, library),
-      listItems(campaignId, library, folderId),
-      listTags(campaignId),
-      listTagLinks(campaignId, library),
-      listTrash(campaignId, library),
+      listFolders(projectId, library),
+      listItems(projectId, library, folderId),
+      listTags(projectId),
+      listTagLinks(projectId, library),
+      listTrash(projectId, library),
     ]);
     setFolders(f);
     setItems(i);
@@ -101,7 +101,7 @@ export function LibraryScreen({
     setLinks(l);
     setTrash(tr);
     setVersion((v) => v + 1);
-  }, [campaignId, library, folderId, dataVersion]);
+  }, [projectId, library, folderId, dataVersion]);
 
   /** Runs a change, then reloads everything. Shows any error from Rust. */
   const run = useCallback(
@@ -120,14 +120,14 @@ export function LibraryScreen({
     [reload],
   );
 
-  // A different campaign starts from a clean slate.
+  // A different project starts from a clean slate.
   useEffect(() => {
     setFolderId(null);
     setEditing(null);
     setNotice(null);
     setSearchText("");
     setShowTrash(false);
-  }, [campaignId]);
+  }, [projectId]);
 
   useEffect(() => {
     reload().catch((e) => setError(String(e)));
@@ -141,13 +141,13 @@ export function LibraryScreen({
   // Search as you type (after a short pause), and again whenever data changes.
   useEffect(() => {
     const text = searchText.trim();
-    if (!campaignId || !text) {
+    if (!projectId || !text) {
       setSearchResults(null);
       return;
     }
     let cancelled = false;
     const timer = setTimeout(() => {
-      searchItems(campaignId, text, library, 100)
+      searchItems(projectId, text, library, 100)
         .then((results) => !cancelled && setSearchResults(results))
         .catch((e) => !cancelled && setError(String(e)));
     }, 200);
@@ -155,15 +155,15 @@ export function LibraryScreen({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [searchText, campaignId, library, version]);
+  }, [searchText, projectId, library, version]);
 
   if (loading) return <p>Loading...</p>;
-  if (!campaignId) {
+  if (!projectId) {
     return (
       <section>
         <h1>{title}</h1>
         <p className="empty">
-          No campaign is open. Tap the bar at the top to choose one.
+          No project is open. Tap the bar at the top to choose one.
         </p>
       </section>
     );
@@ -321,9 +321,9 @@ export function LibraryScreen({
             <ConfirmButton label="Delete" onConfirm={() => removeItem(item)} />
           </div>
         )}
-        {mode === "tags" && campaignId && (
+        {mode === "tags" && projectId && (
           <TagEditor
-            campaignId={campaignId}
+            projectId={projectId}
             itemId={item.id}
             itemTags={itemTags}
             allTags={allTags}
@@ -396,7 +396,7 @@ export function LibraryScreen({
             onSubmit={(e) => {
               e.preventDefault();
               run(async () => {
-                await createFolder(campaignId, library, folderId, newFolder);
+                await createFolder(projectId, library, folderId, newFolder);
                 setNewFolder("");
               });
             }}
@@ -416,7 +416,7 @@ export function LibraryScreen({
             onSubmit={(e) => {
               e.preventDefault();
               run(async () => {
-                await createItem(campaignId, library, newItemType, newItem, folderId);
+                await createItem(projectId, library, newItemType, newItem, folderId);
                 setNewItem("");
               });
             }}
@@ -474,7 +474,7 @@ export function LibraryScreen({
         <TrashPanel
           trash={trash}
           run={run}
-          emptyAll={() => emptyTrash(campaignId, library)}
+          emptyAll={() => emptyTrash(projectId, library)}
         />
       )}
     </section>

@@ -18,7 +18,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * how, and can rename without touching them.
  */
 export const reviewTableRename: RenameReviewer = async (item, newName) => {
-  const found = await findEntriesMentioning(item.campaignId, item.name);
+  const found = await findEntriesMentioning(item.projectId, item.name);
   const plan = planRename(
     found.map((f) => ({ entryId: f.entryId, text: f.text })),
     item.name,

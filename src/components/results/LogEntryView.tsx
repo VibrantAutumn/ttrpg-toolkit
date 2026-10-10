@@ -4,7 +4,7 @@ import { saveRoll } from "../../api/dice";
 import { termTexts } from "../../lib/results/format";
 import { copyText } from "../../lib/copyText";
 import type { DiceLogEntry, DrawLogEntry, NameLogEntry, RollLogEntry, TableLogEntry } from "../../lib/results/rollLog";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { bumpDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
 import { drawFromPlayDeck } from "../../state/playActions";
@@ -19,7 +19,7 @@ import { SaveNameToList } from "./SaveNameToList";
  * can do with it (roll or draw again, copy, save as a library item).
  */
 export function LogEntryView({ entry }: { entry: RollLogEntry }) {
-  const { campaign } = useCurrentCampaign();
+  const { project } = useCurrentProject();
   const { openItem } = useNavigation();
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,12 +33,12 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
 
   async function save() {
     // Table results and names are copied for now (a name can be added to a table); saving them waits for sessions (Phase 6).
-    if (!campaign || entry.kind === "table" || entry.kind === "name") return;
+    if (!project || entry.kind === "table" || entry.kind === "name") return;
     try {
       const item =
         entry.kind === "dice"
           ? await saveRoll(
-              campaign.id,
+              project.id,
               entry.label ?? "",
               null,
               entry.notation,
@@ -47,7 +47,7 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
               JSON.stringify(entry.result),
             )
           : await saveDraw(
-              campaign.id,
+              project.id,
               "",
               null,
               entry.sourceName,
@@ -108,9 +108,9 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
 
   /** Rerolls the slots that aren't locked, keeping the entry. */
   async function rerollSlots(e: TableLogEntry) {
-    if (!campaign) return;
+    if (!project) return;
     setNote(null);
-    const outcome = await rerollTableResult(e.id, campaign.id);
+    const outcome = await rerollTableResult(e.id, project.id);
     setError(outcome.ok ? null : outcome.message);
   }
 
@@ -130,7 +130,7 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
           <>
             <button onClick={() => void rollAgain(entry)}>Roll again</button>
             {lockableSlots(entry).length > 0 && (
-              <button onClick={() => void rerollSlots(entry)} disabled={!campaign}>
+              <button onClick={() => void rerollSlots(entry)} disabled={!project}>
                 Reroll slots
               </button>
             )}
@@ -142,7 +142,7 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
           (entry.savedItemId ? (
             <button onClick={() => openItem(entry.savedItemId!)}>Saved ✓ Open</button>
           ) : (
-            <button onClick={() => void save()} disabled={!campaign}>
+            <button onClick={() => void save()} disabled={!project}>
               Save
             </button>
           ))}

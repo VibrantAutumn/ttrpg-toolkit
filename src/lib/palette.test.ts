@@ -7,7 +7,7 @@ function cmd(id: string, label: string, keywords?: string[]): CommandDefinition 
 }
 
 const commands = [
-  cmd("campaigns", "Go to Campaigns", ["switch", "list"]),
+  cmd("projects", "Go to Projects", ["switch", "list"]),
   cmd("world", "Go to Worldbuilding", ["documents", "notes", "lore"]),
   cmd("roll", "Roll dice", ["d20", "random"]),
   cmd("new-doc", "Create document", ["new", "note"]),
@@ -17,7 +17,7 @@ const ids = (list: CommandDefinition[]) => list.map((c) => c.id);
 
 describe("matchCommands", () => {
   it("returns every command alphabetically for an empty query", () => {
-    expect(ids(matchCommands(commands, ""))).toEqual(["new-doc", "campaigns", "world", "roll"]);
+    expect(ids(matchCommands(commands, ""))).toEqual(["new-doc", "projects", "world", "roll"]);
     expect(ids(matchCommands(commands, "   "))).toHaveLength(4);
   });
 

@@ -17,7 +17,7 @@ export function NamePresetView({ itemId }: { itemId: string }) {
     let active = true;
     Promise.all([getNamePreset(itemId), getItem(itemId)])
       .then(async ([preset, item]) => {
-        const [tables, tags] = await Promise.all([listTables(item.campaignId), listTags(item.campaignId)]);
+        const [tables, tags] = await Promise.all([listTables(item.projectId), listTags(item.projectId)]);
         if (active) setState({ setup: parseSetup(preset.setupJson), tables, tags });
       })
       .catch((e) => active && setError(String(e)));

@@ -54,8 +54,8 @@ pub fn add_member(conn: &Connection, collection_id: &str, member_id: &str, now: 
     if collection.id == member.id {
         return Err(DbError::Invalid("Nothing can be put inside itself."));
     }
-    if collection.campaign_id != member.campaign_id {
-        return Err(DbError::Invalid("Both must be in the same campaign."));
+    if collection.project_id != member.project_id {
+        return Err(DbError::Invalid("Both must be in the same project."));
     }
     if !may_hold(&collection.item_type, &member.item_type) {
         return Err(DbError::Invalid(match collection.item_type.as_str() {
@@ -195,32 +195,32 @@ fn collect_cards(
     Ok(())
 }
 
-/// Every live set, deck and pool in a campaign's cards library, for choosing
+/// Every live set, deck and pool in a project's cards library, for choosing
 /// something to draw from. Pools first, then decks, then sets; by name within each.
-pub fn list_all(conn: &Connection, campaign_id: &str) -> Result<Vec<Item>, DbError> {
+pub fn list_all(conn: &Connection, project_id: &str) -> Result<Vec<Item>, DbError> {
     query_items(
         conn,
         &format!(
             "SELECT {} FROM items i
-             WHERE i.campaign_id = ?1 AND i.library = ?2 AND i.deleted_at IS NULL
+             WHERE i.project_id = ?1 AND i.library = ?2 AND i.deleted_at IS NULL
                AND i.item_type IN ('set', 'deck', 'pool')
              ORDER BY CASE i.item_type WHEN 'pool' THEN 0 WHEN 'deck' THEN 1 ELSE 2 END,
                       i.name COLLATE NOCASE, i.created_at",
             items::qualified_columns("i")
         ),
-        params![campaign_id, LIBRARY],
+        params![project_id, LIBRARY],
     )
 }
 
 /// What could still be added to a collection: live items of an allowed kind,
-/// from the same campaign, not already inside. Types in ladder order, then name.
+/// from the same project, not already inside. Types in ladder order, then name.
 pub fn candidates(conn: &Connection, collection_id: &str) -> Result<Vec<Item>, DbError> {
     let collection = require_collection(conn, collection_id)?;
     let allowed = allowed_members(&collection.item_type);
     let placeholders = vec!["?"; allowed.len()].join(", ");
     let sql = format!(
         "SELECT {} FROM items i
-         WHERE i.campaign_id = ? AND (i.library = ? OR i.item_type = 'smart_collection') AND i.deleted_at IS NULL AND i.id <> ?
+         WHERE i.project_id = ? AND (i.library = ? OR i.item_type = 'smart_collection') AND i.deleted_at IS NULL AND i.id <> ?
            AND i.item_type IN ({placeholders})
            AND NOT EXISTS (SELECT 1 FROM collection_members m
                            WHERE m.collection_id = ? AND m.member_id = i.id AND m.deleted_at IS NULL)
@@ -229,7 +229,7 @@ pub fn candidates(conn: &Connection, collection_id: &str) -> Result<Vec<Item>, D
          LIMIT 500",
         items::qualified_columns("i")
     );
-    let mut args: Vec<&dyn rusqlite::ToSql> = vec![&collection.campaign_id, &LIBRARY, &collection.id];
+    let mut args: Vec<&dyn rusqlite::ToSql> = vec![&collection.project_id, &LIBRARY, &collection.id];
     for t in allowed {
         args.push(t);
     }
@@ -240,11 +240,11 @@ pub fn candidates(conn: &Connection, collection_id: &str) -> Result<Vec<Item>, D
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{campaigns, folders, open_in_memory, trash};
+    use crate::db::{projects, folders, open_in_memory, trash};
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -296,9 +296,9 @@ mod tests {
     }
 
     #[test]
-    fn both_must_be_in_the_same_campaign() {
+    fn both_must_be_in_the_same_project() {
         let (conn, camp) = setup();
-        let other = campaigns::create(&conn, "Other", 2).unwrap();
+        let other = projects::create(&conn, "Other", 2).unwrap();
         let deck = make(&conn, &camp, DECK_TYPE, "Deck");
         let foreign = make(&conn, &other.id, CARD_TYPE, "Foreign");
         assert!(matches!(add_member(&conn, &deck.id, &foreign.id, 3), Err(DbError::Invalid(_))));
@@ -453,7 +453,7 @@ mod tests {
     #[test]
     fn candidates_are_eligible_items_not_already_inside_in_ladder_order() {
         let (conn, camp) = setup();
-        let other = campaigns::create(&conn, "Other", 2).unwrap();
+        let other = projects::create(&conn, "Other", 2).unwrap();
         let pool = make(&conn, &camp, POOL_TYPE, "Pool");
         let inside = make(&conn, &camp, CARD_TYPE, "Inside");
         make(&conn, &camp, CARD_TYPE, "zeta card");
@@ -462,7 +462,7 @@ mod tests {
         make(&conn, &camp, DECK_TYPE, "A deck");
         make(&conn, &camp, POOL_TYPE, "Another pool"); // pools can't hold pools
         make(&conn, &camp, "document", "A document"); // wrong kind of item
-        make(&conn, &other.id, CARD_TYPE, "Foreign"); // other campaign
+        make(&conn, &other.id, CARD_TYPE, "Foreign"); // other project
         let trashed = make(&conn, &camp, CARD_TYPE, "Trashed");
         items::soft_delete(&conn, &trashed.id, 3).unwrap();
         add_member(&conn, &pool.id, &inside.id, 4).unwrap();
@@ -478,9 +478,9 @@ mod tests {
     }
 
     #[test]
-    fn list_all_gives_every_live_set_deck_and_pool_of_the_campaign() {
+    fn list_all_gives_every_live_set_deck_and_pool_of_the_project() {
         let (conn, camp) = setup();
-        let other = campaigns::create(&conn, "Other", 2).unwrap();
+        let other = projects::create(&conn, "Other", 2).unwrap();
         make(&conn, &camp, SET_TYPE, "b set");
         make(&conn, &camp, DECK_TYPE, "Zed deck");
         make(&conn, &camp, POOL_TYPE, "A pool");

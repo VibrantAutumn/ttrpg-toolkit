@@ -51,7 +51,7 @@ pub fn validate(setup_json: &str) -> Result<(), DbError> {
 /// Saves a setup as a new item in the Tables library. All or nothing.
 pub fn create(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
     name: &str,
     folder_id: Option<&str>,
     setup_json: &str,
@@ -59,7 +59,7 @@ pub fn create(
 ) -> Result<Item, DbError> {
     validate(setup_json)?;
     let tx = conn.unchecked_transaction()?;
-    let item = items::create(&tx, campaign_id, LIBRARY, PRESET_TYPE, name, folder_id, now)?;
+    let item = items::create(&tx, project_id, LIBRARY, PRESET_TYPE, name, folder_id, now)?;
     tx.execute(
         "INSERT INTO name_presets (item_id, setup_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
         params![item.id, setup_json, now],
@@ -114,15 +114,15 @@ pub fn set_setup(conn: &Connection, item_id: &str, setup_json: &str, now: i64) -
     Ok(())
 }
 
-/// Every live preset in a campaign (any folder), alphabetical.
-pub fn list(conn: &Connection, campaign_id: &str) -> Result<Vec<PresetEntry>, DbError> {
+/// Every live preset in a project (any folder), alphabetical.
+pub fn list(conn: &Connection, project_id: &str) -> Result<Vec<PresetEntry>, DbError> {
     let mut stmt = conn.prepare(
         "SELECT i.id, i.name, p.setup_json, i.folder_id
          FROM name_presets p JOIN items i ON i.id = p.item_id
-         WHERE i.campaign_id = ?1 AND i.deleted_at IS NULL
+         WHERE i.project_id = ?1 AND i.deleted_at IS NULL
          ORDER BY i.name COLLATE NOCASE, i.created_at, i.id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| {
+    let rows = stmt.query_map([project_id], |r| {
         Ok(PresetEntry { item_id: r.get(0)?, name: r.get(1)?, setup_json: r.get(2)?, folder_id: r.get(3)? })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -131,13 +131,13 @@ pub fn list(conn: &Connection, campaign_id: &str) -> Result<Vec<PresetEntry>, Db
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{campaigns, folders, open_in_memory, search, trash};
+    use crate::db::{projects, folders, open_in_memory, search, trash};
 
     const SETUP: &str = r#"{"version":1,"mode":"two","sources":{"first":"a","last":"b"}}"#;
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -180,7 +180,7 @@ mod tests {
         let items: i64 = conn.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).unwrap();
         assert_eq!(items, 1);
         assert!(matches!(create(&conn, &camp, "  ", None, SETUP, 1), Err(DbError::EmptyName)));
-        assert!(create(&conn, "no-such-campaign", "x", None, SETUP, 1).is_err());
+        assert!(create(&conn, "no-such-project", "x", None, SETUP, 1).is_err());
     }
 
     #[test]
@@ -223,8 +223,8 @@ mod tests {
         create(&conn, &camp, "Elven name", None, r#"{"a":2}"#, 3).unwrap();
         let gone = create(&conn, &camp, "Gone", None, SETUP, 4).unwrap();
         items::soft_delete(&conn, &gone.id, 5).unwrap();
-        // Another campaign's presets and other kinds of items stay out.
-        let other = campaigns::create(&conn, "Other", 6).unwrap();
+        // Another project's presets and other kinds of items stay out.
+        let other = projects::create(&conn, "Other", 6).unwrap();
         create(&conn, &other.id, "Elsewhere", None, SETUP, 7).unwrap();
         items::create(&conn, &camp, "tables", "table", "Not a preset", None, 8).unwrap();
 

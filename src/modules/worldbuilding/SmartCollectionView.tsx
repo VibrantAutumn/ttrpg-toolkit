@@ -11,7 +11,7 @@ import { bumpDataVersion } from "../../state/dataVersion";
 
 /** The page of a smart collection: the rules, and what they find right now. Changes save themselves. */
 export function SmartCollectionView({ itemId }: { itemId: string }) {
-  const [campaignId, setCampaignId] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [query, setQuery] = useState<Query | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [status, setStatus] = useState<SaveStatus>("saved");
@@ -37,7 +37,7 @@ export function SmartCollectionView({ itemId }: { itemId: string }) {
     Promise.all([getItem(itemId), getSmartCollection(itemId)])
       .then(([item, saved]) => {
         if (!active) return;
-        setCampaignId(item.campaignId);
+        setProjectId(item.projectId);
         const read = parseQuery(saved.queryJson);
         if (read.ok) {
           setQuery(read.query);
@@ -70,14 +70,14 @@ export function SmartCollectionView({ itemId }: { itemId: string }) {
   );
 
   if (error) return <p className="error">{error}</p>;
-  if (!query || !campaignId) return <p className="empty">Loading...</p>;
+  if (!query || !projectId) return <p className="empty">Loading...</p>;
   return (
-    <SmartCollectionBody campaignId={campaignId} query={query} status={status} problem={problem} onChange={change} />
+    <SmartCollectionBody projectId={projectId} query={query} status={status} problem={problem} onChange={change} />
   );
 }
 
-function SmartCollectionBody({ campaignId, query, status, problem, onChange }: { campaignId: string; query: Query; status: SaveStatus; problem: string | null; onChange: (q: Query) => void }) {
-  const catalog = useQueryCatalog(campaignId, query);
+function SmartCollectionBody({ projectId, query, status, problem, onChange }: { projectId: string; query: Query; status: SaveStatus; problem: string | null; onChange: (q: Query) => void }) {
+  const catalog = useQueryCatalog(projectId, query);
   const mode = query.view?.mode ?? "list";
   return (
     <div className="smart-collection">
@@ -90,7 +90,7 @@ function SmartCollectionBody({ campaignId, query, status, problem, onChange }: {
           This collection's saved rules can't be read ({problem}) so it is showing an empty set of rules. Changing anything replaces the old rules.
         </p>
       )}
-      <QueryBuilder campaignId={campaignId} query={query} catalog={catalog} onChange={onChange} />
+      <QueryBuilder projectId={projectId} query={query} catalog={catalog} onChange={onChange} />
       <div className="row" role="group" aria-label="How to show the results">
         <button type="button" className={mode === "list" ? "chip on" : "chip"} aria-pressed={mode === "list"} onClick={() => onChange({ ...query, view: { mode: "list", columns: query.view?.columns ?? [] } })}>
           List
@@ -100,9 +100,9 @@ function SmartCollectionBody({ campaignId, query, status, problem, onChange }: {
         </button>
       </div>
       {mode === "table" ? (
-        <FieldTable campaignId={campaignId} query={query} catalog={catalog} onChange={onChange} />
+        <FieldTable projectId={projectId} query={query} catalog={catalog} onChange={onChange} />
       ) : (
-        <QueryResults campaignId={campaignId} query={query} catalog={catalog} />
+        <QueryResults projectId={projectId} query={query} catalog={catalog} />
       )}
     </div>
   );

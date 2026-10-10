@@ -5,7 +5,7 @@ import { childFolders, folderOptions, folderPath, tagsByItem } from "./helpers";
 function folder(id: string, parentId: string | null = null, name = id): Folder {
   return {
     id,
-    campaignId: "c",
+    projectId: "c",
     library: "w",
     parentId,
     name,
@@ -18,7 +18,7 @@ function folder(id: string, parentId: string | null = null, name = id): Folder {
 function tag(id: string, name = id): Tag {
   return {
     id,
-    campaignId: "c",
+    projectId: "c",
     parentId: null,
     name,
     color: null,

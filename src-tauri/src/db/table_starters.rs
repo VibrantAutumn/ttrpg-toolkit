@@ -1,5 +1,5 @@
 //! Starter tables: ready-made random tables (and saved name setups that use them)
-//! that come with the app, added to a campaign in one all-or-nothing step.
+//! that come with the app, added to a project in one all-or-nothing step.
 //!
 //! The app builds a "bundle" (plain data, see `TableBundle`) and this module
 //! writes it, the same way `starters.rs` writes a starter deck. Everything made
@@ -17,7 +17,7 @@ use super::error::{clean_name, DbError};
 use super::name_presets::{self, PRESET_TYPE};
 use super::starters::{installed, BundleTag, ID_PREFIX};
 use super::tables::{self, LIBRARY, TABLE_TYPE};
-use super::{campaigns, folders, items, tags};
+use super::{projects, folders, items, tags};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -187,21 +187,21 @@ fn validate(bundle: &TableBundle) -> Result<(), DbError> {
     Ok(())
 }
 
-/// Puts the bundle into the campaign. All or nothing: a failure part-way leaves
-/// the campaign exactly as it was. Refuses if this starter is already there, or
+/// Puts the bundle into the project. All or nothing: a failure part-way leaves
+/// the project exactly as it was. Refuses if this starter is already there, or
 /// if a table with the same name as one of its tables already exists.
-pub fn install(conn: &Connection, campaign_id: &str, bundle: &TableBundle, now: i64) -> Result<TableInstallResult, DbError> {
-    campaigns::require_live(conn, campaign_id)?;
+pub fn install(conn: &Connection, project_id: &str, bundle: &TableBundle, now: i64) -> Result<TableInstallResult, DbError> {
+    projects::require_live(conn, project_id)?;
     validate(bundle)?;
-    if installed(conn, campaign_id)?.contains(&bundle.id) {
-        return Err(DbError::Invalid("That starter has already been added to this campaign."));
+    if installed(conn, project_id)?.contains(&bundle.id) {
+        return Err(DbError::Invalid("That starter has already been added to this project."));
     }
     for table in &bundle.tables {
         let taken: i64 = conn.query_row(
             "SELECT COUNT(*) FROM items
-             WHERE campaign_id = ?1 AND library = ?2 AND item_type = ?3 AND deleted_at IS NULL
+             WHERE project_id = ?1 AND library = ?2 AND item_type = ?3 AND deleted_at IS NULL
                AND name = ?4 COLLATE NOCASE",
-            params![campaign_id, LIBRARY, TABLE_TYPE, table.name.trim()],
+            params![project_id, LIBRARY, TABLE_TYPE, table.name.trim()],
             |r| r.get(0),
         )?;
         if taken > 0 {
@@ -216,7 +216,7 @@ pub fn install(conn: &Connection, campaign_id: &str, bundle: &TableBundle, now: 
     let tx = conn.unchecked_transaction()?;
 
     // Tags: reuse a top-level tag with the same name, so a second starter that uses "Elf" doesn't make another.
-    let existing = tags::list(&tx, campaign_id)?;
+    let existing = tags::list(&tx, project_id)?;
     let mut tag_ids: HashMap<String, String> = HashMap::new();
     for tag in &bundle.tags {
         let found = existing
@@ -224,14 +224,14 @@ pub fn install(conn: &Connection, campaign_id: &str, bundle: &TableBundle, now: 
             .find(|t| t.parent_id.is_none() && t.name.eq_ignore_ascii_case(tag.name.trim()));
         let id = match found {
             Some(t) => t.id.clone(),
-            None => tags::create(&tx, campaign_id, None, &tag.name, tag.color.as_deref(), now)?.id,
+            None => tags::create(&tx, project_id, None, &tag.name, tag.color.as_deref(), now)?.id,
         };
         tag_ids.insert(tag.name.trim().to_lowercase(), id);
     }
 
-    let folder = folders::create(&tx, campaign_id, LIBRARY, None, &bundle.name, now)?;
+    let folder = folders::create(&tx, project_id, LIBRARY, None, &bundle.name, now)?;
     let make = |item_type: &str, name: &str, origin: &str| -> Result<String, DbError> {
-        let item = items::create(&tx, campaign_id, LIBRARY, item_type, name, Some(&folder.id), now)?;
+        let item = items::create(&tx, project_id, LIBRARY, item_type, name, Some(&folder.id), now)?;
         tx.execute(
             "UPDATE items SET origin_pack_id = ?2, origin_item_id = ?3 WHERE id = ?1",
             params![item.id, bundle.id, origin],
@@ -333,7 +333,7 @@ mod tests {
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -421,8 +421,8 @@ mod tests {
         install(&conn, &camp, &bundle(), 100).unwrap();
         assert!(matches!(install(&conn, &camp, &bundle(), 101), Err(DbError::Invalid(_))));
         assert_eq!(count(&conn, "table_entries"), 6);
-        // Another campaign is separate.
-        let other = campaigns::create(&conn, "Other", 2).unwrap();
+        // Another project is separate.
+        let other = projects::create(&conn, "Other", 2).unwrap();
         install(&conn, &other.id, &bundle(), 102).unwrap();
         // Once everything from it is in the trash it can be added again.
         for item in items::list(&conn, &camp, LIBRARY, None).unwrap() {
@@ -507,7 +507,7 @@ mod tests {
     }
 
     #[test]
-    fn a_failure_part_way_leaves_the_campaign_exactly_as_it_was() {
+    fn a_failure_part_way_leaves_the_project_exactly_as_it_was() {
         let (conn, camp) = setup();
         conn.execute_batch("DROP TABLE name_presets").unwrap(); // the last thing install writes
         assert!(install(&conn, &camp, &bundle(), 100).is_err());

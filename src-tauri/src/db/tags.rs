@@ -1,13 +1,13 @@
-//! Tags: campaign-wide labels with optional colour and nesting, attachable to any item.
+//! Tags: project-wide labels with optional colour and nesting, attachable to any item.
 
 use super::error::{clean_name, DbError};
 use super::items::{self, Item};
-use super::campaigns;
+use super::projects;
 use rusqlite::{params, Connection, Row};
 use serde::Serialize;
 use uuid::Uuid;
 
-const COLUMNS: &str = "id, campaign_id, parent_id, name, color, created_at, updated_at, deleted_at";
+const COLUMNS: &str = "id, project_id, parent_id, name, color, created_at, updated_at, deleted_at";
 
 /// A tag plus all tags nested below it.
 const SUBTREE: &str = "WITH RECURSIVE tree(id) AS (
@@ -21,7 +21,7 @@ const SUBTREE: &str = "WITH RECURSIVE tree(id) AS (
 #[serde(rename_all = "camelCase")]
 pub struct Tag {
     pub id: String,
-    pub campaign_id: String,
+    pub project_id: String,
     pub parent_id: Option<String>,
     pub name: String,
     /// `#rrggbb`, or none.
@@ -34,7 +34,7 @@ pub struct Tag {
 fn from_row(row: &Row) -> rusqlite::Result<Tag> {
     Ok(Tag {
         id: row.get("id")?,
-        campaign_id: row.get("campaign_id")?,
+        project_id: row.get("project_id")?,
         parent_id: row.get("parent_id")?,
         name: row.get("name")?,
         color: row.get("color")?,
@@ -81,16 +81,16 @@ fn check_color(color: Option<&str>) -> Result<(), DbError> {
 /// Is a live tag with this name already a child of `parent` (ignoring case)?
 fn name_taken(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
     parent: Option<&str>,
     name: &str,
     except_id: Option<&str>,
 ) -> Result<bool, DbError> {
     let count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM tags
-         WHERE campaign_id = ?1 AND parent_id IS ?2 AND name = ?3 COLLATE NOCASE
+         WHERE project_id = ?1 AND parent_id IS ?2 AND name = ?3 COLLATE NOCASE
            AND deleted_at IS NULL AND (?4 IS NULL OR id <> ?4)",
-        params![campaign_id, parent, name, except_id],
+        params![project_id, parent, name, except_id],
         |row| row.get(0),
     )?;
     Ok(count > 0)
@@ -100,7 +100,7 @@ const NAME_TAKEN: DbError = DbError::Invalid("A tag with that name already exist
 
 pub fn create(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
     parent_id: Option<&str>,
     name: &str,
     color: Option<&str>,
@@ -108,38 +108,38 @@ pub fn create(
 ) -> Result<Tag, DbError> {
     let name = clean_name(name)?;
     check_color(color)?;
-    campaigns::require_live(conn, campaign_id)?;
+    projects::require_live(conn, project_id)?;
     if let Some(parent) = parent_id {
-        if get_live(conn, parent)?.campaign_id != campaign_id {
-            return Err(DbError::Invalid("That tag belongs to a different campaign."));
+        if get_live(conn, parent)?.project_id != project_id {
+            return Err(DbError::Invalid("That tag belongs to a different project."));
         }
     }
-    if name_taken(conn, campaign_id, parent_id, name, None)? {
+    if name_taken(conn, project_id, parent_id, name, None)? {
         return Err(NAME_TAKEN);
     }
     let id = Uuid::now_v7().to_string();
     conn.execute(
-        "INSERT INTO tags (id, campaign_id, parent_id, name, color, created_at, updated_at)
+        "INSERT INTO tags (id, project_id, parent_id, name, color, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
-        params![id, campaign_id, parent_id, name, color, now],
+        params![id, project_id, parent_id, name, color, now],
     )?;
     get(conn, &id)
 }
 
-/// Every live tag in a campaign (the front end builds the tree from `parent_id`).
-pub fn list(conn: &Connection, campaign_id: &str) -> Result<Vec<Tag>, DbError> {
+/// Every live tag in a project (the front end builds the tree from `parent_id`).
+pub fn list(conn: &Connection, project_id: &str) -> Result<Vec<Tag>, DbError> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT {COLUMNS} FROM tags WHERE campaign_id = ?1 AND deleted_at IS NULL
+        "SELECT {COLUMNS} FROM tags WHERE project_id = ?1 AND deleted_at IS NULL
          ORDER BY name COLLATE NOCASE, created_at"
     ))?;
-    let rows = stmt.query_map([campaign_id], from_row)?;
+    let rows = stmt.query_map([project_id], from_row)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
 pub fn rename(conn: &Connection, id: &str, name: &str, now: i64) -> Result<Tag, DbError> {
     let name = clean_name(name)?;
     let tag = get_live(conn, id)?;
-    if name_taken(conn, &tag.campaign_id, tag.parent_id.as_deref(), name, Some(id))? {
+    if name_taken(conn, &tag.project_id, tag.parent_id.as_deref(), name, Some(id))? {
         return Err(NAME_TAKEN);
     }
     conn.execute(
@@ -163,8 +163,8 @@ pub fn set_color(conn: &Connection, id: &str, color: Option<&str>, now: i64) -> 
 pub fn move_to(conn: &Connection, id: &str, new_parent: Option<&str>, now: i64) -> Result<Tag, DbError> {
     let tag = get_live(conn, id)?;
     if let Some(parent) = new_parent {
-        if get_live(conn, parent)?.campaign_id != tag.campaign_id {
-            return Err(DbError::Invalid("That tag belongs to a different campaign."));
+        if get_live(conn, parent)?.project_id != tag.project_id {
+            return Err(DbError::Invalid("That tag belongs to a different project."));
         }
         // Walk up from the new parent; meeting this tag would make it its own ancestor.
         let loops: i64 = conn.query_row(
@@ -181,7 +181,7 @@ pub fn move_to(conn: &Connection, id: &str, new_parent: Option<&str>, now: i64) 
             return Err(DbError::Invalid("A tag can't be nested inside itself or its own sub-tags."));
         }
     }
-    if name_taken(conn, &tag.campaign_id, new_parent, &tag.name, Some(id))? {
+    if name_taken(conn, &tag.project_id, new_parent, &tag.name, Some(id))? {
         return Err(NAME_TAKEN);
     }
     conn.execute(
@@ -215,7 +215,7 @@ pub fn restore(conn: &Connection, id: &str, now: i64) -> Result<Tag, DbError> {
         None => false,
     };
     let new_parent = if parent_trashed { None } else { tag.parent_id.as_deref() };
-    if name_taken(conn, &tag.campaign_id, new_parent, &tag.name, Some(id))? {
+    if name_taken(conn, &tag.project_id, new_parent, &tag.name, Some(id))? {
         return Err(DbError::Invalid(
             "A tag with that name exists now. Rename it first, then restore.",
         ));
@@ -244,8 +244,8 @@ pub fn add_to_item(conn: &Connection, item_id: &str, tag_id: &str, now: i64) -> 
         return Err(DbError::NotFound);
     }
     let tag = get_live(conn, tag_id)?;
-    if item.campaign_id != tag.campaign_id {
-        return Err(DbError::Invalid("That tag belongs to a different campaign."));
+    if item.project_id != tag.project_id {
+        return Err(DbError::Invalid("That tag belongs to a different project."));
     }
     conn.execute(
         "INSERT INTO item_tags (item_id, tag_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)
@@ -290,7 +290,7 @@ pub struct TagLink {
 /// items can show its tag chips without asking once per item.
 pub fn links_in_library(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
     library: &str,
 ) -> Result<Vec<TagLink>, DbError> {
     let tag_columns = COLUMNS
@@ -303,11 +303,11 @@ pub fn links_in_library(
          FROM item_tags it
          JOIN tags t ON t.id = it.tag_id
          JOIN items i ON i.id = it.item_id
-         WHERE i.campaign_id = ?1 AND i.library = ?2 AND i.deleted_at IS NULL
+         WHERE i.project_id = ?1 AND i.library = ?2 AND i.deleted_at IS NULL
            AND it.deleted_at IS NULL AND t.deleted_at IS NULL
          ORDER BY t.name COLLATE NOCASE"
     ))?;
-    let rows = stmt.query_map(params![campaign_id, library], |row| {
+    let rows = stmt.query_map(params![project_id, library], |row| {
         Ok(TagLink {
             item_id: row.get("link_item_id")?,
             tag: from_row(row)?,
@@ -320,7 +320,7 @@ pub fn links_in_library(
 /// tag nested below it (so "Region" finds things tagged "Sword Coast").
 pub fn items_with_tag(
     conn: &Connection,
-    campaign_id: &str,
+    project_id: &str,
     tag_id: &str,
     include_subtags: bool,
 ) -> Result<Vec<Item>, DbError> {
@@ -332,14 +332,14 @@ pub fn items_with_tag(
              WHERE ?3 = 1 AND t.deleted_at IS NULL
          )
          SELECT {} FROM items
-         WHERE campaign_id = ?2 AND deleted_at IS NULL
+         WHERE project_id = ?2 AND deleted_at IS NULL
            AND id IN (SELECT item_id FROM item_tags
                       WHERE deleted_at IS NULL AND tag_id IN (SELECT id FROM tree))
          ORDER BY name COLLATE NOCASE, created_at",
         items::COLUMNS
     ))?;
     let rows = stmt.query_map(
-        params![tag_id, campaign_id, include_subtags as i64],
+        params![tag_id, project_id, include_subtags as i64],
         items::from_row,
     )?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -352,7 +352,7 @@ mod tests {
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -403,7 +403,7 @@ mod tests {
         let (conn, camp) = setup();
         create(&conn, &camp, None, "Omen", None, 1).unwrap();
         let result = conn.execute(
-            "INSERT INTO tags (id, campaign_id, name, created_at, updated_at) VALUES ('x', ?1, 'omen', 1, 1)",
+            "INSERT INTO tags (id, project_id, name, created_at, updated_at) VALUES ('x', ?1, 'omen', 1, 1)",
             [&camp],
         );
         assert!(result.is_err());
@@ -423,9 +423,9 @@ mod tests {
     }
 
     #[test]
-    fn list_is_alphabetical_and_per_campaign() {
+    fn list_is_alphabetical_and_per_project() {
         let (conn, camp) = setup();
-        let other = campaigns::create(&conn, "Other", 1).unwrap();
+        let other = projects::create(&conn, "Other", 1).unwrap();
         create(&conn, &camp, None, "beta", None, 1).unwrap();
         create(&conn, &camp, None, "Alpha", None, 1).unwrap();
         create(&conn, &other.id, None, "Elsewhere", None, 1).unwrap();
@@ -433,7 +433,7 @@ mod tests {
     }
 
     #[test]
-    fn nesting_cannot_form_loops_or_cross_campaigns() {
+    fn nesting_cannot_form_loops_or_cross_projects() {
         let (conn, camp) = setup();
         let a = create(&conn, &camp, None, "A", None, 1).unwrap();
         let b = create(&conn, &camp, Some(&a.id), "B", None, 1).unwrap();
@@ -441,7 +441,7 @@ mod tests {
         assert!(matches!(move_to(&conn, &a.id, Some(&a.id), 2), Err(DbError::Invalid(_))));
         assert!(matches!(move_to(&conn, &a.id, Some(&c.id), 2), Err(DbError::Invalid(_))));
         assert_eq!(get(&conn, &a.id).unwrap().parent_id, None);
-        let other = campaigns::create(&conn, "Other", 1).unwrap();
+        let other = projects::create(&conn, "Other", 1).unwrap();
         let foreign = create(&conn, &other.id, None, "F", None, 1).unwrap();
         assert!(matches!(move_to(&conn, &a.id, Some(&foreign.id), 2), Err(DbError::Invalid(_))));
         assert!(matches!(
@@ -514,11 +514,11 @@ mod tests {
     }
 
     #[test]
-    fn tags_and_items_must_be_live_and_in_the_same_campaign() {
+    fn tags_and_items_must_be_live_and_in_the_same_project() {
         let (conn, camp) = setup();
         let item = new_item(&conn, &camp, "Bob");
         let t = create(&conn, &camp, None, "T", None, 1).unwrap();
-        let other = campaigns::create(&conn, "Other", 1).unwrap();
+        let other = projects::create(&conn, "Other", 1).unwrap();
         let foreign = create(&conn, &other.id, None, "F", None, 1).unwrap();
         assert!(matches!(add_to_item(&conn, &item.id, &foreign.id, 2), Err(DbError::Invalid(_))));
         assert!(matches!(add_to_item(&conn, "nope", &t.id, 2), Err(DbError::NotFound)));

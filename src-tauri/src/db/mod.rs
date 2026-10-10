@@ -1,4 +1,4 @@
-pub mod campaigns;
+pub mod projects;
 pub mod cards;
 pub mod collections;
 pub mod documents;

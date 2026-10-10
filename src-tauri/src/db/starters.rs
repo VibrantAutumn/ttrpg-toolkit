@@ -1,5 +1,5 @@
 //! Starter decks: a ready-made folder of cards (with pictures, values, notes and
-//! tags), sets and a deck, added to a campaign in one all-or-nothing step.
+//! tags), sets and a deck, added to a project in one all-or-nothing step.
 //!
 //! The app builds a "bundle" (plain data, see `Bundle`) and this module writes
 //! it. Everything made carries `origin_pack_id = <bundle id>` (like items that
@@ -9,7 +9,7 @@
 
 use super::cards::{self, CARD_TYPE, DECK_TYPE, LIBRARY, SET_TYPE};
 use super::error::{clean_name, DbError};
-use super::{campaigns, collections, folders, items, tags};
+use super::{projects, collections, folders, items, tags};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -92,14 +92,14 @@ pub struct InstallResult {
     pub sets: u32,
 }
 
-/// Which starters are already in a campaign (any live item that came from one).
-pub fn installed(conn: &Connection, campaign_id: &str) -> Result<Vec<String>, DbError> {
+/// Which starters are already in a project (any live item that came from one).
+pub fn installed(conn: &Connection, project_id: &str) -> Result<Vec<String>, DbError> {
     let mut stmt = conn.prepare(
         "SELECT DISTINCT origin_pack_id FROM items
-         WHERE campaign_id = ?1 AND origin_pack_id LIKE 'starter:%' AND deleted_at IS NULL
+         WHERE project_id = ?1 AND origin_pack_id LIKE 'starter:%' AND deleted_at IS NULL
          ORDER BY origin_pack_id",
     )?;
-    let rows = stmt.query_map([campaign_id], |r| r.get::<_, String>(0))?;
+    let rows = stmt.query_map([project_id], |r| r.get::<_, String>(0))?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
@@ -158,13 +158,13 @@ fn validate(bundle: &Bundle) -> Result<(), DbError> {
     Ok(())
 }
 
-/// Puts the bundle into the campaign. All or nothing: a failure part-way leaves
-/// the campaign exactly as it was. Refuses if this starter is already there.
-pub fn install(conn: &Connection, campaign_id: &str, bundle: &Bundle, now: i64) -> Result<InstallResult, DbError> {
-    campaigns::require_live(conn, campaign_id)?;
+/// Puts the bundle into the project. All or nothing: a failure part-way leaves
+/// the project exactly as it was. Refuses if this starter is already there.
+pub fn install(conn: &Connection, project_id: &str, bundle: &Bundle, now: i64) -> Result<InstallResult, DbError> {
+    projects::require_live(conn, project_id)?;
     validate(bundle)?;
-    if installed(conn, campaign_id)?.contains(&bundle.id) {
-        return Err(DbError::Invalid("That starter deck has already been added to this campaign."));
+    if installed(conn, project_id)?.contains(&bundle.id) {
+        return Err(DbError::Invalid("That starter deck has already been added to this project."));
     }
 
     // The checks above run before the first write; from here on one transaction
@@ -173,7 +173,7 @@ pub fn install(conn: &Connection, campaign_id: &str, bundle: &Bundle, now: i64) 
 
     // Tags: reuse a top-level tag with the same name, so adding two starters
     // that both use "Hearts" doesn't make two.
-    let existing = tags::list(&tx, campaign_id)?;
+    let existing = tags::list(&tx, project_id)?;
     let mut tag_ids: HashMap<&str, String> = HashMap::new();
     for tag in &bundle.tags {
         let found = existing
@@ -181,14 +181,14 @@ pub fn install(conn: &Connection, campaign_id: &str, bundle: &Bundle, now: i64) 
             .find(|t| t.parent_id.is_none() && t.name.eq_ignore_ascii_case(tag.name.trim()));
         let id = match found {
             Some(t) => t.id.clone(),
-            None => tags::create(&tx, campaign_id, None, &tag.name, tag.color.as_deref(), now)?.id,
+            None => tags::create(&tx, project_id, None, &tag.name, tag.color.as_deref(), now)?.id,
         };
         tag_ids.insert(tag.name.as_str(), id);
     }
 
-    let folder = folders::create(&tx, campaign_id, LIBRARY, None, &bundle.name, now)?;
+    let folder = folders::create(&tx, project_id, LIBRARY, None, &bundle.name, now)?;
     let make = |item_type: &str, name: &str, origin: &str| -> Result<String, DbError> {
-        let item = items::create(&tx, campaign_id, LIBRARY, item_type, name, Some(&folder.id), now)?;
+        let item = items::create(&tx, project_id, LIBRARY, item_type, name, Some(&folder.id), now)?;
         tx.execute(
             "UPDATE items SET origin_pack_id = ?2, origin_item_id = ?3 WHERE id = ?1",
             params![item.id, bundle.id, origin],
@@ -317,7 +317,7 @@ mod tests {
 
     fn setup() -> (Connection, String) {
         let conn = open_in_memory();
-        let c = campaigns::create(&conn, "Test", 1).unwrap();
+        let c = projects::create(&conn, "Test", 1).unwrap();
         (conn, c.id)
     }
 
@@ -365,7 +365,7 @@ mod tests {
         let (conn, camp) = setup();
         install(&conn, &camp, &bundle(), 100).unwrap();
         let rows: Vec<(String, String)> = conn
-            .prepare("SELECT origin_pack_id, origin_item_id FROM items WHERE campaign_id = ?1 AND item_type = 'card' ORDER BY origin_item_id")
+            .prepare("SELECT origin_pack_id, origin_item_id FROM items WHERE project_id = ?1 AND item_type = 'card' ORDER BY origin_item_id")
             .unwrap()
             .query_map([&camp], |r| Ok((r.get(0)?, r.get(1)?)))
             .unwrap()
@@ -375,8 +375,8 @@ mod tests {
         assert!(rows.iter().all(|(pack, _)| pack == "starter:test"));
         assert_eq!(rows.iter().map(|(_, k)| k.as_str()).collect::<Vec<_>>(), ["h1", "h2", "j", "s1"]);
         assert_eq!(installed(&conn, &camp).unwrap(), ["starter:test"]);
-        // Nothing was marked on the (unrelated) campaign next door.
-        let other = campaigns::create(&conn, "Other", 2).unwrap();
+        // Nothing was marked on the (unrelated) project next door.
+        let other = projects::create(&conn, "Other", 2).unwrap();
         assert!(installed(&conn, &other.id).unwrap().is_empty());
     }
 
@@ -492,11 +492,11 @@ mod tests {
             assert!(matches!(install(&conn, &camp, &b, 1), Err(DbError::Invalid(_)) | Err(DbError::EmptyName)), "{what}");
             assert_eq!(count(&conn, "items") + count(&conn, "folders") + count(&conn, "tags"), 0, "{what}");
         }
-        assert!(matches!(install(&conn, "no-such-campaign", &bundle(), 1), Err(DbError::NotFound)));
+        assert!(matches!(install(&conn, "no-such-project", &bundle(), 1), Err(DbError::NotFound)));
     }
 
     #[test]
-    fn a_failure_part_way_leaves_the_campaign_exactly_as_it_was() {
+    fn a_failure_part_way_leaves_the_project_exactly_as_it_was() {
         let (conn, camp) = setup();
         // The checks pass, but a late step fails (the table for pictures is gone).
         conn.execute_batch("DROP TABLE card_images").unwrap();

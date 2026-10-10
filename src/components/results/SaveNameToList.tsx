@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createItem } from "../../api/library";
 import { listTables, type TableSummary } from "../../api/tables";
-import { useCurrentCampaign } from "../../state/CurrentCampaign";
+import { useCurrentProject } from "../../state/CurrentProject";
 import { saveNameToTable } from "../../state/nameActions";
 
 /** The drop-down's value for "make a new table". Table ids are UUIDs, so this can't clash. */
@@ -13,7 +13,7 @@ const NEW_TABLE = "new-table";
  * new table made right here.
  */
 export function SaveNameToList({ name }: { name: string }) {
-  const { campaign } = useCurrentCampaign();
+  const { project } = useCurrentProject();
   const [open, setOpen] = useState(false);
   const [tables, setTables] = useState<TableSummary[]>([]);
   const [chosen, setChosen] = useState("");
@@ -22,24 +22,24 @@ export function SaveNameToList({ name }: { name: string }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open || !campaign) return;
+    if (!open || !project) return;
     let active = true;
-    listTables(campaign.id)
+    listTables(project.id)
       .then((list) => active && setTables(list))
       .catch((e) => active && setError(String(e)));
     return () => {
       active = false;
     };
-  }, [open, campaign]);
+  }, [open, project]);
 
   const making = chosen === NEW_TABLE;
   const ready = making ? newName.trim() !== "" : chosen !== "";
 
   async function save() {
-    if (!campaign || !ready) return;
+    if (!project || !ready) return;
     try {
       if (making) {
-        const table = await createItem(campaign.id, "tables", "table", newName, null);
+        const table = await createItem(project.id, "tables", "table", newName, null);
         await saveNameToTable(table.id, name);
         setNote(`Made the table “${table.name}” and added “${name}” to it.`);
         setNewName("");
@@ -59,7 +59,7 @@ export function SaveNameToList({ name }: { name: string }) {
 
   return (
     <div>
-      <button onClick={() => setOpen((v) => !v)} aria-expanded={open} disabled={!campaign}>
+      <button onClick={() => setOpen((v) => !v)} aria-expanded={open} disabled={!project}>
         Save to list
       </button>
       {open && (

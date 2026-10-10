@@ -6,7 +6,7 @@ import { MAX_COLUMNS, emptyQuery, normalizeQuery, type Column, type Query } from
 import { addColumn, buildRows, cellText, columnLabel, filterRows, moveColumn, nextSort, removeColumn, sortDirection, type TableContext } from "./table";
 
 const item = (id: string, name: string): Item => ({
-  id, campaignId: "c", library: "worldbuilding", itemType: "document", name, icon: null, folderId: null,
+  id, projectId: "c", library: "worldbuilding", itemType: "document", name, icon: null, folderId: null,
   visibility: "default", createdAt: 1000, updatedAt: 2000, deletedAt: null,
 });
 

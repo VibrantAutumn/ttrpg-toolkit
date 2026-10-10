@@ -73,7 +73,7 @@ describe("every starter generator", () => {
     });
   }
 
-  it("leaves out a template or field the campaign doesn't have", () => {
+  it("leaves out a template or field the project doesn't have", () => {
     const none = toDefinition({ name: "X", description: "d", templateName: "Missing", rows: [{ label: "R", target: { kind: "field", fieldName: "Nope" }, source: "x" }] }, lookup);
     expect(none.templateId).toBeNull();
     expect(none.rows[0].target).toEqual({ kind: "text" });

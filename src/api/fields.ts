@@ -44,15 +44,15 @@ const toSet = (r: SetRecord): FieldSet => ({ id: r.id, name: r.name, description
 
 // ---- definitions
 
-export const listFieldDefinitions = async (campaignId: string) =>
-  toDefinitions(await invoke<DefinitionRecord[]>("list_field_definitions", { campaignId }));
+export const listFieldDefinitions = async (projectId: string) =>
+  toDefinitions(await invoke<DefinitionRecord[]>("list_field_definitions", { projectId }));
 
-export const listDeletedFieldDefinitions = async (campaignId: string) =>
-  toDefinitions(await invoke<DefinitionRecord[]>("list_deleted_field_definitions", { campaignId }));
+export const listDeletedFieldDefinitions = async (projectId: string) =>
+  toDefinitions(await invoke<DefinitionRecord[]>("list_deleted_field_definitions", { projectId }));
 
-export async function createFieldDefinition(campaignId: string, def: FieldDefinition): Promise<FieldDefinition> {
+export async function createFieldDefinition(projectId: string, def: FieldDefinition): Promise<FieldDefinition> {
   const record = await invoke<DefinitionRecord>("create_field_definition", {
-    campaignId,
+    projectId,
     name: def.name.trim(),
     kind: def.kind,
     description: def.description,
@@ -76,12 +76,12 @@ export const restoreFieldDefinition = (id: string) => invoke<DefinitionRecord>("
 
 // ---- sets
 
-export const listFieldSets = async (campaignId: string) =>
-  (await invoke<SetRecord[]>("list_field_sets", { campaignId })).map(toSet);
-export const listDeletedFieldSets = async (campaignId: string) =>
-  (await invoke<SetRecord[]>("list_deleted_field_sets", { campaignId })).map(toSet);
-export const createFieldSet = async (campaignId: string, name: string, description: string) =>
-  toSet(await invoke<SetRecord>("create_field_set", { campaignId, name, description }));
+export const listFieldSets = async (projectId: string) =>
+  (await invoke<SetRecord[]>("list_field_sets", { projectId })).map(toSet);
+export const listDeletedFieldSets = async (projectId: string) =>
+  (await invoke<SetRecord[]>("list_deleted_field_sets", { projectId })).map(toSet);
+export const createFieldSet = async (projectId: string, name: string, description: string) =>
+  toSet(await invoke<SetRecord>("create_field_set", { projectId, name, description }));
 export const updateFieldSet = async (id: string, name: string, description: string) =>
   toSet(await invoke<SetRecord>("update_field_set", { id, name, description }));
 export const setFieldSetFields = async (setId: string, fieldIds: string[]) =>
