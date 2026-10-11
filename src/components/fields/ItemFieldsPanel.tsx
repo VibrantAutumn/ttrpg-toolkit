@@ -16,6 +16,8 @@ import { fieldsToShow, type ShownField } from "../../lib/fields/fieldSets";
 import { coerceValue, emptyValue, formatValue, isEmpty, type FieldValue } from "../../lib/fields/value";
 import { bumpDataVersion, useDataVersion } from "../../state/dataVersion";
 import { useFieldCatalog } from "../../state/fieldCatalog";
+import { useProjectRules } from "../../state/projectRules";
+import { projectStatBlocks } from "../../lib/rulesets/projectRules";
 import { ConfirmButton } from "../ConfirmButton";
 import { FieldDefinitionForm } from "./FieldDefinitionForm";
 import { FieldSetForm } from "./FieldSetForm";
@@ -31,6 +33,7 @@ import { FieldValueEditor } from "./FieldValueEditor";
  */
 export function ItemFieldsPanel({ item }: { item: Item }) {
   const catalog = useFieldCatalog(item.projectId);
+  const { rules } = useProjectRules(item.projectId);
   const dataVersion = useDataVersion();
   const [data, setData] = useState<ItemFieldData | null>(null);
   const [extraIds, setExtraIds] = useState<string[]>([]);
@@ -113,6 +116,10 @@ export function ItemFieldsPanel({ item }: { item: Item }) {
   const shownIds = new Set(shown.map((s) => s.definition.id));
   const setsToAdd = catalog.sets.filter((s) => !appliedSets.has(s.id));
   const fieldsToAdd = catalog.definitions.filter((d) => !shownIds.has(d.id));
+  // Stat blocks of the project's rulesets are property sets; this lists the ones this page doesn't have yet.
+  const statBlocksToAdd = projectStatBlocks(rules).filter(
+    (b) => b.setId !== null && !appliedSets.has(b.setId) && catalog.sets.some((s) => s.id === b.setId),
+  );
 
   const removeEverywhere = (action: () => Promise<unknown>) =>
     run(async () => {
@@ -235,6 +242,20 @@ export function ItemFieldsPanel({ item }: { item: Item }) {
           </button>
           {adding && (
             <>
+          {statBlocksToAdd.length > 0 && (
+            <select
+              aria-label="Add a stat block"
+              value=""
+              onChange={(e) => e.currentTarget.value && run(() => applyFieldSet(item.id, e.currentTarget.value))}
+            >
+              <option value="">Add a stat block…</option>
+              {statBlocksToAdd.map((b) => (
+                <option key={`${b.rulesName}-${b.block.key}`} value={b.setId as string}>
+                  {rules.length > 1 ? `${b.block.name} (${b.rulesName})` : b.block.name}
+                </option>
+              ))}
+            </select>
+          )}
           {setsToAdd.length > 0 && (
             <select
               aria-label="Add a property set"

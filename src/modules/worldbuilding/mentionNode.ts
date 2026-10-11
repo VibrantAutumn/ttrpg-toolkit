@@ -5,6 +5,9 @@ import type { Item } from "../../api/library";
 import { itemIcon, itemTypeLabel, libraryLabel } from "../../components/item/itemDisplay";
 import type { PickerBridge } from "./PickerMenu";
 
+/** The "@" menu's plugin key, shared so the editor can close the menu when it loses focus. */
+export const mentionSuggestionKey = new PluginKey("mentionSuggestion");
+
 /** What the editor needs from the rest of the app to support mentions. */
 export interface MentionSupport {
   /** Items whose name matches what was typed after "@" (never the document itself). */
@@ -142,7 +145,7 @@ export function createMention(getSupport: () => MentionSupport | undefined, brid
         Suggestion<Item, Item>({
           editor: this.editor,
           char: "@",
-          pluginKey: new PluginKey("mentionSuggestion"),
+          pluginKey: mentionSuggestionKey,
           // Item names have spaces, so keep matching while typing them.
           allowSpaces: true,
           items: async ({ query }) => (query.trim() === "" ? [] : ((await getSupport()?.search(query.trim())) ?? [])),

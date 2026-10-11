@@ -12,7 +12,7 @@ use crate::db::projects::{self, Project};
 use crate::db::fields;
 use crate::db::tabs;
 use crate::db::{
-    cards, collections, documents, formulas, generators, play_decks, saved_draws, saved_rolls, settings, smart_collections, spreads, tables,
+    cards, collections, documents, encounters, formulas, generators, play_decks, rulesets, saved_draws, saved_rolls, settings, smart_collections, spreads, tables,
 };
 use rusqlite::{params, Connection, ErrorCode};
 use serde::de::DeserializeOwned;
@@ -70,6 +70,8 @@ pub struct ParsedPack {
     pub item_tabs: Vec<ItemTabRecord>,
     pub smart_collections: Vec<SmartCollectionRecord>,
     pub generators: Vec<GeneratorRecord>,
+    pub encounters: Vec<EncounterRecord>,
+    pub project_rulesets: Vec<ProjectRulesetRecord>,
     /// Plain-language notes about anything that had to be fixed or skipped.
     pub warnings: Vec<String>,
 }
@@ -104,6 +106,8 @@ impl ParsedPack {
             item_tabs: self.item_tabs.len() as u32,
             smart_collections: self.smart_collections.len() as u32,
             generators: self.generators.len() as u32,
+            encounters: self.encounters.len() as u32,
+            project_rulesets: self.project_rulesets.len() as u32,
         }
     }
 }
@@ -207,6 +211,8 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         item_tabs: read_list(&mut archive, ITEM_TABS_FILE, limits, &mut total)?,
         smart_collections: read_list(&mut archive, SMART_COLLECTIONS_FILE, limits, &mut total)?,
         generators: read_list(&mut archive, GENERATORS_FILE, limits, &mut total)?,
+        encounters: read_list(&mut archive, ENCOUNTERS_FILE, limits, &mut total)?,
+        project_rulesets: read_list(&mut archive, PROJECT_RULESETS_FILE, limits, &mut total)?,
         warnings: Vec::new(),
     };
     sanitize(&mut pack);
@@ -767,6 +773,26 @@ fn sanitize(pack: &mut ParsedPack) {
     });
     note(before - pack.generators.len(), "generator(s) belonged to something missing or were unreadable and were skipped.");
 
+    let before = pack.encounters.len();
+    let mut seen = HashSet::new();
+    pack.encounters.retain(|e| {
+        item_type.get(e.item_id.as_str()) == Some(&encounters::ENCOUNTER_TYPE)
+            && encounters::validate(&e.state_json).is_ok()
+            && seen.insert(e.item_id.clone())
+    });
+    note(before - pack.encounters.len(), "encounter(s) belonged to something missing or were unreadable and were skipped.");
+
+    let before = pack.project_rulesets.len();
+    let mut seen = HashSet::new();
+    pack.project_rulesets.retain(|r| {
+        !r.name.trim().is_empty()
+            && r.name.trim().chars().count() <= rulesets::MAX_NAME_CHARS
+            && rulesets::validate_definition(&r.rules_json).is_ok()
+            && serde_json::from_str::<serde_json::Value>(&r.ids_json).is_ok_and(|v| v.is_object())
+            && seen.insert(r.id.clone())
+    });
+    note(before - pack.project_rulesets.len(), "ruleset copy(ies) were unreadable and were skipped.");
+
     let before = pack.item_field_sets.len();
     let mut seen = HashSet::new();
     pack.item_field_sets.retain(|a| {
@@ -916,6 +942,18 @@ pub(super) fn remapped_body(body: &str, ids: &HashMap<String, String>) -> String
 /// the new ids; ids outside the pack are left as they were.
 pub(super) fn remapped_slots(text: &str, ids: &HashMap<String, String>) -> String {
     remapped_after(text, "link:", ids)
+}
+
+/// An encounter's state with its combatants' page ids replaced by the new ids, and no undo history.
+fn remapped_encounter(state_json: &str, ids: &HashMap<String, String>) -> String {
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(state_json) else {
+        return state_json.to_string();
+    };
+    if let Some(object) = value.as_object_mut() {
+        object.insert("history".to_string(), serde_json::json!([]));
+    }
+    remap_ids(&mut value, ids);
+    value.to_string()
 }
 
 /// A generator's definition: ids inside (a version 1 template or field) are replaced as in any JSON,
@@ -1192,6 +1230,16 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
         )
         .map_err(db_error)?;
     }
+    // An encounter remembers the pages its combatants came from by id: point them at the imported copies. The undo
+    // history holds old states as text (with the old ids inside), so it is not carried over.
+    for e in &pack.encounters {
+        let state_json = remapped_encounter(&e.state_json, &item_ids);
+        tx.execute(
+            "INSERT INTO encounters (item_id, state_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            params![item_ids[&e.item_id], state_json, e.created_at, e.updated_at],
+        )
+        .map_err(db_error)?;
+    }
     for p in &pack.play_decks {
         let state_json = remapped_json(&p.state_json, &item_ids);
         // Where the cards came from: the imported copy of it, or nothing if it wasn't in the pack.
@@ -1265,6 +1313,39 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
                 tab_ids[&t.id], item_ids[&t.parent_id], t.kind, t.position,
                 t.child_id.as_ref().map(|c| &item_ids[c]), t.target_id.as_ref().map(|x| &item_ids[x]),
                 t.title, t.created_at, t.updated_at, t.deleted_at
+            ],
+        )
+        .map_err(db_error)?;
+    }
+
+    // The project's copies of rulesets name their properties and stat blocks by the project's own ids: point them at
+    // the imported copies. Rulesets are global, so a copy whose ruleset this device doesn't have yet also brings the
+    // ruleset itself (found by name, which is what a ruleset is called by), and the copy is linked to it.
+    let mut ruleset_ids = field_ids.clone();
+    ruleset_ids.extend(field_set_ids.iter().map(|(old, new)| (old.clone(), new.clone())));
+    for r in &pack.project_rulesets {
+        let ids_json = remapped_json(&r.ids_json, &ruleset_ids);
+        let global = if r.deleted_at.is_some() {
+            None
+        } else {
+            let found: Option<String> = tx
+                .query_row(
+                    "SELECT id FROM rulesets WHERE deleted_at IS NULL AND name = ?1 COLLATE NOCASE",
+                    [r.name.trim()],
+                    |row| row.get(0),
+                )
+                .ok();
+            match found {
+                Some(id) => Some(id),
+                None => Some(rulesets::create(&tx, r.name.trim(), "", &r.rules_json, None, now)?.id),
+            }
+        };
+        tx.execute(
+            "INSERT INTO project_rulesets (id, project_id, ruleset_id, name, rules_json, ids_json, position, created_at, updated_at, deleted_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                Uuid::now_v7().to_string(), project.id, global, r.name.trim(), r.rules_json, ids_json, r.position,
+                r.created_at, r.updated_at, r.deleted_at
             ],
         )
         .map_err(db_error)?;

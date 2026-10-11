@@ -1,4 +1,8 @@
 import { useState } from "react";
+import { applyFieldSet } from "../../api/fields";
+import { projectStatBlocks } from "../../lib/rulesets/projectRules";
+import { bumpDataVersion } from "../../state/dataVersion";
+import { useProjectRules } from "../../state/projectRules";
 import { addDocumentTab, addEmbedTab, updateEmbedTab, type Tab } from "../../api/tabs";
 import { useRenameItem } from "../../state/renameReview";
 import { itemIcon } from "./itemDisplay";
@@ -12,7 +16,7 @@ export function tabLabel(tab: Tab): string {
 
 const tabIcon = (tab: Tab) => (tab.item ? itemIcon(tab.item) : "▫️");
 
-type Adding = null | "menu" | "document" | "embed" | "slot";
+type Adding = null | "menu" | "document" | "embed" | "slot" | "statblock";
 
 /**
  * The tabs under a page's title: Main, then each tab in order, then a "+" to add one. A tab is a
@@ -42,6 +46,8 @@ export function TabStrip({
   onRenamed: () => void;
 }) {
   const renameReviewed = useRenameItem();
+  const { rules } = useProjectRules(projectId);
+  const statBlocks = projectStatBlocks(rules).filter((b) => b.setId !== null);
   const [renaming, setRenaming] = useState<{ tab: Tab; name: string } | null>(null);
   const [adding, setAdding] = useState<Adding>(null);
   const [name, setName] = useState("");
@@ -128,6 +134,7 @@ export function TabStrip({
       {adding === "menu" && (
         <div className="tab-menu row wrap">
           <button onClick={() => setAdding("document")}>New document tab</button>
+          {statBlocks.length > 0 && <button onClick={() => setAdding("statblock")}>Stat block tab…</button>}
           <button onClick={() => setAdding("embed")}>Embed an item…</button>
           <button onClick={() => setAdding("slot")}>Empty embed slot</button>
           <button onClick={close}>Cancel</button>
@@ -148,6 +155,29 @@ export function TabStrip({
             Cancel
           </button>
         </form>
+      )}
+
+      {adding === "statblock" && (
+        <div className="tab-menu row wrap">
+          <span className="meta">Which stat block?</span>
+          {statBlocks.map((b) => (
+            <button
+              key={`${b.rulesName}-${b.block.key}`}
+              onClick={() =>
+                void attempt(async () => {
+                  // A document tab named after the stat block, with that stat block's properties on it.
+                  const tab = await addDocumentTab(parentId, b.block.name);
+                  if (tab.item) await applyFieldSet(tab.item.id, b.setId as string);
+                  bumpDataVersion();
+                  return tab;
+                })
+              }
+            >
+              {rules.length > 1 ? `${b.block.name} (${b.rulesName})` : b.block.name}
+            </button>
+          ))}
+          <button onClick={close}>Cancel</button>
+        </div>
       )}
 
       {adding === "slot" && (

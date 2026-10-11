@@ -1,6 +1,6 @@
 import { Extension, type Editor } from "@tiptap/core";
 import Suggestion from "@tiptap/suggestion";
-import { filterBlockCommands, type BlockCommand, type BlockCommandId } from "../../lib/documents/blockCommands";
+import { filterBlockCommands, type BlockCommandId, type SlashCommand } from "../../lib/documents/blockCommands";
 import { insertToggle, wrapInCallout, wrapInSecret } from "./containerNodes";
 import { insertColumns } from "./layoutNodes";
 import type { PickerBridge } from "./PickerMenu";
@@ -58,19 +58,26 @@ export function runBlockCommand(editor: Editor, id: BlockCommandId): void {
 }
 
 /** Typing "/" at the start of a line or after a space opens a menu of blocks. */
-export function slashCommands(bridge: PickerBridge<BlockCommand>) {
+export function slashCommands(
+  bridge: PickerBridge<SlashCommand>,
+  /** Extra items for this page (its project's stat blocks), read each time the menu opens. */
+  getExtras: () => SlashCommand[],
+  /** Adds a stat block (a property set) to the page. */
+  addStatBlock: (setId: string) => void,
+) {
   return Extension.create({
     name: "slashCommands",
     addProseMirrorPlugins() {
       return [
-        Suggestion<BlockCommand, BlockCommand>({
+        Suggestion<SlashCommand, SlashCommand>({
           editor: this.editor,
           char: "/",
-          items: ({ query }) => filterBlockCommands(query),
+          items: ({ query }) => filterBlockCommands(query, getExtras()),
           allow: ({ state, range }) => state.doc.resolve(range.from).parent.type.name !== "codeBlock",
           command: ({ editor, range, props }) => {
             editor.chain().focus().deleteRange(range).run();
-            runBlockCommand(editor, props.id);
+            if (props.setId) addStatBlock(props.setId);
+            else runBlockCommand(editor, props.id as BlockCommandId);
           },
           render: () => ({
             onStart: (props) => bridge.show(props),

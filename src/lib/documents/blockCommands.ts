@@ -36,8 +36,15 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
   { id: "secret", label: "Secret", hint: "GM-only block", group: "Highlights", keywords: ["gm", "hidden", "private"] },
 ];
 
+/** An item of the "/" menu: one of the fixed blocks, or an extra the page offers (a stat block to add to it). */
+export interface SlashCommand extends Omit<BlockCommand, "id"> {
+  id: BlockCommandId | `statblock:${string}`;
+  /** For a stat block: the property set it adds to the page. */
+  setId?: string;
+}
+
 /** How well one typed word fits a command, lower is better; null = no match. */
-function termScore(command: BlockCommand, term: string): number | null {
+function termScore(command: SlashCommand, term: string): number | null {
   const label = command.label.toLowerCase();
   if (label.startsWith(term)) return 0;
   if (label.split(/\s+/).some((word) => word.startsWith(term))) return 1;
@@ -45,12 +52,13 @@ function termScore(command: BlockCommand, term: string): number | null {
   return null;
 }
 
-/** The blocks matching what was typed after "/", best first (ties keep the list's order). */
-export function filterBlockCommands(query: string): BlockCommand[] {
+/** The blocks (and `extra` items, listed after them) matching what was typed after "/", best first (ties keep the list's order). */
+export function filterBlockCommands(query: string, extra: SlashCommand[] = []): SlashCommand[] {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (terms.length === 0) return [...BLOCK_COMMANDS];
-  const scored: { command: BlockCommand; score: number; index: number }[] = [];
-  BLOCK_COMMANDS.forEach((command, index) => {
+  const all: SlashCommand[] = [...BLOCK_COMMANDS, ...extra];
+  if (terms.length === 0) return all;
+  const scored: { command: SlashCommand; score: number; index: number }[] = [];
+  all.forEach((command, index) => {
     let total = 0;
     for (const term of terms) {
       const score = termScore(command, term);

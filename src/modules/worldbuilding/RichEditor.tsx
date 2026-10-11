@@ -9,13 +9,14 @@ import StarterKit from "@tiptap/starter-kit";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import type { Item } from "../../api/library";
 import { itemIcon, itemTypeLabel, libraryLabel } from "../../components/item/itemDisplay";
-import { BLOCK_COMMANDS, type BlockCommand } from "../../lib/documents/blockCommands";
+import { BLOCK_COMMANDS, type BlockCommand, type SlashCommand } from "../../lib/documents/blockCommands";
 import { canOpenExternally, normalizeLinkAddress } from "../../lib/documents/links";
 import { docToMarkdown, markdownToDoc } from "../../lib/documents/markdown";
 import type { DocNode } from "../../lib/documents/types";
 import { ancestorOf, CALLOUT_KINDS, Callout, Secret, Toggle, ToggleSummary, unwrapBlock } from "./containerNodes";
 import { addColumn, Column, Columns, columnsContext, deleteColumn, insideNode, MAX_COLUMNS, unwrapColumns } from "./layoutNodes";
-import { createMention, type MentionSupport } from "./mentionNode";
+import { exitSuggestion } from "@tiptap/suggestion";
+import { createMention, mentionSuggestionKey, type MentionSupport } from "./mentionNode";
 import { PickerMenu, usePickerMenu } from "./PickerMenu";
 import { RawMarkdown } from "./rawMarkdownNode";
 import { runBlockCommand, slashCommands } from "./slashCommands";
@@ -28,6 +29,12 @@ export interface RichEditorHandle {
 // A table cell holds one paragraph (the Markdown table format has nothing more), and the first row is the header.
 const MarkdownCell = TableCell.extend({ content: "paragraph+" });
 const MarkdownHeader = TableHeader.extend({ content: "paragraph+" });
+
+/** What "/" needs to offer the project's stat blocks and add one to this page. */
+export interface StatBlockSupport {
+  list: () => { setId: string; name: string; rulesName: string }[];
+  add: (setId: string) => void;
+}
 
 /** True on a phone or tablet, where the system shows its own menu above a selection. */
 const touchScreen = () => typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches === true;
@@ -43,6 +50,7 @@ export function RichEditor({
   onMarkdown,
   onFlush,
   mentions,
+  statBlocks,
   ref,
 }: {
   initial: string;
@@ -50,6 +58,8 @@ export function RichEditor({
   onFlush: () => void;
   /** What "@" needs to find, show and open items; without it "@" does nothing. */
   mentions?: MentionSupport;
+  /** The stat blocks "/" can add to the page, and how; without it the menu has none. */
+  statBlocks?: StatBlockSupport;
   ref?: Ref<RichEditorHandle>;
 }) {
   const onMarkdownRef = useRef(onMarkdown);
@@ -65,7 +75,9 @@ export function RichEditor({
 
   const mentionsRef = useRef(mentions);
   mentionsRef.current = mentions;
-  const slashMenu = usePickerMenu<BlockCommand>(() => editorRef.current);
+  const statBlocksRef = useRef(statBlocks);
+  statBlocksRef.current = statBlocks;
+  const slashMenu = usePickerMenu<SlashCommand>(() => editorRef.current);
   const mentionMenu = usePickerMenu<Item>(() => editorRef.current);
 
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
@@ -104,7 +116,19 @@ export function RichEditor({
       ToggleSummary,
       Toggle,
       createMention(() => mentionsRef.current, mentionMenu.bridge),
-      slashCommands(slashMenu.bridge),
+      slashCommands(
+        slashMenu.bridge,
+        () =>
+          (statBlocksRef.current?.list() ?? []).map((b) => ({
+            id: `statblock:${b.setId}` as const,
+            setId: b.setId,
+            label: `Stat block: ${b.name}`,
+            hint: b.rulesName ? `Adds ${b.name} properties (${b.rulesName})` : `Adds ${b.name} properties`,
+            group: "Stat blocks",
+            keywords: ["stat", "statblock", "stats", "monster", "character", b.name.toLowerCase()],
+          })),
+        (setId) => statBlocksRef.current?.add(setId),
+      ),
     ],
     [slashMenu.bridge, mentionMenu.bridge],
   );
@@ -124,7 +148,10 @@ export function RichEditor({
       window.clearTimeout(timer.current);
       timer.current = window.setTimeout(commit, 300);
     },
-    onBlur: () => {
+    onBlur: ({ editor: e }) => {
+      // Clicking away closes an open "/" or "@" menu.
+      exitSuggestion(e.view);
+      exitSuggestion(e.view, mentionSuggestionKey);
       commit();
       onFlushRef.current();
     },

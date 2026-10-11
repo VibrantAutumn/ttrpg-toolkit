@@ -82,7 +82,54 @@ export function installMockBackend(): void {
   const live = (library: string, itemType?: string) =>
     [...items.values()].filter((i) => i.deletedAt === null && i.library === library && (itemType === undefined || i.itemType === itemType));
 
+  // Rulesets are global; the mock keeps them (and the project's copies) in memory.
+  const rulesets: { id: string; name: string; description: string; definitionJson: string; originId: string | null; createdAt: number; updatedAt: number; deleted: boolean }[] = [];
+  const projectRulesets: { id: string; projectId: string; rulesetId: string; name: string; rulesJson: string; idsJson: string; position: number }[] = [];
+  const toRecord = ({ deleted: _deleted, ...r }: (typeof rulesets)[number]) => r;
+
+  const encounterStates = new Map<string, string>();
+
   const handlers: Record<string, (a: Args) => unknown> = {
+    get_encounter: (a) => {
+      const text = encounterStates.get(String(a.itemId));
+      return text === undefined ? null : { itemId: a.itemId, stateJson: text, createdAt: now, updatedAt: now };
+    },
+    set_encounter_state: (a) => void encounterStates.set(String(a.itemId), String(a.stateJson)),
+    list_rulesets: () => rulesets.filter((r) => !r.deleted).map(toRecord),
+    list_deleted_rulesets: () => rulesets.filter((r) => r.deleted).map(toRecord),
+    get_ruleset: (a) => toRecord(rulesets.find((r) => r.id === a.id)!),
+    create_ruleset: (a) => {
+      counter += 1;
+      const made = { id: `r${counter}`, name: String(a.name), description: String(a.description), definitionJson: String(a.definitionJson), originId: (a.originId as string | null) ?? null, createdAt: now, updatedAt: now, deleted: false };
+      rulesets.push(made);
+      return toRecord(made);
+    },
+    update_ruleset: (a) => {
+      const r = rulesets.find((x) => x.id === a.id)!;
+      Object.assign(r, { name: String(a.name), description: String(a.description), definitionJson: String(a.definitionJson), updatedAt: Date.now() });
+      return toRecord(r);
+    },
+    delete_ruleset: (a) => void (rulesets.find((r) => r.id === a.id)!.deleted = true),
+    restore_ruleset: (a) => {
+      const r = rulesets.find((x) => x.id === a.id)!;
+      r.deleted = false;
+      return toRecord(r);
+    },
+    purge_ruleset: (a) => void rulesets.splice(rulesets.findIndex((r) => r.id === a.id), 1),
+    list_installed_ruleset_starters: () => rulesets.filter((r) => !r.deleted && r.originId).map((r) => r.originId),
+    list_project_rulesets: () => projectRulesets,
+    apply_ruleset: (a) => {
+      const r = rulesets.find((x) => x.id === a.ruleset_id || x.id === a.rulesetId)!;
+      let copy = projectRulesets.find((c) => c.rulesetId === r.id);
+      if (!copy) {
+        counter += 1;
+        copy = { id: `pr${counter}`, projectId: project.id, rulesetId: r.id, name: r.name, rulesJson: r.definitionJson, idsJson: '{"fields":{},"sets":{}}', position: projectRulesets.length };
+        projectRulesets.push(copy);
+      }
+      copy.rulesJson = r.definitionJson;
+      return { projectRuleset: copy, fieldsMade: 3, setsMade: 1, formulasMade: 2 };
+    },
+    remove_project_ruleset: (a) => void projectRulesets.splice(projectRulesets.findIndex((c) => c.id === a.projectRulesetId), 1),
     db_schema_version: () => 24,
     list_projects: () => [project],
     get_current_project: () => project,

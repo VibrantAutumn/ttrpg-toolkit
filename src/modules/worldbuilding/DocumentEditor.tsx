@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { applyFieldSet } from "../../api/fields";
 import { getDocumentBody, getItem, getItems, searchItems, setDocumentBody } from "../../api/library";
 import { createAutosaver, type Autosaver, type SaveStatus } from "../../lib/autosave";
+import { projectStatBlocks } from "../../lib/rulesets/projectRules";
 import { markdownToDoc } from "../../lib/documents/markdown";
 import { mentionIds } from "../../lib/documents/mentions";
 import { bumpDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
+import { useProjectRules } from "../../state/projectRules";
 import type { MentionSupport } from "./mentionNode";
-import { RichEditor } from "./RichEditor";
+import { RichEditor, type StatBlockSupport } from "./RichEditor";
 
 const STATUS_LABEL: Record<SaveStatus, string> = {
   saved: "Saved",
@@ -28,6 +31,24 @@ export function DocumentEditor({ itemId }: { itemId: string }) {
   const latest = useRef<string>(""); // the newest text from whichever view is showing
   const { openItem } = useNavigation();
   const projectId = useRef<string | null>(null);
+  const [project, setProject] = useState<string | null>(null);
+  const { rules } = useProjectRules(project);
+
+  // What "/" needs to add a stat block (a property set of one of the project's rulesets) to this page.
+  const statBlocks = useMemo<StatBlockSupport>(
+    () => ({
+      list: () =>
+        projectStatBlocks(rules)
+          .filter((b) => b.setId !== null)
+          .map((b) => ({ setId: b.setId as string, name: b.block.name, rulesName: rules.length > 1 ? b.rulesName : "" })),
+      add: (setId) => {
+        applyFieldSet(itemId, setId)
+          .then(() => bumpDataVersion()) // the page's Properties panel shows it
+          .catch((e) => setError(String(e)));
+      },
+    }),
+    [rules, itemId],
+  );
 
   // What "@" needs: search the open project (never the document itself), look up names, open items.
   const mentions = useMemo<MentionSupport>(
@@ -49,6 +70,7 @@ export function DocumentEditor({ itemId }: { itemId: string }) {
     getItem(itemId)
       .then((item) => {
         projectId.current = item.projectId;
+        if (active) setProject(item.projectId);
       })
       .catch(() => {});
     const autosaver = createAutosaver({
@@ -103,7 +125,7 @@ export function DocumentEditor({ itemId }: { itemId: string }) {
 
   return (
     <div className="doc-editor">
-      <RichEditor initial={text} mentions={mentions} onMarkdown={changeText} onFlush={() => void saver.current?.flush()} />
+      <RichEditor initial={text} mentions={mentions} statBlocks={statBlocks} onMarkdown={changeText} onFlush={() => void saver.current?.flush()} />
       <div className="doc-editor-foot row">
         <p className={status === "error" ? "error grow" : "meta grow"} role="status">
           {STATUS_LABEL[status]}

@@ -1,0 +1,109 @@
+/* Encounters */
+.encounter-columns {
+  /* Two columns when there is room (combatants, then settings and log), one column when the page is narrow. */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.turn-controls {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0.5rem 0 1rem;
+  padding: 0.6rem 0.75rem;
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.turn-controls .round {
+  font-size: 1.2em;
+}
+
+.turn-controls .primary,
+.encounter-settings .primary {
+  margin-top: 0.4rem;
+  width: 100%;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.combatant-list {
+  list-style: none;
+  margin: 0.5rem 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.combatant {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-left-width: 6px;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.combatant-party {
+  border-left-color: #4dabf7;
+}
+
+.combatant-foes {
+  border-left-color: #ff8787;
+}
+
+.combatant.is-turn {
+  border-color: #ffd43b;
+  box-shadow: 0 0 0 2px #ffd43b;
+}
+
+.combatant.is-defeated {
+  opacity: 0.55;
+}
+
+.combatant.is-defeated .combatant-head strong {
+  text-decoration: line-through;
+}
+
+.combatant.has-acted {
+  opacity: 0.8;
+}
+
+.combatant-stats {
+  margin: 0.2rem 0;
+}
+
+.status-chips {
+  list-style: none;
+  margin: 0.4rem 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.2rem 0 0.6rem;
+  border: 2px solid var(--border);
+  border-radius: 999px;
+}
+
+.status-chip button {
+  min-height: 32px;
+  padding: 0 0.4rem;
+  border: none;
+  background: transparent;
+}
+
+.log-list {
+  margin: 0;
+  padding-left: 1.5rem;
+  max-height: 22rem;
+  overflow-y: auto;
+}

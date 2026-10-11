@@ -20,6 +20,8 @@
 //!   data/item_tabs.json    (likewise; a page's tabs: nested documents and embeds)
 //!   data/smart_collections.json    (likewise; a saved query, with tag, folder, field and item ids inside)
 //!   data/generators.json    (likewise; a generator's rows, with a template's item id and field ids inside)
+//!   data/encounters.json    (likewise; an encounter's state, with the item ids of its combatants' pages inside; undo history is not carried)
+//!   data/project_rulesets.json    (likewise; the project's copies of rulesets, with the project's field and set ids inside)
 //!   assets/cards/<id>.<ext>, assets/cards/<id>.thumb.<ext>   card pictures (one file each)
 //!   assets/                  reserved for future use (images, ...)
 //!
@@ -62,6 +64,8 @@ pub const FIELD_VALUES_FILE: &str = "data/field_values.json";
 pub const ITEM_TABS_FILE: &str = "data/item_tabs.json";
 pub const SMART_COLLECTIONS_FILE: &str = "data/smart_collections.json";
 pub const GENERATORS_FILE: &str = "data/generators.json";
+pub const ENCOUNTERS_FILE: &str = "data/encounters.json";
+pub const PROJECT_RULESETS_FILE: &str = "data/project_rulesets.json";
 /// Card picture files live under this folder inside the zip.
 pub const CARD_ASSET_DIR: &str = "assets/cards/";
 
@@ -117,6 +121,8 @@ pub struct Counts {
     pub item_tabs: u32,
     pub smart_collections: u32,
     pub generators: u32,
+    pub encounters: u32,
+    pub project_rulesets: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -344,6 +350,34 @@ pub struct GeneratorRecord {
     pub definition_json: String,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+/// An encounter in progress (the item itself is separate). `state_json` holds the combatants, whose pages are
+/// remembered by item id; import points them at the imported copies.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EncounterRecord {
+    pub item_id: String,
+    pub state_json: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// A project's copy of a ruleset. `rules_json` is the ruleset as it was when applied; `ids_json` maps its property
+/// and stat block keys to the project's own field and field set ids (import points those at the imported copies).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectRulesetRecord {
+    pub id: String,
+    pub name: String,
+    pub rules_json: String,
+    #[serde(default = "empty_object")]
+    pub ids_json: String,
+    #[serde(default)]
+    pub position: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deleted_at: Option<i64>,
 }
 
 /// A field (its kind never changes). `config_json` holds the kind's settings.

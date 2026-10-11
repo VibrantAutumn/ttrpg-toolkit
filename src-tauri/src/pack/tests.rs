@@ -8,6 +8,7 @@ use crate::db::fields::{self, ValueIndex};
 use crate::db::tabs;
 use crate::db::formulas;
 use crate::db::spreads::{self, PositionInput};
+use crate::db::encounters;
 use crate::db::generators;
 use crate::db::smart_collections;
 use crate::db::tables::{self, EntryInput, Pick};
@@ -218,6 +219,24 @@ mind the [Rumors]".into(), weight: 1 },
     let definition = r#"{"version":1,"templateId":null,"rows":[{"id":"r1","label":"Name","target":{"kind":"name"},"source":"[Names]","fallback":""}]}"#;
     generators::set_definition(conn, &maker.id, definition, 4930).unwrap();
 
+    // An encounter whose combatant came from Strahd's page (remembered by id), and a copy of a ruleset that knows the
+    // "Race" property and the "NPC" set by key (the copy's ids point at this project's own fields).
+    let fight = items::create(conn, c, "encounters", "encounter", "Crypt fight", None, 4940).unwrap();
+    let state = json!({
+        "version": 1, "phase": "running", "round": 2, "history": [],
+        "combatants": [{ "id": "c1", "baseName": "Strahd", "itemId": strahd.id, "side": "foes" }]
+    })
+    .to_string();
+    encounters::set_state(conn, &fight.id, &state, 4950).unwrap();
+    let rules = r#"{"version":1,"fields":[],"statBlocks":[],"formulas":[],"encounter":{}}"#;
+    let ids = json!({ "fields": { "race": race.id }, "sets": { "npc": npc.id } }).to_string();
+    conn.execute(
+        "INSERT INTO project_rulesets (id, project_id, ruleset_id, name, rules_json, ids_json, position, created_at, updated_at, deleted_at)
+         VALUES ('pr-1', ?1, NULL, 'Generic d20', ?2, ?3, 0, 4960, 4970, NULL)",
+        rusqlite::params![c, rules, ids],
+    )
+    .unwrap();
+
     camp.id
 }
 
@@ -269,6 +288,8 @@ struct Snapshot {
     item_tabs: Vec<String>,
     smart_collections: Vec<String>,
     generators: Vec<String>,
+    encounters: Vec<String>,
+    project_rulesets: Vec<String>,
 }
 
 fn snapshot(conn: &Connection, project_id: &str) -> Snapshot {
@@ -366,6 +387,16 @@ fn snapshot(conn: &Connection, project_id: &str) -> Snapshot {
         generators: lines(conn,
             "SELECT i.name, i.library, g.definition_json, g.created_at, g.updated_at, i.deleted_at
              FROM generators g JOIN items i ON i.id = g.item_id WHERE i.project_id = ?1", project_id),
+        encounters: lines(conn,
+            "SELECT i.name, i.library, json_extract(e.state_json, '$.phase'), json_extract(e.state_json, '$.round'),
+                    (SELECT name FROM items WHERE id = json_extract(e.state_json, '$.combatants[0].itemId')),
+                    e.created_at, e.updated_at, i.deleted_at
+             FROM encounters e JOIN items i ON i.id = e.item_id WHERE i.project_id = ?1", project_id),
+        project_rulesets: lines(conn,
+            "SELECT r.name, r.position, r.rules_json, r.created_at, r.updated_at, r.deleted_at,
+                    (SELECT name FROM field_definitions WHERE id = json_extract(r.ids_json, '$.fields.race')),
+                    (SELECT name FROM field_sets WHERE id = json_extract(r.ids_json, '$.sets.npc'))
+             FROM project_rulesets r WHERE r.project_id = ?1", project_id),
     }
 }
 
@@ -420,7 +451,7 @@ fn the_manifest_describes_the_pack() {
         // 2 formulas, 3 cards, a set, a deck, a pool, a saved draw, a deck in play, a spread, 2 tables). 2 cards have details, 1 a picture, 7 membership rows.
         // 1 table has settings; the 2 tables have 4 entries in all (one deleted) and 2 entry tags (one removed).
         Counts {
-            folders: 3, items: 24, tags: 4, item_tags: 4, links: 5, documents: 5, saved_rolls: 2, formulas: 2,
+            folders: 3, items: 25, tags: 4, item_tags: 4, links: 5, documents: 5, saved_rolls: 2, formulas: 2,
             card_details: 2, collection_members: 7, card_images: 1, saved_draws: 1, play_decks: 1, spreads: 1, spread_positions: 3,
             random_tables: 1, table_entries: 4, table_entry_tags: 2,
             // 4 fields (one deleted), 2 sets (one deleted) with 3 member rows (one removed), 2 applied sets (one taken off),
@@ -432,6 +463,9 @@ fn the_manifest_describes_the_pack() {
             smart_collections: 1,
             // The "NPC maker" generator.
             generators: 1,
+            // The "Crypt fight" encounter and the project's copy of a ruleset.
+            encounters: 1,
+            project_rulesets: 1,
         }
     );
     assert_eq!(pack.counts(), m.counts);
@@ -461,7 +495,7 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
         )
         .unwrap();
     assert_eq!(shared, 0);
-    assert_eq!(count(&conn, "items"), 48);
+    assert_eq!(count(&conn, "items"), 50);
 }
 
 #[test]
@@ -509,7 +543,7 @@ fn imported_items_remember_where_they_came_from() {
             .map(|r| r.unwrap())
             .collect()
     };
-    assert_eq!(rows.len(), 24);
+    assert_eq!(rows.len(), 25);
     for (name, origin_pack, origin_item) in rows {
         assert_eq!(origin_pack.as_deref(), Some(pack_id.as_str()), "{name}");
         // The origin id is the item's id in the ORIGINAL project.
@@ -881,7 +915,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
     assert!(pack.warnings.iter().all(|w| w.chars().next().unwrap().is_ascii_digit()));
     assert_eq!(
         pack.counts(),
-        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0 }
+        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0, encounters: 0, project_rulesets: 0 }
     );
 
     let conn = open_in_memory();
@@ -1002,7 +1036,7 @@ fn the_committed_version_1_pack_still_imports() {
     assert_eq!(result.project.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0 }
+        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0, encounters: 0, project_rulesets: 0 }
     );
     let camp = result.project.id;
 
@@ -2136,4 +2170,105 @@ fn unusable_tabs_are_repaired_or_skipped_with_a_warning() {
     let result = import_parsed(&conn, &pack, 9000).unwrap();
     assert_eq!(count(&conn, "item_tabs"), 4);
     assert_eq!(result.counts.item_tabs, 4);
+}
+
+
+// ------------------------------------------------------------ encounters and rulesets
+
+#[test]
+fn an_encounters_combatants_follow_their_pages_to_the_imported_copies_and_undo_history_is_left_behind() {
+    let conn = open_in_memory();
+    let c = projects::create(&conn, "Fights", 1).unwrap().id;
+    let page = items::create(&conn, &c, "worldbuilding", "document", "Strahd", None, 2).unwrap();
+    let fight = items::create(&conn, &c, "encounters", "encounter", "Crypt fight", None, 3).unwrap();
+    let state = json!({
+        "version": 1, "phase": "running", "round": 3,
+        "combatants": [
+            { "id": "c1", "baseName": "Strahd", "itemId": page.id },
+            { "id": "c2", "baseName": "Wolf", "itemId": null },
+            { "id": "c3", "baseName": "Gone", "itemId": "not-in-this-pack" }
+        ],
+        "history": [format!("{{\"state\":{{\"combatants\":[{{\"itemId\":\"{}\"}}]}}}}", page.id)]
+    });
+    encounters::set_state(&conn, &fight.id, &state.to_string(), 4).unwrap();
+
+    let bytes = export_project(&conn, &c, 5).unwrap();
+    let imported = import_pack(&conn, &bytes, 6).unwrap().project.id;
+    let new_page = items::list(&conn, &imported, "worldbuilding", None).unwrap().into_iter().find(|i| i.name == "Strahd").unwrap();
+    let new_fight = items::list(&conn, &imported, "encounters", None).unwrap().into_iter().find(|i| i.name == "Crypt fight").unwrap();
+
+    let got: serde_json::Value = serde_json::from_str(&encounters::get(&conn, &new_fight.id).unwrap().unwrap().state_json).unwrap();
+    assert_eq!(got["combatants"][0]["itemId"], json!(new_page.id));
+    assert_eq!(got["combatants"][1]["itemId"], json!(null));
+    assert_eq!(got["combatants"][2]["itemId"], json!("not-in-this-pack"), "ids outside the pack stay as written");
+    assert_eq!((got["phase"].as_str(), got["round"].as_i64()), (Some("running"), Some(3)));
+    assert_eq!(got["history"], json!([]), "undo history isn't carried over");
+    // The original still has its own.
+    let original: serde_json::Value = serde_json::from_str(&encounters::get(&conn, &fight.id).unwrap().unwrap().state_json).unwrap();
+    assert_eq!(original["history"].as_array().unwrap().len(), 1);
+    assert_eq!(original["combatants"][0]["itemId"], json!(page.id));
+}
+
+#[test]
+fn a_ruleset_copy_brings_its_ruleset_along_when_this_device_doesnt_have_it_and_links_to_it_when_it_does() {
+    let source = open_in_memory();
+    let original = populate(&source);
+    let bytes = export_project(&source, &original, 5000).unwrap();
+
+    // A fresh device has no "Generic d20": it is made from the copy, and the copy points at it.
+    let target = open_in_memory();
+    assert!(crate::db::rulesets::list(&target).unwrap().is_empty());
+    let imported = import_pack(&target, &bytes, 6000).unwrap().project.id;
+    let made = crate::db::rulesets::list(&target).unwrap();
+    assert_eq!(made.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(), ["Generic d20"]);
+    let copies = crate::db::rulesets::list_for_project(&target, &imported).unwrap();
+    assert_eq!(copies.len(), 1);
+    assert_eq!(copies[0].ruleset_id.as_deref(), Some(made[0].id.as_str()));
+    // The copy's ids are the imported project's own properties and sets.
+    let ids: serde_json::Value = serde_json::from_str(&copies[0].ids_json).unwrap();
+    let race = fields::list_definitions(&target, &imported).unwrap().into_iter().find(|d| d.name == "Race").unwrap();
+    let npc = fields::list_sets(&target, &imported).unwrap().into_iter().find(|s| s.name == "NPC").unwrap();
+    assert_eq!(ids["fields"]["race"], json!(race.id));
+    assert_eq!(ids["sets"]["npc"], json!(npc.id));
+
+    // Importing again finds the ruleset by name instead of making a second one.
+    let again = import_pack(&target, &bytes, 7000).unwrap().project.id;
+    assert_eq!(crate::db::rulesets::list(&target).unwrap().len(), 1);
+    let copies = crate::db::rulesets::list_for_project(&target, &again).unwrap();
+    assert_eq!(copies[0].ruleset_id.as_deref(), Some(made[0].id.as_str()));
+}
+
+#[test]
+fn bad_encounter_and_ruleset_data_in_a_pack_is_skipped_with_warnings() {
+    let item = |id: &str, ty: &str, lib: &str| json!({ "id": id, "library": lib, "itemType": ty, "name": id, "icon": null, "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null });
+    let record = |id: &str, state: &str| json!({ "itemId": id, "stateJson": state, "createdAt": 1, "updatedAt": 1 });
+    let copy = |id: &str, name: &str, rules: &str, ids: &str| json!({ "id": id, "name": name, "rulesJson": rules, "idsJson": ids, "position": 0, "createdAt": 1, "updatedAt": 1, "deletedAt": null });
+    let bytes = pack_with(&[
+        ("data/items.json", json!([item("e1", "encounter", "encounters"), item("d", "document", "worldbuilding"), item("e2", "encounter", "encounters")])),
+        ("data/encounters.json", json!([
+            record("e1", "{\"phase\":\"setup\"}"),
+            record("d", "{}"),                 // not an encounter
+            record("e2", "not json"),          // unreadable
+            record("missing", "{}"),           // no such item
+        ])),
+        ("data/project_rulesets.json", json!([
+            copy("a", "Good", "{}", "{}"),
+            copy("b", "  ", "{}", "{}"),       // no name
+            copy("c", "Broken", "[1]", "{}"),  // rules that aren't an object
+            copy("d", "Ids", "{}", "oops"),    // ids that can't be read
+        ])),
+    ]);
+    let pack = read_pack(&bytes).unwrap();
+    assert_eq!(pack.encounters.len(), 1);
+    assert_eq!(pack.project_rulesets.len(), 1);
+    assert!(pack.warnings.iter().any(|w| w.contains("encounter")), "{:?}", pack.warnings);
+    assert!(pack.warnings.iter().any(|w| w.contains("ruleset")), "{:?}", pack.warnings);
+
+    let conn = open_in_memory();
+    let result = import_parsed(&conn, &pack, 9000).unwrap();
+    assert_eq!(result.counts.encounters, 1);
+    assert_eq!(result.counts.project_rulesets, 1);
+    // The second encounter item has no saved state, which reads as a new encounter.
+    let e2 = items::list(&conn, &result.project.id, "encounters", None).unwrap().into_iter().find(|i| i.name == "e2").unwrap();
+    assert_eq!(encounters::get(&conn, &e2.id).unwrap(), None);
 }

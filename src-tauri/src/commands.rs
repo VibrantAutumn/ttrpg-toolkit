@@ -8,6 +8,7 @@ use crate::db::projects::{self, Project};
 use crate::db::cards::{self, CardDetails, ImageData};
 use crate::db::collections;
 use crate::db::documents;
+use crate::db::encounters::{self, Encounter, EncounterEntry};
 use crate::db::error::DbError;
 use crate::db::fields::{self, FieldDefinition, FieldSet, FieldValue, IndexUpdate, ItemFields, ValueIndex};
 use crate::db::folders::{self, Folder};
@@ -16,6 +17,7 @@ use crate::db::formulas::{self, Formula, FormulaEntry};
 use crate::db::links;
 use crate::db::generators::{self, Generator};
 use crate::db::query::{self, QueryResult};
+use crate::db::rulesets::{self, ApplyResult, ProjectRuleset, Ruleset};
 use crate::db::smart_collections::{self, SmartCollection};
 use crate::db::spreads::{self, PositionInput, Spread, SpreadEntry};
 use crate::db::starters::{self, InstallResult};
@@ -723,6 +725,90 @@ pub fn remove_tab(db: Db, tab_id: String) -> Result<(), String> {
 #[tauri::command]
 pub fn move_tab(db: Db, tab_id: String, delta: i64) -> Result<(), String> {
     with_conn(&db, |c| tabs::move_tab(c, &tab_id, delta, db::now_ms()))
+}
+
+// ---- Rulesets ----
+
+#[tauri::command]
+pub fn list_rulesets(db: Db) -> Result<Vec<Ruleset>, String> {
+    with_conn(&db, rulesets::list)
+}
+
+#[tauri::command]
+pub fn list_deleted_rulesets(db: Db) -> Result<Vec<Ruleset>, String> {
+    with_conn(&db, rulesets::list_deleted)
+}
+
+#[tauri::command]
+pub fn get_ruleset(db: Db, id: String) -> Result<Ruleset, String> {
+    with_conn(&db, |c| rulesets::get(c, &id))
+}
+
+#[tauri::command]
+pub fn create_ruleset(db: Db, name: String, description: String, definition_json: String, origin_id: Option<String>) -> Result<Ruleset, String> {
+    with_conn(&db, |c| rulesets::create(c, &name, &description, &definition_json, origin_id.as_deref(), db::now_ms()))
+}
+
+#[tauri::command]
+pub fn update_ruleset(db: Db, id: String, name: String, description: String, definition_json: String) -> Result<Ruleset, String> {
+    with_conn(&db, |c| rulesets::update(c, &id, &name, &description, &definition_json, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn delete_ruleset(db: Db, id: String) -> Result<(), String> {
+    with_conn(&db, |c| rulesets::soft_delete(c, &id, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn restore_ruleset(db: Db, id: String) -> Result<Ruleset, String> {
+    with_conn(&db, |c| rulesets::restore(c, &id, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn purge_ruleset(db: Db, id: String) -> Result<(), String> {
+    with_conn(&db, |c| rulesets::purge(c, &id))
+}
+
+#[tauri::command]
+pub fn list_installed_ruleset_starters(db: Db) -> Result<Vec<String>, String> {
+    with_conn(&db, rulesets::installed_starters)
+}
+
+/// Copies a ruleset into a project (its properties, stat block sets and formulas, and its
+/// encounter rules), sent as JSON text. All or nothing.
+#[tauri::command]
+pub async fn apply_ruleset(db: Db<'_>, project_id: String, ruleset_id: String, bundle_json: String) -> Result<ApplyResult, String> {
+    let bundle: rulesets::RulesetBundle = serde_json::from_str(&bundle_json)
+        .map_err(|_| "The ruleset's data couldn't be read.".to_string())?;
+    with_conn(&db, |c| rulesets::apply(c, &project_id, &ruleset_id, &bundle, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn list_project_rulesets(db: Db, project_id: String) -> Result<Vec<ProjectRuleset>, String> {
+    with_conn(&db, |c| rulesets::list_for_project(c, &project_id))
+}
+
+#[tauri::command]
+pub fn remove_project_ruleset(db: Db, project_ruleset_id: String) -> Result<(), String> {
+    with_conn(&db, |c| rulesets::remove_from_project(c, &project_ruleset_id, db::now_ms()))
+}
+
+// ---- Encounters ----
+
+/// The saved state of an encounter, or nothing for one that is new.
+#[tauri::command]
+pub fn get_encounter(db: Db, item_id: String) -> Result<Option<Encounter>, String> {
+    with_conn(&db, |c| encounters::get(c, &item_id))
+}
+
+#[tauri::command]
+pub fn set_encounter_state(db: Db, item_id: String, state_json: String) -> Result<(), String> {
+    with_conn(&db, |c| encounters::set_state(c, &item_id, &state_json, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn list_encounters(db: Db, project_id: String) -> Result<Vec<EncounterEntry>, String> {
+    with_conn(&db, |c| encounters::list(c, &project_id))
 }
 
 // ---- Templates ----

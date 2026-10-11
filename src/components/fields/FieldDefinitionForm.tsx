@@ -50,11 +50,6 @@ export function FieldDefinitionForm({
   const [problems, setProblems] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  /** Changes some of the kind's settings. */
-  function configure<K extends FieldKind>(change: Partial<ConfigOf<K>>) {
-    setDraft((d) => ({ ...d, config: { ...d.config, ...change } }) as FieldDefinition);
-  }
-
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const found = validateDefinition(draft);
@@ -76,6 +71,48 @@ export function FieldDefinitionForm({
   return (
     <form className="field-form" onSubmit={submit}>
       <h3>{initial ? `Change “${initial.name}”` : "New property"}</h3>
+      <DefinitionEditor draft={draft} setDraft={setDraft} lockedKind={initial ? initial.kind : null} />
+
+      {problems.length > 0 && (
+        <ul className="error" role="alert">
+          {problems.map((p) => (
+            <li key={p}>{p}</li>
+          ))}
+        </ul>
+      )}
+      <div className="row">
+        <button type="submit" disabled={saving}>
+          {initial ? "Save changes" : "Make property"}
+        </button>
+        <button type="button" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * The part of the form that describes a property: name, what it is for, kind and the kind's settings.
+ * It only edits the draft it is given and saves nothing, so a ruleset's editor can use it too.
+ */
+export function DefinitionEditor({
+  draft,
+  setDraft,
+  lockedKind,
+}: {
+  draft: FieldDefinition;
+  setDraft: (change: (d: FieldDefinition) => FieldDefinition) => void;
+  /** Set when the kind can't be changed any more (the property already exists). */
+  lockedKind: FieldKind | null;
+}) {
+  /** Changes some of the kind's settings. */
+  function configure<K extends FieldKind>(change: Partial<ConfigOf<K>>) {
+    setDraft((d) => ({ ...d, config: { ...d.config, ...change } }) as FieldDefinition);
+  }
+
+  return (
+    <>
       <label>
         Name
         <input
@@ -102,8 +139,8 @@ export function FieldDefinitionForm({
       </label>
       <label>
         Kind
-        {initial ? (
-          <span> {KIND_LABELS[initial.kind]} (can't be changed)</span>
+        {lockedKind ? (
+          <span> {KIND_LABELS[lockedKind]} (can't be changed)</span>
         ) : (
           <select
             value={draft.kind}
@@ -137,7 +174,7 @@ export function FieldDefinitionForm({
         </label>
       )}
 
-      {draft.kind === "dropdown" && <ChoicesEditor def={draft} onChange={setDraft} />}
+      {draft.kind === "dropdown" && <ChoicesEditor def={draft} onChange={(def) => setDraft(() => def)} />}
 
       {draft.kind === "link" && (
         <>
@@ -166,23 +203,7 @@ export function FieldDefinitionForm({
             : "Holds entries, each with a title and a description (actions, abilities...)."}
         </p>
       )}
-
-      {problems.length > 0 && (
-        <ul className="error" role="alert">
-          {problems.map((p) => (
-            <li key={p}>{p}</li>
-          ))}
-        </ul>
-      )}
-      <div className="row">
-        <button type="submit" disabled={saving}>
-          {initial ? "Save changes" : "Make property"}
-        </button>
-        <button type="button" onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </form>
+    </>
   );
 }
 

@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import { exitSuggestion, type SuggestionProps } from "@tiptap/suggestion";
-import { Fragment, useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 /**
  * The popup menu behind the editor's "/" and "@" triggers. TipTap's suggestion plugin tells a
@@ -89,6 +89,11 @@ export function PickerMenu<T>({
   /** Shown when there is nothing to pick yet (for example before anything is typed). */
   hint?: string;
 }) {
+  const list = useRef<HTMLUListElement | null>(null);
+  // Arrow keys move the highlight; keep it in view when the list is longer than the menu.
+  useEffect(() => {
+    list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [view.index, view.items]);
   const rect = view.rect;
   if (!rect) return null;
   if (view.items.length === 0 && !hint) return null;
@@ -96,7 +101,7 @@ export function PickerMenu<T>({
   const left = Math.max(8, Math.min(rect.left, window.innerWidth - 308));
   const style = above ? { left, bottom: window.innerHeight - rect.top + 4 } : { left, top: rect.bottom + 4 };
   return (
-    <ul className="slash-menu" role="listbox" aria-label={label} style={style}>
+    <ul ref={list} className="slash-menu" role="listbox" aria-label={label} style={style}>
       {view.items.length === 0 && <li className="picker-hint">{hint}</li>}
       {view.items.map((item, i) => {
         const heading = group && view.query.trim() === "" && (i === 0 || group(view.items[i - 1]) !== group(item)) ? group(item) : null;

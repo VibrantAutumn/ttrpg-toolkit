@@ -139,6 +139,16 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "remove_name_presets",
         sql: include_str!("../../migrations/0025_remove_name_presets.sql"),
     },
+    Migration {
+        version: 26,
+        name: "create_rulesets",
+        sql: include_str!("../../migrations/0026_create_rulesets.sql"),
+    },
+    Migration {
+        version: 27,
+        name: "create_encounters",
+        sql: include_str!("../../migrations/0027_create_encounters.sql"),
+    },
 ];
 
 #[derive(Debug)]

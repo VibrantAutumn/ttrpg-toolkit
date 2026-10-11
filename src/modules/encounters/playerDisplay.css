@@ -1,0 +1,116 @@
+/* The player display: large, high contrast, readable from across a table. Its own colours (always dark),
+   so it looks the same whatever theme the GM's window uses. */
+.pd {
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 2rem clamp(1rem, 4vw, 4rem);
+  background: #0f1115;
+  color: #f1f3f5;
+  font-size: clamp(1.1rem, 2.4vw, 2.2rem);
+}
+
+.pd-empty {
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+
+.pd-hint {
+  color: #868e96;
+  font-size: 0.7em;
+}
+
+.pd-header h1 {
+  margin: 0;
+  font-size: 1.6em;
+}
+
+.pd-round {
+  margin: 0.25em 0 1em;
+  color: #ced4da;
+  font-size: 1.1em;
+}
+
+.pd-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5em;
+}
+
+.pd-row {
+  display: grid;
+  grid-template-columns: minmax(8ch, 1.2fr) minmax(6ch, 0.6fr) 2fr;
+  align-items: center;
+  gap: 0.75em;
+  padding: 0.5em 0.9em;
+  border: 2px solid #343a40;
+  border-left-width: 0.4em;
+  border-radius: 0.5em;
+  background: #1a1d23;
+}
+
+.pd-party {
+  border-left-color: #4dabf7;
+}
+
+.pd-foes {
+  border-left-color: #ff8787;
+}
+
+.pd-current {
+  border-color: #ffd43b;
+  background: #2b2a1a;
+}
+
+.pd-acted {
+  opacity: 0.75;
+}
+
+.pd-defeated {
+  opacity: 0.45;
+}
+
+.pd-defeated .pd-name {
+  text-decoration: line-through;
+}
+
+.pd-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.pd-marker {
+  margin-right: 0.4em;
+  color: #ffd43b;
+}
+
+.pd-health {
+  color: #ced4da;
+}
+
+.pd-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  justify-content: flex-end;
+}
+
+.pd-status {
+  padding: 0 0.5em;
+  border: 2px solid #adb5bd;
+  border-radius: 999px;
+  font-size: 0.7em;
+  color: #adb5bd;
+}
+
+@media (max-width: 600px) {
+  .pd-row {
+    grid-template-columns: 1fr auto;
+  }
+  .pd-statuses {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}

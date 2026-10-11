@@ -65,3 +65,18 @@ describe("filterBlockCommands", () => {
     expect(ids("zzzz")).toEqual([]);
   });
 });
+
+describe("filterBlockCommands with extra items", () => {
+  const extra = [{ id: "statblock:s1" as const, setId: "s1", label: "Stat block: Monster", hint: "", group: "Stat blocks", keywords: ["stat", "monster"] }];
+
+  it("lists extras after the blocks, and finds them by their words", () => {
+    const all = filterBlockCommands("", extra);
+    expect(all[all.length - 1].id).toBe("statblock:s1");
+    expect(filterBlockCommands("stat", extra).map((c) => c.id)).toEqual(["statblock:s1"]);
+    expect(filterBlockCommands("monster", extra)[0].setId).toBe("s1");
+  });
+
+  it("leaves the plain list alone when there are none", () => {
+    expect(filterBlockCommands("stat")).toEqual([]);
+  });
+});

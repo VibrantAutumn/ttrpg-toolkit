@@ -459,7 +459,7 @@ export function LibraryScreen({
               {folderId
                 ? "This folder is empty."
                 : allowNewItems
-                  ? `Nothing here yet. Create a folder or a ${typeLabel.toLowerCase()} above.`
+                  ? `Nothing here yet. Create a folder or ${/^[aeiou]/i.test(typeLabel) ? "an" : "a"} ${typeLabel.toLowerCase()} above.`
                   : "Nothing here yet. Create a folder above, or add a formula or save a roll in the Roll tab."}
             </p>
           ) : (

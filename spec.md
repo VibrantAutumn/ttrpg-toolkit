@@ -377,7 +377,7 @@ Nine phases, each usable at the table. Shared engines are **designed** in Phase 
 1. **Foundation:** app shell, SQLite with migrations, module registry, projects, library framework (folders, tags, search, trash), links and backlinks, a plain document editor, basic command palette, content pack export/import (backups). A test build running on Android.
 2. **Dice, results and cards:** dice notation, results engine and roll log, widget framework and quick tools panel, deck library, cards, sets, pools, draws, spreads, decks in play. Starter tarot and playing-card decks.
 3. **Random tables:** tables with weights and number ranges, nesting, dice and card slots, labels, unique picks, avoid recent, entry tags, a slot-chip editor, rename-with-update, Starter tables. *(Done.)*
-4. **Worldbuilding:** rich text editor, nested document tabs, fields and field sets, templates, queries and smart collections, field views, global search. Then entity slots, roll context and generators. Starter templates. *(Built; awaiting testing.)*
+4. **Worldbuilding:** rich text editor, nested document tabs, fields and field sets, templates, queries and smart collections, field views, global search. Then entity slots, roll context and generators. Starter templates. *(Done, with the Phase 4b UI redesign.)*
 5. **Rulesets and encounters:** ruleset editor, stat blocks, encounter library and runner, first version of the player display. Starter rulesets.
 6. **Time:** calendar builder, multiple calendars, project state and status bar, sessions, weather, events, timelines.
 7. **Maps:** map library, layers, pins, regions, nested maps, roads, terrain, travel modes, travel time, party marker.

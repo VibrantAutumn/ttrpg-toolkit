@@ -42,6 +42,8 @@ pub fn export_project(conn: &Connection, project_id: &str, now: i64) -> Result<V
     let item_tabs = read_item_tabs(conn, project_id)?;
     let smart_collections = read_smart_collections(conn, project_id)?;
     let generators = read_generators(conn, project_id)?;
+    let encounters = read_encounters(conn, project_id)?;
+    let project_rulesets = read_project_rulesets(conn, project_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -78,6 +80,8 @@ pub fn export_project(conn: &Connection, project_id: &str, now: i64) -> Result<V
             item_tabs: item_tabs.len() as u32,
             smart_collections: smart_collections.len() as u32,
             generators: generators.len() as u32,
+            encounters: encounters.len() as u32,
+            project_rulesets: project_rulesets.len() as u32,
         },
     };
 
@@ -108,6 +112,8 @@ pub fn export_project(conn: &Connection, project_id: &str, now: i64) -> Result<V
     put(&mut zip, options, ITEM_TABS_FILE, &item_tabs, false)?;
     put(&mut zip, options, SMART_COLLECTIONS_FILE, &smart_collections, false)?;
     put(&mut zip, options, GENERATORS_FILE, &generators, false)?;
+    put(&mut zip, options, ENCOUNTERS_FILE, &encounters, false)?;
+    put(&mut zip, options, PROJECT_RULESETS_FILE, &project_rulesets, false)?;
     put(&mut zip, options, COLLECTION_MEMBERS_FILE, &collection_members, false)?;
     let image_records: Vec<CardImageRecord> = card_images.iter().map(|(r, _, _)| r.clone()).collect();
     put(&mut zip, options, CARD_IMAGES_FILE, &image_records, false)?;
@@ -648,6 +654,38 @@ fn read_generators(conn: &Connection, project_id: &str) -> Result<Vec<GeneratorR
     )?;
     let rows = stmt.query_map([project_id], |r| {
         Ok(GeneratorRecord { item_id: r.get(0)?, definition_json: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)? })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_encounters(conn: &Connection, project_id: &str) -> Result<Vec<EncounterRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT e.item_id, e.state_json, e.created_at, e.updated_at
+         FROM encounters e JOIN items i ON i.id = e.item_id
+         WHERE i.project_id = ?1 ORDER BY e.created_at, e.item_id",
+    )?;
+    let rows = stmt.query_map([project_id], |r| {
+        Ok(EncounterRecord { item_id: r.get(0)?, state_json: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)? })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_project_rulesets(conn: &Connection, project_id: &str) -> Result<Vec<ProjectRulesetRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, rules_json, ids_json, position, created_at, updated_at, deleted_at
+         FROM project_rulesets WHERE project_id = ?1 ORDER BY position, created_at, id",
+    )?;
+    let rows = stmt.query_map([project_id], |r| {
+        Ok(ProjectRulesetRecord {
+            id: r.get(0)?,
+            name: r.get(1)?,
+            rules_json: r.get(2)?,
+            ids_json: r.get(3)?,
+            position: r.get(4)?,
+            created_at: r.get(5)?,
+            updated_at: r.get(6)?,
+            deleted_at: r.get(7)?,
+        })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
 }
