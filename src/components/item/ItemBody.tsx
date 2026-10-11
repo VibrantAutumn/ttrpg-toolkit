@@ -11,11 +11,12 @@ export function ItemBody({ item }: { item: Item }) {
   // Each item type can bring its own editor (registered by its module).
   const Editor = registry.getItemType(item.itemType)?.editor;
   const trashed = item.deletedAt != null;
+  const plain = registry.getItemType(item.itemType)?.plain === true;
 
   return (
     <>
       {/* Properties sit right under the title (like Notion's page properties), then the text. */}
-      {!trashed && <ItemFieldsPanel item={item} />}
+      {!trashed && !plain && <ItemFieldsPanel item={item} />}
 
       {trashed ? null : Editor ? (
         <Editor key={item.id} itemId={item.id} />

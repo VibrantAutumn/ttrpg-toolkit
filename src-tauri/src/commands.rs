@@ -5,6 +5,7 @@
 //! the snake_case names below.
 
 use crate::db::projects::{self, Project};
+use crate::db::calendar_events::{self, CalendarEvent, EventInput};
 use crate::db::cards::{self, CardDetails, ImageData};
 use crate::db::collections;
 use crate::db::documents;
@@ -14,7 +15,11 @@ use crate::db::fields::{self, FieldDefinition, FieldSet, FieldValue, IndexUpdate
 use crate::db::folders::{self, Folder};
 use crate::db::items::{self, Item};
 use crate::db::formulas::{self, Formula, FormulaEntry};
+use crate::db::json_items::{self, JsonEntry, JsonRecord};
 use crate::db::links;
+use crate::db::project_state::{self, ProjectState};
+use crate::db::sessions::{self, Session, SessionEntry, SessionInput};
+use crate::db::weather::{self, WeatherDay};
 use crate::db::generators::{self, Generator};
 use crate::db::query::{self, QueryResult};
 use crate::db::rulesets::{self, ApplyResult, ProjectRuleset, Ruleset};
@@ -628,6 +633,11 @@ pub fn create_item(
 }
 
 #[tauri::command]
+pub fn set_item_visibility(db: Db, id: String, visibility: String) -> Result<Item, String> {
+    with_conn(&db, |c| items::set_visibility(c, &id, &visibility, db::now_ms()))
+}
+
+#[tauri::command]
 pub fn rename_item(db: Db, id: String, name: String) -> Result<Item, String> {
     with_conn(&db, |c| items::rename(c, &id, &name, db::now_ms()))
 }
@@ -1077,4 +1087,126 @@ pub fn search_items(
     with_conn(&db, |c| {
         search::search(c, &project_id, &text, library.as_deref(), limit.unwrap_or(50))
     })
+}
+
+// ---- Time (Phase 6) ----
+
+#[tauri::command]
+pub fn get_calendar(db: Db, item_id: String) -> Result<Option<JsonRecord>, String> {
+    with_conn(&db, |c| json_items::get(c, &json_items::CALENDAR, &item_id))
+}
+
+#[tauri::command]
+pub fn set_calendar(db: Db, item_id: String, calendar_json: String) -> Result<(), String> {
+    with_conn(&db, |c| json_items::set(c, &json_items::CALENDAR, &item_id, &calendar_json, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn list_calendars(db: Db, project_id: String) -> Result<Vec<JsonEntry>, String> {
+    with_conn(&db, |c| json_items::list(c, &json_items::CALENDAR, &project_id))
+}
+
+#[tauri::command]
+pub fn get_timeline(db: Db, item_id: String) -> Result<Option<JsonRecord>, String> {
+    with_conn(&db, |c| json_items::get(c, &json_items::TIMELINE, &item_id))
+}
+
+#[tauri::command]
+pub fn set_timeline(db: Db, item_id: String, config_json: String) -> Result<(), String> {
+    with_conn(&db, |c| json_items::set(c, &json_items::TIMELINE, &item_id, &config_json, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn list_timelines(db: Db, project_id: String) -> Result<Vec<JsonEntry>, String> {
+    with_conn(&db, |c| json_items::list(c, &json_items::TIMELINE, &project_id))
+}
+
+#[tauri::command]
+pub fn get_calendar_event(db: Db, item_id: String) -> Result<Option<CalendarEvent>, String> {
+    with_conn(&db, |c| calendar_events::get(c, &item_id))
+}
+
+#[tauri::command]
+pub fn set_calendar_event(db: Db, item_id: String, input: EventInput) -> Result<(), String> {
+    with_conn(&db, |c| calendar_events::set(c, &item_id, &input, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn list_calendar_events(db: Db, project_id: String, from_day: i64, to_day: i64) -> Result<Vec<CalendarEvent>, String> {
+    with_conn(&db, |c| calendar_events::list_in_range(c, &project_id, from_day, to_day))
+}
+
+#[tauri::command]
+pub fn list_all_calendar_events(db: Db, project_id: String) -> Result<Vec<CalendarEvent>, String> {
+    with_conn(&db, |c| calendar_events::list_all(c, &project_id))
+}
+
+#[tauri::command]
+pub fn get_project_state(db: Db, project_id: String) -> Result<ProjectState, String> {
+    with_conn(&db, |c| project_state::get(c, &project_id))
+}
+
+#[tauri::command]
+pub fn set_main_calendar(db: Db, project_id: String, calendar_id: Option<String>) -> Result<(), String> {
+    with_conn(&db, |c| project_state::set_main_calendar(c, &project_id, calendar_id.as_deref(), db::now_ms()))
+}
+
+#[tauri::command]
+pub fn set_project_now(db: Db, project_id: String, day: i64, minute: i64) -> Result<(), String> {
+    with_conn(&db, |c| project_state::set_now(c, &project_id, day, minute, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn set_current_session(db: Db, project_id: String, session_id: Option<String>) -> Result<(), String> {
+    with_conn(&db, |c| project_state::set_session(c, &project_id, session_id.as_deref(), db::now_ms()))
+}
+
+#[tauri::command]
+pub fn get_session(db: Db, item_id: String) -> Result<Session, String> {
+    with_conn(&db, |c| sessions::get(c, &item_id))
+}
+
+#[tauri::command]
+pub fn set_session(db: Db, item_id: String, input: SessionInput) -> Result<(), String> {
+    with_conn(&db, |c| sessions::set(c, &item_id, &input, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn start_session(db: Db, item_id: String, real_date: Option<String>) -> Result<Session, String> {
+    with_conn(&db, |c| sessions::start(c, &item_id, real_date.as_deref(), db::now_ms()))
+}
+
+#[tauri::command]
+pub fn end_session(db: Db, item_id: String) -> Result<Session, String> {
+    with_conn(&db, |c| sessions::end(c, &item_id, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn list_sessions(db: Db, project_id: String) -> Result<Vec<SessionEntry>, String> {
+    with_conn(&db, |c| sessions::list(c, &project_id))
+}
+
+#[tauri::command]
+pub fn get_weather(db: Db, project_id: String, day: i64) -> Result<Option<WeatherDay>, String> {
+    with_conn(&db, |c| weather::get(c, &project_id, day))
+}
+
+#[tauri::command]
+pub fn set_weather(db: Db, project_id: String, day: i64, weather_json: String) -> Result<(), String> {
+    with_conn(&db, |c| weather::set(c, &project_id, day, &weather_json, db::now_ms()))
+}
+
+#[tauri::command]
+pub fn clear_weather(db: Db, project_id: String, day: i64) -> Result<(), String> {
+    with_conn(&db, |c| weather::clear(c, &project_id, day))
+}
+
+#[tauri::command]
+pub fn list_weather(db: Db, project_id: String, from_day: i64, to_day: i64) -> Result<Vec<WeatherDay>, String> {
+    with_conn(&db, |c| weather::list_range(c, &project_id, from_day, to_day))
+}
+
+#[tauri::command]
+pub fn set_weather_table(db: Db, project_id: String, table_id: Option<String>) -> Result<(), String> {
+    with_conn(&db, |c| project_state::set_weather_table(c, &project_id, table_id.as_deref(), db::now_ms()))
 }

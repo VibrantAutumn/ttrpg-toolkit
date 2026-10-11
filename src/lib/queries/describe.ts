@@ -1,3 +1,4 @@
+import { displayDay } from "../calendar/display";
 import { isGroup, isRuleComplete, type Comparison, type Group, type Node, type Query, type Rule } from "./query";
 
 /** How to put names to the ids a query holds. Anything it can't find is shown as “(missing)”. */
@@ -11,6 +12,8 @@ export interface QueryNames {
   /** A readable name for an item type id ("document" -> "Document"). */
   itemType(id: string): string;
   library(id: string): string;
+  /** The kind of a property (so a date property's numbers can be shown as dates). Optional. */
+  fieldKind?(fieldId: string): string | undefined;
 }
 
 const MISSING = "(missing)";
@@ -23,6 +26,14 @@ const CMP_WORDS: Record<Comparison, [string, string]> = {
   "<=": ["is at most", "isn't at most"],
   ">": ["is more than", "isn't more than"],
   ">=": ["is at least", "isn't at least"],
+};
+
+const DATE_CMP_WORDS: Record<Comparison, [string, string]> = {
+  "=": ["is on", "isn't on"],
+  "<": ["is before", "isn't before"],
+  "<=": ["is on or before", "isn't on or before"],
+  ">": ["is after", "isn't after"],
+  ">=": ["is on or after", "isn't on or after"],
 };
 
 function body(rule: Rule, names: QueryNames): string {
@@ -59,8 +70,10 @@ function body(rule: Rule, names: QueryNames): string {
         case "equals":
           return `${field} ${not ? "isn't" : "is"} ${quote(t.text)}`;
         case "number":
+          if (names.fieldKind?.(rule.fieldId) === "date") return `${field} ${DATE_CMP_WORDS[t.cmp][not ? 1 : 0]} ${displayDay(t.value)}`;
           return `${field} ${CMP_WORDS[t.cmp][not ? 1 : 0]} ${t.value}`;
         case "between":
+          if (names.fieldKind?.(rule.fieldId) === "date") return `${field} ${not ? "isn't" : "is"} between ${displayDay(t.min)} and ${displayDay(t.max)}`;
           return `${field} ${not ? "isn't" : "is"} between ${t.min} and ${t.max}`;
         case "choice":
           return `${field} ${not ? "isn't" : "is"} ${orList(t.optionIds.map((o) => names.choice(rule.fieldId, o) ?? MISSING))}`;

@@ -44,6 +44,12 @@ pub fn export_project(conn: &Connection, project_id: &str, now: i64) -> Result<V
     let generators = read_generators(conn, project_id)?;
     let encounters = read_encounters(conn, project_id)?;
     let project_rulesets = read_project_rulesets(conn, project_id)?;
+    let calendars = read_calendars(conn, project_id)?;
+    let timelines = read_timelines(conn, project_id)?;
+    let calendar_events = read_calendar_events(conn, project_id)?;
+    let sessions = read_sessions(conn, project_id)?;
+    let weather_days = read_weather_days(conn, project_id)?;
+    let project_state = read_project_state(conn, project_id)?;
 
     let manifest = Manifest {
         format: FORMAT.to_string(),
@@ -82,6 +88,12 @@ pub fn export_project(conn: &Connection, project_id: &str, now: i64) -> Result<V
             generators: generators.len() as u32,
             encounters: encounters.len() as u32,
             project_rulesets: project_rulesets.len() as u32,
+            calendars: calendars.len() as u32,
+            timelines: timelines.len() as u32,
+            calendar_events: calendar_events.len() as u32,
+            sessions: sessions.len() as u32,
+            weather_days: weather_days.len() as u32,
+            project_state: project_state.len() as u32,
         },
     };
 
@@ -114,6 +126,12 @@ pub fn export_project(conn: &Connection, project_id: &str, now: i64) -> Result<V
     put(&mut zip, options, GENERATORS_FILE, &generators, false)?;
     put(&mut zip, options, ENCOUNTERS_FILE, &encounters, false)?;
     put(&mut zip, options, PROJECT_RULESETS_FILE, &project_rulesets, false)?;
+    put(&mut zip, options, CALENDARS_FILE, &calendars, false)?;
+    put(&mut zip, options, TIMELINES_FILE, &timelines, false)?;
+    put(&mut zip, options, CALENDAR_EVENTS_FILE, &calendar_events, false)?;
+    put(&mut zip, options, SESSIONS_FILE, &sessions, false)?;
+    put(&mut zip, options, WEATHER_DAYS_FILE, &weather_days, false)?;
+    put(&mut zip, options, PROJECT_STATE_FILE, &project_state, false)?;
     put(&mut zip, options, COLLECTION_MEMBERS_FILE, &collection_members, false)?;
     let image_records: Vec<CardImageRecord> = card_images.iter().map(|(r, _, _)| r.clone()).collect();
     put(&mut zip, options, CARD_IMAGES_FILE, &image_records, false)?;
@@ -666,6 +684,103 @@ fn read_encounters(conn: &Connection, project_id: &str) -> Result<Vec<EncounterR
     )?;
     let rows = stmt.query_map([project_id], |r| {
         Ok(EncounterRecord { item_id: r.get(0)?, state_json: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)? })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_calendars(conn: &Connection, project_id: &str) -> Result<Vec<CalendarRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT c.item_id, c.calendar_json, c.created_at, c.updated_at
+         FROM calendars c JOIN items i ON i.id = c.item_id
+         WHERE i.project_id = ?1 ORDER BY c.created_at, c.item_id",
+    )?;
+    let rows = stmt.query_map([project_id], |r| {
+        Ok(CalendarRecord { item_id: r.get(0)?, calendar_json: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)? })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_timelines(conn: &Connection, project_id: &str) -> Result<Vec<TimelineRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT t.item_id, t.config_json, t.created_at, t.updated_at
+         FROM timelines t JOIN items i ON i.id = t.item_id
+         WHERE i.project_id = ?1 ORDER BY t.created_at, t.item_id",
+    )?;
+    let rows = stmt.query_map([project_id], |r| {
+        Ok(TimelineRecord { item_id: r.get(0)?, config_json: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)? })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_calendar_events(conn: &Connection, project_id: &str) -> Result<Vec<CalendarEventRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT e.item_id, e.start_day, e.start_minute, e.end_day, e.end_minute, e.recurrence_json, e.until_day, e.body,
+                e.created_at, e.updated_at
+         FROM calendar_events e JOIN items i ON i.id = e.item_id
+         WHERE i.project_id = ?1 ORDER BY e.created_at, e.item_id",
+    )?;
+    let rows = stmt.query_map([project_id], |r| {
+        Ok(CalendarEventRecord {
+            item_id: r.get(0)?,
+            start_day: r.get(1)?,
+            start_minute: r.get(2)?,
+            end_day: r.get(3)?,
+            end_minute: r.get(4)?,
+            recurrence_json: r.get(5)?,
+            until_day: r.get(6)?,
+            body: r.get(7)?,
+            created_at: r.get(8)?,
+            updated_at: r.get(9)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_sessions(conn: &Connection, project_id: &str) -> Result<Vec<SessionRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT s.item_id, s.real_date, s.start_day, s.start_minute, s.end_day, s.end_minute, s.status, s.created_at, s.updated_at
+         FROM sessions s JOIN items i ON i.id = s.item_id
+         WHERE i.project_id = ?1 ORDER BY s.created_at, s.item_id",
+    )?;
+    let rows = stmt.query_map([project_id], |r| {
+        Ok(SessionRecord {
+            item_id: r.get(0)?,
+            real_date: r.get(1)?,
+            start_day: r.get(2)?,
+            start_minute: r.get(3)?,
+            end_day: r.get(4)?,
+            end_minute: r.get(5)?,
+            status: r.get(6)?,
+            created_at: r.get(7)?,
+            updated_at: r.get(8)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_weather_days(conn: &Connection, project_id: &str) -> Result<Vec<WeatherDayRecord>, PackError> {
+    let mut stmt = conn.prepare("SELECT day, weather_json, created_at, updated_at FROM weather_days WHERE project_id = ?1 ORDER BY day")?;
+    let rows = stmt.query_map([project_id], |r| {
+        Ok(WeatherDayRecord { day: r.get(0)?, weather_json: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)? })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn read_project_state(conn: &Connection, project_id: &str) -> Result<Vec<ProjectStateRecord>, PackError> {
+    let mut stmt = conn.prepare(
+        "SELECT main_calendar_id, now_day, now_minute, session_id, weather_table_id, created_at, updated_at
+         FROM project_state WHERE project_id = ?1",
+    )?;
+    let rows = stmt.query_map([project_id], |r| {
+        Ok(ProjectStateRecord {
+            main_calendar_id: r.get(0)?,
+            now_day: r.get(1)?,
+            now_minute: r.get(2)?,
+            session_id: r.get(3)?,
+            weather_table_id: r.get(4)?,
+            created_at: r.get(5)?,
+            updated_at: r.get(6)?,
+        })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
 }

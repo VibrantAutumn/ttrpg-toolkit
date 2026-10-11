@@ -7,6 +7,7 @@
  * only checked in the real app.
  */
 import { mockIPC } from "@tauri-apps/api/mocks";
+import { STARTER_CALENDARS } from "../starter/calendars";
 
 interface MockItem {
   id: string;
@@ -89,6 +90,46 @@ export function installMockBackend(): void {
 
   const encounterStates = new Map<string, string>();
 
+  // Time: the project's "now", a starter calendar, a few events and sessions (so the month view has something to show).
+  const timeState: { mainCalendarId: string | null; nowDay: number; nowMinute: number; sessionId: string | null; weatherTableId: string | null } = {
+    mainCalendarId: null,
+    nowDay: 0,
+    nowMinute: 9 * 60,
+    sessionId: null,
+    weatherTableId: null,
+  };
+  const jsonDocs = new Map<string, string>();
+  const events = new Map<string, Args>();
+  const sessions = new Map<string, Args>();
+  const weather = new Map<number, string>();
+  const eventRecord = (id: string) => {
+    const item = items.get(id);
+    const e = events.get(id);
+    if (!item || !e) return null;
+    return { itemId: id, name: item.name, itemType: item.itemType, visibility: item.visibility, ...(e as object), updatedAt: now } as {
+      itemId: string; name: string; itemType: string; visibility: string; startDay: number; endDay: number | null; recurrenceJson: string | null; updatedAt: number;
+    };
+  };
+  const sessionRecord = (id: string) => ({
+    itemId: id, realDate: null, startDay: null, startMinute: null, endDay: null, endMinute: null, status: "planned", updatedAt: now, ...(sessions.get(id) ?? {}),
+  }) as { itemId: string; realDate: string | null; startDay: number | null; startMinute: number | null; endDay: number | null; endMinute: number | null; status: string; updatedAt: number };
+  {
+    const real = add("calendar", "calendar", STARTER_CALENDARS[0].name);
+    jsonDocs.set(real.id, JSON.stringify(STARTER_CALENDARS[0].calendar));
+    add("calendar", "calendar", STARTER_CALENDARS[1].name);
+    jsonDocs.set(`i${counter}`, JSON.stringify(STARTER_CALENDARS[1].calendar));
+    timeState.mainCalendarId = real.id;
+    timeState.nowDay = 739900; // somewhere in 2026
+    const feast = add("calendar", "event", "Harvest feast");
+    events.set(feast.id, { startDay: timeState.nowDay + 3, startMinute: null, endDay: timeState.nowDay + 4, endMinute: null, recurrenceJson: JSON.stringify({ kind: "weeks", interval: 1, weekday: 4 }), untilDay: null, body: "" });
+    const note = add("calendar", "note", "Strahd's spy arrives");
+    (note as { visibility: string }).visibility = "secret";
+    events.set(note.id, { startDay: timeState.nowDay + 6, startMinute: null, endDay: null, endMinute: null, recurrenceJson: null, untilDay: null, body: "" });
+    const first = add("worldbuilding", "session", "Session 1: Arrival");
+    sessions.set(first.id, { realDate: "2026-09-12", startDay: timeState.nowDay - 5, startMinute: 0, endDay: timeState.nowDay - 2, endMinute: 0, status: "ended" });
+    add("calendar", "timeline", "World history");
+  }
+
   const handlers: Record<string, (a: Args) => unknown> = {
     get_encounter: (a) => {
       const text = encounterStates.get(String(a.itemId));
@@ -130,7 +171,58 @@ export function installMockBackend(): void {
       return { projectRuleset: copy, fieldsMade: 3, setsMade: 1, formulasMade: 2 };
     },
     remove_project_ruleset: (a) => void projectRulesets.splice(projectRulesets.findIndex((c) => c.id === a.projectRulesetId), 1),
-    db_schema_version: () => 24,
+    // ---- Time (calendars, events, sessions, weather and the project's "now") ----
+    get_project_state: () => ({ projectId: project.id, ...timeState }),
+    set_main_calendar: (a) => void (timeState.mainCalendarId = (a.calendarId as string | null) ?? null),
+    set_project_now: (a) => {
+      timeState.nowDay = Number(a.day);
+      timeState.nowMinute = Number(a.minute);
+    },
+    set_current_session: (a) => void (timeState.sessionId = (a.sessionId as string | null) ?? null),
+    set_weather_table: (a) => void (timeState.weatherTableId = (a.tableId as string | null) ?? null),
+    get_calendar: (a) => (jsonDocs.has(String(a.itemId)) ? { itemId: a.itemId, json: jsonDocs.get(String(a.itemId)), createdAt: now, updatedAt: now } : null),
+    set_calendar: (a) => void jsonDocs.set(String(a.itemId), String(a.calendarJson)),
+    list_calendars: () => live("calendar", "calendar").map((i) => ({ itemId: i.id, name: i.name, updatedAt: now })),
+    get_timeline: (a) => (jsonDocs.has(String(a.itemId)) ? { itemId: a.itemId, json: jsonDocs.get(String(a.itemId)), createdAt: now, updatedAt: now } : null),
+    set_timeline: (a) => void jsonDocs.set(String(a.itemId), String(a.configJson)),
+    list_timelines: () => live("calendar", "timeline").map((i) => ({ itemId: i.id, name: i.name, updatedAt: now })),
+    get_calendar_event: (a) => eventRecord(String(a.itemId)),
+    set_calendar_event: (a) => void events.set(String(a.itemId), a.input as Args),
+    list_calendar_events: (a) =>
+      [...events.keys()]
+        .map(eventRecord)
+        .filter((e): e is NonNullable<typeof e> => e !== null && e.startDay <= Number(a.toDay) && (e.recurrenceJson !== null || (e.endDay ?? e.startDay) >= Number(a.fromDay))),
+    list_all_calendar_events: () => [...events.keys()].map(eventRecord).filter((e) => e !== null),
+    set_item_visibility: (a) => {
+      const item = items.get(String(a.id));
+      if (item) (item as { visibility: string }).visibility = String(a.visibility);
+      return item;
+    },
+    get_session: (a) => sessionRecord(String(a.itemId)),
+    set_session: (a) => void sessions.set(String(a.itemId), a.input as Args),
+    start_session: (a) => {
+      const id = String(a.itemId);
+      sessions.set(id, { ...sessionRecord(id), realDate: a.realDate ?? null, startDay: timeState.nowDay, startMinute: timeState.nowMinute, endDay: null, endMinute: null, status: "running" });
+      timeState.sessionId = id;
+      return sessionRecord(id);
+    },
+    end_session: (a) => {
+      const id = String(a.itemId);
+      sessions.set(id, { ...sessionRecord(id), endDay: timeState.nowDay, endMinute: timeState.nowMinute, status: "ended" });
+      if (timeState.sessionId === id) timeState.sessionId = null;
+      return sessionRecord(id);
+    },
+    list_sessions: () =>
+      live("worldbuilding", "session").map((i) => {
+        const s = sessionRecord(i.id);
+        return { itemId: i.id, name: i.name, status: s.status, realDate: s.realDate, startDay: s.startDay, endDay: s.endDay, updatedAt: now };
+      }),
+    get_weather: (a) => (weather.has(Number(a.day)) ? { day: a.day, weatherJson: weather.get(Number(a.day)), updatedAt: now } : null),
+    set_weather: (a) => void weather.set(Number(a.day), String(a.weatherJson)),
+    clear_weather: (a) => void weather.delete(Number(a.day)),
+    list_weather: (a) =>
+      [...weather.entries()].filter(([d]) => d >= Number(a.fromDay) && d <= Number(a.toDay)).map(([day, weatherJson]) => ({ day, weatherJson, updatedAt: now })),
+    db_schema_version: () => 28,
     list_projects: () => [project],
     get_current_project: () => project,
     set_current_project: () => project,

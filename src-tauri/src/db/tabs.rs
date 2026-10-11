@@ -71,7 +71,7 @@ pub fn family_of(conn: &Connection, item_id: &str) -> Result<Option<Family>, DbE
 fn require_page(conn: &Connection, parent_id: &str) -> Result<Item, DbError> {
     let parent = live_item(conn, parent_id)?;
     if !documents::holds_text(&parent.item_type) {
-        return Err(DbError::Invalid("Only a document or a template can have tabs."));
+        return Err(DbError::Invalid("Only a page (a document, template or session) can have tabs."));
     }
     if family_of(conn, parent_id)?.is_some() {
         return Err(DbError::Invalid("A tab can't have tabs of its own."));

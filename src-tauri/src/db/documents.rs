@@ -12,9 +12,9 @@ pub const DOCUMENT_TYPE: &str = "document";
 pub const MAX_BODY_BYTES: usize = 2_000_000;
 
 /// Does an item of this type hold text? Documents do, and so do templates (their text is the
-/// starter text of the documents made from them).
+/// starter text of the documents made from them) and sessions (a session is a page with dates).
 pub fn holds_text(item_type: &str) -> bool {
-    item_type == DOCUMENT_TYPE || item_type == super::templates::TEMPLATE_TYPE
+    item_type == DOCUMENT_TYPE || item_type == super::templates::TEMPLATE_TYPE || item_type == super::sessions::SESSION_TYPE
 }
 
 /// Checks the item exists, is live, and holds text.

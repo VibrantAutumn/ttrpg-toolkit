@@ -22,6 +22,9 @@
 //!   data/generators.json    (likewise; a generator's rows, with a template's item id and field ids inside)
 //!   data/encounters.json    (likewise; an encounter's state, with the item ids of its combatants' pages inside; undo history is not carried)
 //!   data/project_rulesets.json    (likewise; the project's copies of rulesets, with the project's field and set ids inside)
+//!   data/calendars.json, data/timelines.json, data/calendar_events.json, data/sessions.json, data/weather_days.json,
+//!   data/project_state.json    (likewise; time: dates are absolute day numbers; a timeline's query has tag, folder, field and item ids
+//!   inside; the project state names its calendar, session and weather table by item id)
 //!   assets/cards/<id>.<ext>, assets/cards/<id>.thumb.<ext>   card pictures (one file each)
 //!   assets/                  reserved for future use (images, ...)
 //!
@@ -66,6 +69,12 @@ pub const SMART_COLLECTIONS_FILE: &str = "data/smart_collections.json";
 pub const GENERATORS_FILE: &str = "data/generators.json";
 pub const ENCOUNTERS_FILE: &str = "data/encounters.json";
 pub const PROJECT_RULESETS_FILE: &str = "data/project_rulesets.json";
+pub const CALENDARS_FILE: &str = "data/calendars.json";
+pub const TIMELINES_FILE: &str = "data/timelines.json";
+pub const CALENDAR_EVENTS_FILE: &str = "data/calendar_events.json";
+pub const SESSIONS_FILE: &str = "data/sessions.json";
+pub const WEATHER_DAYS_FILE: &str = "data/weather_days.json";
+pub const PROJECT_STATE_FILE: &str = "data/project_state.json";
 /// Card picture files live under this folder inside the zip.
 pub const CARD_ASSET_DIR: &str = "assets/cards/";
 
@@ -123,6 +132,12 @@ pub struct Counts {
     pub generators: u32,
     pub encounters: u32,
     pub project_rulesets: u32,
+    pub calendars: u32,
+    pub timelines: u32,
+    pub calendar_events: u32,
+    pub sessions: u32,
+    pub weather_days: u32,
+    pub project_state: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -473,4 +488,94 @@ pub struct ItemTabRecord {
     pub created_at: i64,
     pub updated_at: i64,
     pub deleted_at: Option<i64>,
+}
+
+/// A calendar's definition (the item itself is separate). Nothing inside refers to other items.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarRecord {
+    pub item_id: String,
+    pub calendar_json: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// A timeline's settings. `config_json` holds a query with tag, folder, field and item ids (import points them at the
+/// imported copies) and a lane rule that names a tag or a field.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineRecord {
+    pub item_id: String,
+    pub config_json: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// A quick event or a dated note. Days are absolute day numbers, the same in every project.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarEventRecord {
+    pub item_id: String,
+    pub start_day: i64,
+    #[serde(default)]
+    pub start_minute: Option<i64>,
+    #[serde(default)]
+    pub end_day: Option<i64>,
+    #[serde(default)]
+    pub end_minute: Option<i64>,
+    #[serde(default)]
+    pub recurrence_json: Option<String>,
+    #[serde(default)]
+    pub until_day: Option<i64>,
+    #[serde(default)]
+    pub body: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// A session's dates and status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionRecord {
+    pub item_id: String,
+    #[serde(default)]
+    pub real_date: Option<String>,
+    #[serde(default)]
+    pub start_day: Option<i64>,
+    #[serde(default)]
+    pub start_minute: Option<i64>,
+    #[serde(default)]
+    pub end_day: Option<i64>,
+    #[serde(default)]
+    pub end_minute: Option<i64>,
+    pub status: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// The weather kept for one day.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeatherDayRecord {
+    pub day: i64,
+    pub weather_json: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// The project's shared "now". At most one per pack. Item ids point at items of the pack; import points them at the
+/// imported copies (or leaves them unset if the item wasn't in the pack).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectStateRecord {
+    #[serde(default)]
+    pub main_calendar_id: Option<String>,
+    pub now_day: i64,
+    pub now_minute: i64,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub weather_table_id: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
 }

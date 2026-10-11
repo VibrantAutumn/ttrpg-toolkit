@@ -18,6 +18,8 @@ import {
   type RuleKind,
   type SortKey,
 } from "../../lib/queries/query";
+import { useTime } from "../../state/timeState";
+import { DatePicker } from "../time/DatePicker";
 import { ItemPick } from "./ItemPick";
 import { pathLabel } from "../../lib/queries/catalog";
 import type { QueryCatalog } from "./useQueryCatalog";
@@ -347,26 +349,42 @@ function FieldRule({ projectId, catalog, rule, set }: { projectId: string; catal
 }
 
 function TestEditor({ projectId, catalog, def, test, onChange }: { projectId: string; catalog: QueryCatalog; def: QueryCatalog["fields"][number]; test: FieldTest; onChange: (t: FieldTest) => void }) {
+  const time = useTime();
   switch (test.check) {
     case "contains":
     case "equals":
       return <input value={test.text} maxLength={QUERY_LIMITS.text} aria-label="Text" placeholder="Text" onChange={(e) => onChange({ ...test, text: e.currentTarget.value })} />;
-    case "number":
+    case "number": {
+      const words =
+        def.kind === "date"
+          ? { "=": "on", "<": "before", "<=": "on or before", ">": "after", ">=": "on or after" }
+          : { "=": "equal to", "<": "less than", "<=": "at most", ">": "more than", ">=": "at least" };
       return (
         <div className="row wrap">
           <select value={test.cmp} aria-label="Comparison" onChange={(e) => onChange({ ...test, cmp: e.currentTarget.value as Comparison })}>
             {COMPARISONS.map((c) => (
               <option key={c} value={c}>
-                {{ "=": "equal to", "<": "less than", "<=": "at most", ">": "more than", ">=": "at least" }[c]}
+                {words[c]}
               </option>
             ))}
           </select>
-          <NumberBox value={test.value} label="Value" onChange={(n) => onChange({ ...test, value: n })} />
+          {def.kind === "date" ? (
+            <DatePicker calendar={time.calendar} day={Math.round(test.value)} label="Date" onChange={(d) => onChange({ ...test, value: d ?? 0 })} />
+          ) : (
+            <NumberBox value={test.value} label="Value" onChange={(n) => onChange({ ...test, value: n })} />
+          )}
           {def.kind === "bar" && <small className="meta">(the bar's current value)</small>}
         </div>
       );
+    }
     case "between":
-      return (
+      return def.kind === "date" ? (
+        <div className="row wrap">
+          <DatePicker calendar={time.calendar} day={Math.round(test.min)} label="From" onChange={(d) => onChange({ ...test, min: d ?? 0 })} />
+          <span>to</span>
+          <DatePicker calendar={time.calendar} day={Math.round(test.max)} label="To" onChange={(d) => onChange({ ...test, max: d ?? 0 })} />
+        </div>
+      ) : (
         <div className="row wrap">
           <NumberBox value={test.min} label="Lowest value" onChange={(n) => onChange({ ...test, min: n })} />
           <span>and</span>

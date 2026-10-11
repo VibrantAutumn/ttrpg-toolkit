@@ -171,6 +171,21 @@ pub fn rename(conn: &Connection, id: &str, name: &str, now: i64) -> Result<Item,
     get(conn, id)
 }
 
+/// Marks an item `default` (follow its tool's default), `visible` or `secret` (GM only).
+pub fn set_visibility(conn: &Connection, id: &str, visibility: &str, now: i64) -> Result<Item, DbError> {
+    if !matches!(visibility, "default" | "visible" | "secret") {
+        return Err(DbError::Invalid("Visibility is default, visible or secret."));
+    }
+    let changed = conn.execute(
+        "UPDATE items SET visibility = ?2, updated_at = ?3 WHERE id = ?1 AND deleted_at IS NULL",
+        params![id, visibility, now],
+    )?;
+    if changed == 0 {
+        return Err(DbError::NotFound);
+    }
+    get(conn, id)
+}
+
 /// Moves an item into a folder (or to the top level when `None`).
 pub fn move_to(
     conn: &Connection,
@@ -228,6 +243,18 @@ mod tests {
         soft_delete(&conn, &gone.id, 7).unwrap();
         let names: Vec<String> = list_of_type(&conn, &camp, "w", "template").unwrap().into_iter().map(|i| i.name).collect();
         assert_eq!(names, ["alpha", "Zeta"]);
+    }
+
+    #[test]
+    fn visibility_can_be_set_to_the_three_known_values_only() {
+        let (conn, camp) = setup();
+        let i = create(&conn, &camp, "calendar", "note", "Plot", None, 10).unwrap();
+        assert_eq!(set_visibility(&conn, &i.id, "secret", 20).unwrap().visibility, "secret");
+        assert_eq!(set_visibility(&conn, &i.id, "visible", 30).unwrap().visibility, "visible");
+        assert!(set_visibility(&conn, &i.id, "hidden", 40).is_err());
+        assert_eq!(get(&conn, &i.id).unwrap().visibility, "visible");
+        soft_delete(&conn, &i.id, 50).unwrap();
+        assert!(set_visibility(&conn, &i.id, "secret", 60).is_err());
     }
 
     #[test]

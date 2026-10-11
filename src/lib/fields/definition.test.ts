@@ -41,9 +41,9 @@ describe("new definitions", () => {
     }
   });
 
-  it("does not offer a date field yet (it waits for the calendar)", () => {
-    expect(FIELD_KINDS).not.toContain("date");
-    expect([...FIELD_KINDS].sort()).toEqual(["bar", "dropdown", "formula", "link", "list", "number", "text"]);
+  it("offers a date field but not a map location yet (that waits for maps)", () => {
+    expect(FIELD_KINDS).toContain("date");
+    expect([...FIELD_KINDS].sort()).toEqual(["bar", "date", "dropdown", "formula", "link", "list", "number", "text"]);
   });
 });
 
@@ -129,7 +129,7 @@ describe("dropdown choices", () => {
 
 describe("normalizeDefinition (reading what was stored)", () => {
   it("gives null for anything that is not a definition", () => {
-    for (const bad of [null, 3, "x", [], {}, { id: "a", name: "A", kind: "date" }, { id: "", name: "A", kind: "text" }, { id: "a", kind: "text" }]) {
+    for (const bad of [null, 3, "x", [], {}, { id: "a", name: "A", kind: "location" }, { id: "", name: "A", kind: "text" }, { id: "a", kind: "text" }]) {
       expect(normalizeDefinition(bad)).toBeNull();
     }
   });

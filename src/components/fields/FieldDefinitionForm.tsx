@@ -174,6 +174,13 @@ export function DefinitionEditor({
         </label>
       )}
 
+      {draft.kind === "date" && (
+        <label className="check">
+          <input type="checkbox" checked={draft.config.range} onChange={(e) => configure<"date">({ range: e.currentTarget.checked })} />
+          Allow a range (a start and an end)
+        </label>
+      )}
+
       {draft.kind === "dropdown" && <ChoicesEditor def={draft} onChange={(def) => setDraft(() => def)} />}
 
       {draft.kind === "link" && (

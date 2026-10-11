@@ -129,7 +129,7 @@ export function ItemPage({ pageId, openTab, onBack }: { pageId: string; openTab:
           <InlineTitle item={item} readOnly={trashed} run={run} />
           {!canHaveTabs && (
             <p className="meta page-meta">
-              {itemTypeLabel(item)} <TagChips tags={tags} />
+              {itemTypeLabel(item)} {registry.getItemType(item.itemType)?.plain !== true && <TagChips tags={tags} />}
             </p>
           )}
           {error && <p className="error">{error}</p>}

@@ -64,6 +64,7 @@ export function useQueryCatalog(projectId: string, query: Query): QueryCatalog {
       folder: (id) => (folders.some((f) => f.id === id) ? pathLabel(folders, id) : undefined),
       field: (id) => definitions.find((d) => d.id === id)?.name,
       item: (id) => itemNames.get(id),
+      fieldKind: (id) => definitions.find((d) => d.id === id)?.kind,
       choice: (fieldId, optionId) => {
         const def = definitions.find((d) => d.id === fieldId);
         return def?.kind === "dropdown" ? def.config.options.find((o) => o.id === optionId)?.label : undefined;

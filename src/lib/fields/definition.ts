@@ -4,15 +4,15 @@
  * every item that uses the field; values are stored against the definition's id, so renaming a
  * field or one of a dropdown's choices never disturbs saved values.
  *
- * Kinds (the spec's list, minus two that wait for later phases): text, number, bar (current
- * and maximum), dice formula, dropdown, list (entries with a title and a description) and link
- * (to other items). The in-world date field needs the calendar (Phase 6) and the map-location
- * field needs maps (Phase 7).
+ * Kinds (the spec's list, minus one that waits for a later phase): text, number, bar (current
+ * and maximum), dice formula, dropdown, list (entries with a title and a description), link
+ * (to other items) and date (an in-world day or range of days; see `lib/calendar/`). The
+ * map-location field needs maps (Phase 7).
  */
 
-export type FieldKind = "text" | "number" | "bar" | "formula" | "dropdown" | "list" | "link";
+export type FieldKind = "text" | "number" | "bar" | "formula" | "dropdown" | "list" | "link" | "date";
 
-export const FIELD_KINDS: readonly FieldKind[] = ["text", "number", "bar", "formula", "dropdown", "list", "link"];
+export const FIELD_KINDS: readonly FieldKind[] = ["text", "number", "bar", "formula", "dropdown", "list", "link", "date"];
 
 export const KIND_LABELS: Record<FieldKind, string> = {
   text: "Text",
@@ -22,6 +22,7 @@ export const KIND_LABELS: Record<FieldKind, string> = {
   dropdown: "Dropdown",
   list: "List",
   link: "Link",
+  date: "Date",
 };
 
 /** Sizes everything is held to. The database checks the same limits. */
@@ -75,6 +76,11 @@ export interface LinkConfig {
   itemTypes: string[];
 }
 
+export interface DateConfig {
+  /** Whether the property can hold a range (a start and an end) as well as a single day. */
+  range: boolean;
+}
+
 interface Base {
   id: string;
   name: string;
@@ -88,7 +94,8 @@ export type FieldDefinition =
   | (Base & { kind: "formula"; config: FormulaConfig })
   | (Base & { kind: "dropdown"; config: DropdownConfig })
   | (Base & { kind: "list"; config: ListConfig })
-  | (Base & { kind: "link"; config: LinkConfig });
+  | (Base & { kind: "link"; config: LinkConfig })
+  | (Base & { kind: "date"; config: DateConfig });
 
 export type ConfigOf<K extends FieldKind> = Extract<FieldDefinition, { kind: K }>["config"];
 
@@ -107,6 +114,8 @@ export function defaultConfig(kind: FieldKind): FieldDefinition["config"] {
       return { options: [] };
     case "link":
       return { many: false, library: null, itemTypes: [] };
+    case "date":
+      return { range: false };
     default:
       return {};
   }
@@ -219,6 +228,8 @@ export function normalizeDefinition(raw: unknown): FieldDefinition | null {
         config: { many: config.many === true, library: str(config.library) || null, itemTypes: [...new Set(types)] },
       };
     }
+    case "date":
+      return { ...base, kind, config: { range: config.range === true } };
     default:
       return { ...base, kind, config: {} } as FieldDefinition;
   }

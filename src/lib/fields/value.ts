@@ -1,3 +1,4 @@
+import { displayDay } from "../calendar/display";
 import { checkFormula } from "../dice/formula";
 import { LIMITS, type FieldDefinition } from "./definition";
 
@@ -12,6 +13,11 @@ export interface BarValue {
   current: number;
   max: number;
 }
+/** An in-world date: an absolute day number (see `lib/calendar/`), and the last day if it is a range. */
+export interface DateValue {
+  day: number;
+  endDay: number | null;
+}
 export interface ListEntry {
   title: string;
   text: string;
@@ -19,9 +25,9 @@ export interface ListEntry {
 
 /**
  * text and formula: string · number: number or null · bar: BarValue or null ·
- * dropdown: a choice's id or null · list: entries · link: item ids.
+ * dropdown: a choice's id or null · list: entries · link: item ids · date: DateValue or null.
  */
-export type FieldValue = string | number | null | BarValue | ListEntry[] | string[];
+export type FieldValue = string | number | null | BarValue | DateValue | ListEntry[] | string[];
 
 export type CoerceResult = { ok: true; value: FieldValue } | { ok: false; error: string };
 
@@ -128,6 +134,19 @@ export function coerceValue(def: FieldDefinition, raw: unknown): CoerceResult {
       return done(entries);
     }
 
+    case "date": {
+      if (raw === null || raw === undefined) return done(null);
+      const MAX_DAY = 1_000_000_000;
+      const valid = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && Math.abs(v) <= MAX_DAY;
+      if (!isObject(raw) || !valid(raw.day)) return fail("Expected a date.");
+      const end = raw.endDay === undefined || raw.endDay === null ? null : raw.endDay;
+      if (end === null) return done({ day: raw.day, endDay: null });
+      if (!valid(end)) return fail("Expected a date.");
+      if (!def.config.range) return fail("This property holds a single date, not a range.");
+      if (end < raw.day) return fail("A range can't end before it starts.");
+      return done({ day: raw.day, endDay: end === raw.day ? null : end });
+    }
+
     case "link": {
       if (raw === null || raw === undefined) return done([]);
       const list = typeof raw === "string" ? [raw] : raw;
@@ -145,6 +164,8 @@ export function coerceValue(def: FieldDefinition, raw: unknown): CoerceResult {
 export interface FormatContext {
   /** The name of the item with this id, or undefined if it can't be found. */
   itemName?: (id: string) => string | undefined;
+  /** Writes an absolute day number as a date in the project's main calendar. Without it the project's main calendar is used (`lib/calendar/display.ts`), or `Day 12` if none is set. */
+  formatDay?: (day: number) => string;
 }
 
 const SNIPPET = 20;
@@ -169,6 +190,12 @@ export function formatValue(def: FieldDefinition, value: FieldValue, context: Fo
       return def.config.options.find((o) => o.id === value)?.label ?? "";
     case "list":
       return (value as ListEntry[]).map((e) => (e.title !== "" ? e.title : snippet(e.text))).join(", ");
+    case "date": {
+      const date = value as DateValue | null;
+      if (!date) return "";
+      const show = context.formatDay ?? displayDay;
+      return date.endDay === null ? show(date.day) : `${show(date.day)} to ${show(date.endDay)}`;
+    }
     case "link": {
       const ids = value as string[];
       if (ids.length === 0) return "";
@@ -215,6 +242,8 @@ export function indexValue(def: FieldDefinition, value: FieldValue): ValueIndex 
       const lines = entries.flatMap((e) => [e.title, e.text].filter((t) => t !== ""));
       return { sortNum: entries.length, sortText: (entries[0].title || entries[0].text).toLowerCase(), searchText: lines.join("\n") };
     }
+    case "date":
+      return { sortNum: (value as DateValue).day, sortText: null, searchText: "" };
     case "link":
       return { sortNum: (value as string[]).length, sortText: null, searchText: "" };
   }

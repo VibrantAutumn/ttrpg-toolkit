@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listItemTags, listTags, type Item, type Tag } from "../../api/library";
+import { registry } from "../../registry";
 import { useDataVersion } from "../../state/dataVersion";
 import { useRenameItem } from "../../state/renameReview";
 import { ConfirmButton } from "../ConfirmButton";
@@ -30,6 +31,7 @@ export function ItemActions({
   children?: React.ReactNode;
 }) {
   const renameReviewed = useRenameItem();
+  const plain = registry.getItemType(item.itemType)?.plain === true;
   const dataVersion = useDataVersion();
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState("");
@@ -93,10 +95,12 @@ export function ItemActions({
         </form>
       ) : (
         <div className="row wrap">
-          <button type="button" className="link section-toggle" onClick={() => setTagsOpen(!tagsOpen)} aria-expanded={tagsOpen}>
-            {tagsOpen ? "▾" : "▸"} Tags
-          </button>
-          {tagsOpen && (
+          {!plain && (
+            <button type="button" className="link section-toggle" onClick={() => setTagsOpen(!tagsOpen)} aria-expanded={tagsOpen}>
+              {tagsOpen ? "▾" : "▸"} Tags
+            </button>
+          )}
+          {!plain && tagsOpen && (
             <>
               <TagChips tags={tags} />
               <button type="button" className="add-icon" aria-label="Add a tag" aria-expanded={editingTags} title="Add or remove tags" onClick={toggleTagEditor}>
@@ -127,7 +131,7 @@ export function ItemActions({
           )}
         </div>
       )}
-      {tagsOpen && editingTags && <TagEditor projectId={item.projectId} itemId={item.id} itemTags={tags} allTags={allTags} run={runTags} />}
+      {!plain && tagsOpen && editingTags && <TagEditor projectId={item.projectId} itemId={item.id} itemTags={tags} allTags={allTags} run={runTags} />}
     </>
   );
 }

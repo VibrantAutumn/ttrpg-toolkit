@@ -81,6 +81,9 @@ export const renameItem = (id: string, name: string) =>
   invoke<Item>("rename_item", { id, name });
 export const moveItem = (id: string, folderId: string | null) =>
   invoke<Item>("move_item", { id, folderId });
+/** Marks an item `default`, `visible` or `secret` (GM only; players never receive secret items once sharing exists). */
+export const setItemVisibility = (id: string, visibility: Item["visibility"]) =>
+  invoke<Item>("set_item_visibility", { id, visibility });
 export const deleteItem = (id: string) => invoke<void>("delete_item", { id });
 
 export const getItem = (id: string) => invoke<Item>("get_item", { id });

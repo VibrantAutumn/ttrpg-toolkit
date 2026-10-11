@@ -4,8 +4,10 @@ import { describeParseError } from "../../lib/dice/formula";
 import { adjustBar, barFraction, parseBarInput } from "../../lib/fields/bar";
 import type { FieldDefinition } from "../../lib/fields/definition";
 import { parseNumberInput } from "../../lib/fields/numberInput";
-import { coerceValue, type BarValue, type FieldValue, type ListEntry } from "../../lib/fields/value";
+import { coerceValue, type BarValue, type DateValue, type FieldValue, type ListEntry } from "../../lib/fields/value";
 import { rollLog } from "../../state/rollLog";
+import { useTime } from "../../state/timeState";
+import { DatePicker } from "../time/DatePicker";
 import { itemIcon } from "../item/itemDisplay";
 import { LinkPicker } from "../item/LinkPicker";
 
@@ -43,6 +45,8 @@ export function FieldValueEditor(props: FieldValueEditorProps) {
       return <ListEditor {...props} def={def} />;
     case "link":
       return <LinkEditor {...props} def={def} />;
+    case "date":
+      return <DateEditor {...props} def={def} />;
   }
 }
 
@@ -121,6 +125,52 @@ function NumberEditor({ def, value, disabled, onChange }: Kind<"number">) {
       </span>
       <ErrorLine message={error} />
     </>
+  );
+}
+
+function DateEditor({ def, value, disabled, onChange }: Kind<"date">) {
+  const { calendar, state } = useTime();
+  const date = value as DateValue | null;
+  const [error, setError] = useState<string | null>(null);
+  const today = state?.nowDay ?? 0;
+  async function save(next: DateValue | null) {
+    setError(await onChange(next));
+  }
+  return (
+    <div className="field-date">
+      <DatePicker
+        calendar={calendar}
+        day={date?.day ?? null}
+        allowEmpty
+        defaultDay={today}
+        disabled={disabled}
+        label={def.name}
+        onChange={(day) => save(day === null ? null : { day, endDay: date?.endDay != null && date.endDay > day ? date.endDay : null })}
+      />
+      {def.config.range && date && (
+        <div className="row-list">
+          <label className="check">
+            <input
+              type="checkbox"
+              disabled={disabled}
+              checked={date.endDay !== null}
+              onChange={(e) => save({ day: date.day, endDay: e.currentTarget.checked ? date.day + 1 : null })}
+            />
+            Until
+          </label>
+          {date.endDay !== null && (
+            <DatePicker
+              calendar={calendar}
+              day={date.endDay}
+              disabled={disabled}
+              label={`${def.name} (end)`}
+              onChange={(end) => save({ day: date.day, endDay: end !== null && end > date.day ? end : null })}
+            />
+          )}
+        </div>
+      )}
+      <ErrorLine message={error} />
+    </div>
   );
 }
 

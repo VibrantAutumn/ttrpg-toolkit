@@ -14,6 +14,7 @@ import { drawSpreadById } from "../../state/spreadActions";
 import { rollLog } from "../../state/rollLog";
 import { rerollTableResult, rollTableById } from "../../state/tableActions";
 import { DrawnCards } from "../cards/DrawnCards";
+import { SaveToSessionButton } from "../time/SaveToSessionButton";
 
 /**
  * One result in the roll log, whatever its kind: what happened, and what you
@@ -134,6 +135,7 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
           </>
         )}
         <button onClick={() => void copy()}>Copy</button>
+        <SaveToSessionButton text={entry.text} title={entry.label ?? undefined} />
         {entry.kind !== "table" &&
           (entry.savedItemId ? (
             <button onClick={() => openItem(entry.savedItemId!)}>Saved ✓ Open</button>

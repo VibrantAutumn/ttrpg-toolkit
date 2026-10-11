@@ -1,4 +1,5 @@
 import { ConfirmButton } from "../../components/ConfirmButton";
+import { SaveToSessionButton } from "../../components/time/SaveToSessionButton";
 import { canUndo, finish, nextTurn, outcomeText, pickTurn, resume, undo, type Outcome } from "../../lib/encounters/engine";
 import { combatantName, isActive, SIDE_LABELS, type EncounterState } from "../../lib/encounters/state";
 import { copyText } from "../../lib/copyText";
@@ -9,7 +10,7 @@ type Apply = (change: (state: EncounterState) => Outcome) => boolean;
  * The bar above a running encounter: the round, whose turn it is, and the buttons that move it on (what they are
  * depends on how initiative works: the next in order, the other side, or "who goes next?" for popcorn).
  */
-export function TurnControls({ state, apply }: { state: EncounterState; apply: Apply }) {
+export function TurnControls({ state, apply, title }: { state: EncounterState; apply: Apply; title?: string }) {
   const current = state.turn === null ? null : state.combatants.find((c) => c.id === state.turn) ?? null;
   const type = state.initiativeType;
 
@@ -23,6 +24,7 @@ export function TurnControls({ state, apply }: { state: EncounterState; apply: A
         <div className="row wrap">
           <button onClick={() => apply((s) => resume(s))}>Resume</button>
           <button onClick={() => void copyText(outcomeText(state))}>Copy the outcome</button>
+          <SaveToSessionButton text={outcomeText(state)} title={title} />
           <button disabled={!canUndo(state)} onClick={() => apply((s) => undo(s))}>
             Undo
           </button>

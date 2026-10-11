@@ -18,7 +18,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub const KINDS: &[&str] = &["text", "number", "bar", "formula", "dropdown", "list", "link"];
+pub const KINDS: &[&str] = &["text", "number", "bar", "formula", "dropdown", "list", "link", "date"];
 
 pub const MAX_NAME_CHARS: usize = 60;
 pub const MAX_DESCRIPTION_CHARS: usize = 300;
@@ -732,7 +732,7 @@ mod tests {
         let make = |name: &str, kind: &str, desc: &str, config: &str| create_definition(&conn, &camp, name, kind, desc, config, 2);
         assert!(matches!(make("  ", "text", "", "{}"), Err(DbError::EmptyName)));
         assert!(matches!(make(&"x".repeat(61), "text", "", "{}"), Err(DbError::Invalid(_))));
-        assert!(matches!(make("A", "date", "", "{}"), Err(DbError::Invalid(_))));
+        assert!(matches!(make("A", "location", "", "{}"), Err(DbError::Invalid(_))));
         assert!(matches!(make("A", "text", &"x".repeat(301), "{}"), Err(DbError::Invalid(_))));
         assert!(matches!(make("A", "text", "", "[1]"), Err(DbError::Invalid(_))));
         assert!(matches!(make("A", "text", "", "nope"), Err(DbError::Invalid(_))));

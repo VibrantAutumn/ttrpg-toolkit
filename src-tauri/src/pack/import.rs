@@ -12,7 +12,7 @@ use crate::db::projects::{self, Project};
 use crate::db::fields;
 use crate::db::tabs;
 use crate::db::{
-    cards, collections, documents, encounters, formulas, generators, play_decks, rulesets, saved_draws, saved_rolls, settings, smart_collections, spreads, tables,
+    calendar_events, cards, collections, documents, encounters, json_items, formulas, generators, play_decks, rulesets, saved_draws, saved_rolls, sessions, settings, smart_collections, spreads, tables, weather,
 };
 use rusqlite::{params, Connection, ErrorCode};
 use serde::de::DeserializeOwned;
@@ -72,6 +72,12 @@ pub struct ParsedPack {
     pub generators: Vec<GeneratorRecord>,
     pub encounters: Vec<EncounterRecord>,
     pub project_rulesets: Vec<ProjectRulesetRecord>,
+    pub calendars: Vec<CalendarRecord>,
+    pub timelines: Vec<TimelineRecord>,
+    pub calendar_events: Vec<CalendarEventRecord>,
+    pub sessions: Vec<SessionRecord>,
+    pub weather_days: Vec<WeatherDayRecord>,
+    pub project_state: Vec<ProjectStateRecord>,
     /// Plain-language notes about anything that had to be fixed or skipped.
     pub warnings: Vec<String>,
 }
@@ -108,6 +114,12 @@ impl ParsedPack {
             generators: self.generators.len() as u32,
             encounters: self.encounters.len() as u32,
             project_rulesets: self.project_rulesets.len() as u32,
+            calendars: self.calendars.len() as u32,
+            timelines: self.timelines.len() as u32,
+            calendar_events: self.calendar_events.len() as u32,
+            sessions: self.sessions.len() as u32,
+            weather_days: self.weather_days.len() as u32,
+            project_state: self.project_state.len() as u32,
         }
     }
 }
@@ -213,6 +225,12 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         generators: read_list(&mut archive, GENERATORS_FILE, limits, &mut total)?,
         encounters: read_list(&mut archive, ENCOUNTERS_FILE, limits, &mut total)?,
         project_rulesets: read_list(&mut archive, PROJECT_RULESETS_FILE, limits, &mut total)?,
+        calendars: read_list(&mut archive, CALENDARS_FILE, limits, &mut total)?,
+        timelines: read_list(&mut archive, TIMELINES_FILE, limits, &mut total)?,
+        calendar_events: read_list(&mut archive, CALENDAR_EVENTS_FILE, limits, &mut total)?,
+        sessions: read_list(&mut archive, SESSIONS_FILE, limits, &mut total)?,
+        weather_days: read_list(&mut archive, WEATHER_DAYS_FILE, limits, &mut total)?,
+        project_state: read_list(&mut archive, PROJECT_STATE_FILE, limits, &mut total)?,
         warnings: Vec::new(),
     };
     sanitize(&mut pack);
@@ -782,6 +800,72 @@ fn sanitize(pack: &mut ParsedPack) {
     });
     note(before - pack.encounters.len(), "encounter(s) belonged to something missing or were unreadable and were skipped.");
 
+    // Time: calendars, timelines, events and notes, sessions, weather and the project's "now".
+    let before = pack.calendars.len();
+    let mut seen = HashSet::new();
+    pack.calendars.retain(|c| {
+        item_type.get(c.item_id.as_str()) == Some(&json_items::CALENDAR.item_type)
+            && json_items::validate(&json_items::CALENDAR, &c.calendar_json).is_ok()
+            && seen.insert(c.item_id.clone())
+    });
+    note(before - pack.calendars.len(), "calendar(s) belonged to something missing or were unreadable and were skipped.");
+
+    let before = pack.timelines.len();
+    let mut seen = HashSet::new();
+    pack.timelines.retain(|t| {
+        item_type.get(t.item_id.as_str()) == Some(&json_items::TIMELINE.item_type)
+            && json_items::validate(&json_items::TIMELINE, &t.config_json).is_ok()
+            && seen.insert(t.item_id.clone())
+    });
+    note(before - pack.timelines.len(), "timeline(s) belonged to something missing or were unreadable and were skipped.");
+
+    let before = pack.calendar_events.len();
+    let mut seen = HashSet::new();
+    pack.calendar_events.retain(|e| {
+        let input = calendar_events::EventInput {
+            start_day: e.start_day,
+            start_minute: e.start_minute,
+            end_day: e.end_day,
+            end_minute: e.end_minute,
+            recurrence_json: e.recurrence_json.clone(),
+            until_day: e.until_day,
+            body: e.body.clone(),
+        };
+        item_type.get(e.item_id.as_str()).is_some_and(|t| *t == calendar_events::EVENT_TYPE || *t == calendar_events::NOTE_TYPE)
+            && calendar_events::validate(&input).is_ok()
+            && seen.insert(e.item_id.clone())
+    });
+    note(before - pack.calendar_events.len(), "event(s) or note(s) belonged to something missing or were unreadable and were skipped.");
+
+    let before = pack.sessions.len();
+    let mut seen = HashSet::new();
+    pack.sessions.retain(|s| {
+        let input = sessions::SessionInput {
+            real_date: s.real_date.clone(),
+            start_day: s.start_day,
+            start_minute: s.start_minute,
+            end_day: s.end_day,
+            end_minute: s.end_minute,
+            status: s.status.clone(),
+        };
+        item_type.get(s.item_id.as_str()) == Some(&sessions::SESSION_TYPE)
+            && sessions::validate(&input).is_ok()
+            && seen.insert(s.item_id.clone())
+    });
+    note(before - pack.sessions.len(), "session(s) belonged to something missing or were unreadable and were skipped.");
+
+    let before = pack.weather_days.len();
+    let mut seen = HashSet::new();
+    pack.weather_days.retain(|w| weather::validate(w.day, &w.weather_json).is_ok() && seen.insert(w.day));
+    note(before - pack.weather_days.len(), "day(s) of weather were unreadable or repeated and were skipped.");
+
+    let before = pack.project_state.len();
+    pack.project_state.retain(|s| {
+        (-calendar_events::MAX_DAY..=calendar_events::MAX_DAY).contains(&s.now_day) && (0..=calendar_events::MAX_MINUTE).contains(&s.now_minute)
+    });
+    pack.project_state.truncate(1);
+    note(before - pack.project_state.len(), "project state record(s) were unreadable or extra and were skipped.");
+
     let before = pack.project_rulesets.len();
     let mut seen = HashSet::new();
     pack.project_rulesets.retain(|r| {
@@ -1347,6 +1431,60 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
                 Uuid::now_v7().to_string(), project.id, global, r.name.trim(), r.rules_json, ids_json, r.position,
                 r.created_at, r.updated_at, r.deleted_at
             ],
+        )
+        .map_err(db_error)?;
+    }
+
+    // Time. Days are absolute numbers, the same in every project, so only item ids need pointing at the imported copies.
+    for c in &pack.calendars {
+        tx.execute(
+            "INSERT INTO calendars (item_id, calendar_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            params![item_ids[&c.item_id], c.calendar_json, c.created_at, c.updated_at],
+        )
+        .map_err(db_error)?;
+    }
+    for t in &pack.timelines {
+        // A timeline's query and lane rule name tags, folders, fields and items by id.
+        let config_json = remapped_json(&t.config_json, &query_ids);
+        tx.execute(
+            "INSERT INTO timelines (item_id, config_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            params![item_ids[&t.item_id], config_json, t.created_at, t.updated_at],
+        )
+        .map_err(db_error)?;
+    }
+    for e in &pack.calendar_events {
+        tx.execute(
+            "INSERT INTO calendar_events
+                (item_id, start_day, start_minute, end_day, end_minute, recurrence_json, until_day, body, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                item_ids[&e.item_id], e.start_day, e.start_minute, e.end_day, e.end_minute, e.recurrence_json, e.until_day,
+                e.body, e.created_at, e.updated_at
+            ],
+        )
+        .map_err(db_error)?;
+    }
+    for s in &pack.sessions {
+        tx.execute(
+            "INSERT INTO sessions (item_id, real_date, start_day, start_minute, end_day, end_minute, status, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![item_ids[&s.item_id], s.real_date, s.start_day, s.start_minute, s.end_day, s.end_minute, s.status, s.created_at, s.updated_at],
+        )
+        .map_err(db_error)?;
+    }
+    for w in &pack.weather_days {
+        tx.execute(
+            "INSERT INTO weather_days (project_id, day, weather_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![project.id, w.day, w.weather_json, w.created_at, w.updated_at],
+        )
+        .map_err(db_error)?;
+    }
+    for s in &pack.project_state {
+        let point = |id: &Option<String>| id.as_ref().and_then(|old| item_ids.get(old)).cloned();
+        tx.execute(
+            "INSERT INTO project_state (project_id, main_calendar_id, now_day, now_minute, session_id, weather_table_id, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![project.id, point(&s.main_calendar_id), s.now_day, s.now_minute, point(&s.session_id), point(&s.weather_table_id), s.created_at, s.updated_at],
         )
         .map_err(db_error)?;
     }

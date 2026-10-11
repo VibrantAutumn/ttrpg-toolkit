@@ -166,7 +166,7 @@ pub fn test_suits_kind(test: &FieldTest, kind: &str) -> bool {
     match test {
         FieldTest::Contains { .. } => matches!(kind, "text" | "formula" | "list"),
         FieldTest::Equals { .. } => matches!(kind, "text" | "formula"),
-        FieldTest::Number { .. } | FieldTest::Between { .. } => matches!(kind, "number" | "bar"),
+        FieldTest::Number { .. } | FieldTest::Between { .. } => matches!(kind, "number" | "bar" | "date"),
         FieldTest::Choice { .. } => kind == "dropdown",
         FieldTest::Links { .. } => kind == "link",
         FieldTest::Empty => true,
@@ -493,7 +493,7 @@ impl Builder<'_> {
             FieldTest::Empty => {
                 let filled = match kind.as_str() {
                     "text" | "formula" => "json_extract(v.value_json, '$') <> ''",
-                    "number" | "bar" | "dropdown" => "json_extract(v.value_json, '$') IS NOT NULL",
+                    "number" | "bar" | "dropdown" | "date" => "json_extract(v.value_json, '$') IS NOT NULL",
                     _ => "json_array_length(v.value_json) > 0",
                 };
                 format!("NOT {}", has(filled.to_string()))

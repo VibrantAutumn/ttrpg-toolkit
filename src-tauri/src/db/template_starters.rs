@@ -507,7 +507,7 @@ mod tests {
         b.templates[0].tags = vec!["Nope".into()];
         cases.push(b);
         let mut b = bundle();
-        b.fields[0].kind = "date".into();
+        b.fields[0].kind = "location".into();
         cases.push(b);
         let mut b = bundle();
         b.fields[0].config_json = "[1]".into();

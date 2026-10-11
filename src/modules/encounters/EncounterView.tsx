@@ -87,7 +87,7 @@ function EncounterBody({ item }: { item: Item }) {
         </p>
       )}
 
-      {running && <TurnControls state={state} apply={apply} />}
+      {running && <TurnControls state={state} apply={apply} title={item.name} />}
 
       <div className="encounter-columns">
         <div>

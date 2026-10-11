@@ -70,6 +70,8 @@ export interface ItemTypeDefinition {
   toolId: string;
   /** False for types made elsewhere (e.g. saved draws): the library's "New item" form leaves them out. */
   creatable?: boolean;
+  /** True for items that are settings rather than content (a calendar): their page has no Tags or Properties. */
+  plain?: boolean;
   /** True if a page of this type can have tabs (nested documents and embeds); only types that hold text do. */
   tabs?: boolean;
   /** The editor shown on the item's page, if this type has content to edit. */

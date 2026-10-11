@@ -90,3 +90,14 @@ describe("describeQuery", () => {
     expect(describeQuery(q, names)).toBe("Is tagged NPC");
   });
 });
+
+describe("describing date tests", () => {
+  const dateNames: QueryNames = { ...names, field: (id) => (id === "born" ? "Born" : undefined), fieldKind: (id) => (id === "born" ? "date" : undefined) };
+  const one = (test: Extract<Rule, { kind: "field" }>["test"], not = false) =>
+    describeRule({ kind: "field", fieldId: "born", test, not } as Rule, dateNames);
+  it("says dates in words, as day numbers when no calendar is set", () => {
+    expect(one({ check: "number", cmp: "<", value: 12 })).toBe("Born is before Day 12");
+    expect(one({ check: "number", cmp: ">=", value: 3 }, true)).toBe("Born isn't on or after Day 3");
+    expect(one({ check: "between", min: 1, max: 9 })).toBe("Born is between Day 1 and Day 9");
+  });
+});

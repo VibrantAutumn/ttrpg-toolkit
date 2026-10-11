@@ -136,7 +136,7 @@ Each project has a small shared "now" that modules read and update.
 
 ## Rulesets and content packs
 
-**Rulesets** are global definitions of a game system. Picking one for a project configures stat blocks, encounters and dice together.
+**Rulesets** are global definitions of a game system. Picking one for a project **copies** it in (decided in Phase 5): its stat blocks become property sets in the project, its dice become formulas, and its encounter rules are kept with the project. Later edits to the global ruleset reach a project only when its copy is updated.
 
 A ruleset contains:
 

@@ -15,6 +15,7 @@ use crate::db::tables::{self, EntryInput, Pick};
 use crate::db::play_decks::{self, NewPlayDeck};
 use crate::db::saved_draws::{self, NewSavedDraw};
 use crate::db::saved_rolls::{self, NewSavedRoll};
+use crate::db::{calendar_events, json_items, project_state, sessions, weather};
 use crate::db::{projects, documents, folders, items, links, open_in_memory, search, settings, tags};
 use rusqlite::types::Value;
 use rusqlite::Connection;
@@ -237,6 +238,35 @@ mind the [Rumors]".into(), weight: 1 },
     )
     .unwrap();
 
+    // Time: a calendar, a timeline whose lane rule names the "Race" property by id, a repeating event, a secret dated note,
+    // a running session, a day of weather, and the project's "now" pointing at the calendar and the session.
+    let calendar = items::create(conn, c, "calendar", "calendar", "Harptos", None, 5000).unwrap();
+    json_items::set(conn, &json_items::CALENDAR, &calendar.id, r#"{"version":1,"months":[{"name":"Hammer","days":30}]}"#, 5010).unwrap();
+    let timeline = items::create(conn, c, "calendar", "timeline", "History", None, 5020).unwrap();
+    let config = json!({ "version": 1, "zoom": "decade", "lanes": { "by": "field", "fieldId": race.id } }).to_string();
+    json_items::set(conn, &json_items::TIMELINE, &timeline.id, &config, 5030).unwrap();
+    let festival = items::create(conn, c, "calendar", "event", "Festival", None, 5040).unwrap();
+    let input = |start: i64, rule: Option<&str>, body: &str| calendar_events::EventInput {
+        start_day: start,
+        start_minute: Some(600),
+        end_day: Some(start + 2),
+        end_minute: None,
+        recurrence_json: rule.map(|r| r.to_string()),
+        until_day: None,
+        body: body.to_string(),
+    };
+    calendar_events::set(conn, &festival.id, &input(100, Some(r#"{"kind":"yearly","month":0,"day":1}"#), "Bring bread"), 5050).unwrap();
+    let plot = items::create(conn, c, "calendar", "note", "The plot thickens", None, 5060).unwrap();
+    calendar_events::set(conn, &plot.id, &input(200, None, "Strahd knows"), 5070).unwrap();
+    items::set_visibility(conn, &plot.id, "secret", 5075).unwrap();
+    let session = items::create(conn, c, "worldbuilding", "session", "Session 1", None, 5080).unwrap();
+    project_state::set_now(conn, c, 150, 30, 5085).unwrap();
+    sessions::start(conn, &session.id, Some("2026-10-10"), 5090).unwrap();
+    weather::set(conn, c, 150, r#"{"text":"Light rain","table":null,"season":null,"manual":false}"#, 5100).unwrap();
+    project_state::set_main_calendar(conn, c, Some(&calendar.id), 5110).unwrap();
+    let weather_table = items::list_of_type(conn, c, "tables", "table").unwrap().into_iter().next().map(|t| t.id);
+    project_state::set_weather_table(conn, c, weather_table.as_deref(), 5120).unwrap();
+
     camp.id
 }
 
@@ -290,6 +320,12 @@ struct Snapshot {
     generators: Vec<String>,
     encounters: Vec<String>,
     project_rulesets: Vec<String>,
+    calendars: Vec<String>,
+    timelines: Vec<String>,
+    calendar_events: Vec<String>,
+    sessions: Vec<String>,
+    weather_days: Vec<String>,
+    project_state: Vec<String>,
 }
 
 fn snapshot(conn: &Connection, project_id: &str) -> Snapshot {
@@ -397,6 +433,27 @@ fn snapshot(conn: &Connection, project_id: &str) -> Snapshot {
                     (SELECT name FROM field_definitions WHERE id = json_extract(r.ids_json, '$.fields.race')),
                     (SELECT name FROM field_sets WHERE id = json_extract(r.ids_json, '$.sets.npc'))
              FROM project_rulesets r WHERE r.project_id = ?1", project_id),
+        calendars: lines(conn,
+            "SELECT i.name, i.library, c.calendar_json, c.created_at, c.updated_at, i.deleted_at
+             FROM calendars c JOIN items i ON i.id = c.item_id WHERE i.project_id = ?1", project_id),
+        timelines: lines(conn,
+            "SELECT i.name, t.created_at, t.updated_at, json_extract(t.config_json, '$.zoom'),
+                    (SELECT name FROM field_definitions WHERE id = json_extract(t.config_json, '$.lanes.fieldId'))
+             FROM timelines t JOIN items i ON i.id = t.item_id WHERE i.project_id = ?1", project_id),
+        calendar_events: lines(conn,
+            "SELECT i.name, i.item_type, i.visibility, e.start_day, e.start_minute, e.end_day, e.end_minute, e.recurrence_json,
+                    e.until_day, e.body, e.created_at, e.updated_at
+             FROM calendar_events e JOIN items i ON i.id = e.item_id WHERE i.project_id = ?1", project_id),
+        sessions: lines(conn,
+            "SELECT i.name, s.real_date, s.start_day, s.start_minute, s.end_day, s.end_minute, s.status, s.created_at, s.updated_at
+             FROM sessions s JOIN items i ON i.id = s.item_id WHERE i.project_id = ?1", project_id),
+        weather_days: lines(conn,
+            "SELECT day, weather_json, created_at, updated_at FROM weather_days WHERE project_id = ?1", project_id),
+        project_state: lines(conn,
+            "SELECT (SELECT name FROM items WHERE id = s.main_calendar_id), s.now_day, s.now_minute,
+                    (SELECT name FROM items WHERE id = s.session_id), (SELECT name FROM items WHERE id = s.weather_table_id),
+                    s.created_at, s.updated_at
+             FROM project_state s WHERE s.project_id = ?1", project_id),
     }
 }
 
@@ -451,7 +508,7 @@ fn the_manifest_describes_the_pack() {
         // 2 formulas, 3 cards, a set, a deck, a pool, a saved draw, a deck in play, a spread, 2 tables). 2 cards have details, 1 a picture, 7 membership rows.
         // 1 table has settings; the 2 tables have 4 entries in all (one deleted) and 2 entry tags (one removed).
         Counts {
-            folders: 3, items: 25, tags: 4, item_tags: 4, links: 5, documents: 5, saved_rolls: 2, formulas: 2,
+            folders: 3, items: 30, tags: 4, item_tags: 4, links: 5, documents: 5, saved_rolls: 2, formulas: 2,
             card_details: 2, collection_members: 7, card_images: 1, saved_draws: 1, play_decks: 1, spreads: 1, spread_positions: 3,
             random_tables: 1, table_entries: 4, table_entry_tags: 2,
             // 4 fields (one deleted), 2 sets (one deleted) with 3 member rows (one removed), 2 applied sets (one taken off),
@@ -466,6 +523,8 @@ fn the_manifest_describes_the_pack() {
             // The "Crypt fight" encounter and the project's copy of a ruleset.
             encounters: 1,
             project_rulesets: 1,
+            // Time: the calendar, the timeline, the festival and the note, one session, one day of weather and the project's now.
+            calendars: 1, timelines: 1, calendar_events: 2, sessions: 1, weather_days: 1, project_state: 1,
         }
     );
     assert_eq!(pack.counts(), m.counts);
@@ -495,7 +554,7 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
         )
         .unwrap();
     assert_eq!(shared, 0);
-    assert_eq!(count(&conn, "items"), 50);
+    assert_eq!(count(&conn, "items"), 60);
 }
 
 #[test]
@@ -543,7 +602,7 @@ fn imported_items_remember_where_they_came_from() {
             .map(|r| r.unwrap())
             .collect()
     };
-    assert_eq!(rows.len(), 25);
+    assert_eq!(rows.len(), 30);
     for (name, origin_pack, origin_item) in rows {
         assert_eq!(origin_pack.as_deref(), Some(pack_id.as_str()), "{name}");
         // The origin id is the item's id in the ORIGINAL project.
@@ -640,7 +699,7 @@ fn unreadable_or_orphaned_fields_are_skipped_or_renamed_with_a_warning() {
         ("data/field_definitions.json", json!([
             { "id": "f1", "name": "Race", "kind": "text", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
             { "id": "f2", "name": "race", "kind": "text", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
-            { "id": "f3", "name": "Date", "kind": "date", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
+            { "id": "f3", "name": "Date", "kind": "location", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
             { "id": "f4", "name": "Faction", "kind": "link", "configJson": "{}", "createdAt": 1, "updatedAt": 1, "deletedAt": null },
             { "id": "f5", "name": "Bad settings", "kind": "text", "configJson": "[1]", "createdAt": 1, "updatedAt": 1, "deletedAt": null }
         ])),
@@ -915,7 +974,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
     assert!(pack.warnings.iter().all(|w| w.chars().next().unwrap().is_ascii_digit()));
     assert_eq!(
         pack.counts(),
-        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0, encounters: 0, project_rulesets: 0 }
+        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0, encounters: 0, project_rulesets: 0, calendars: 0, timelines: 0, calendar_events: 0, sessions: 0, weather_days: 0, project_state: 0 }
     );
 
     let conn = open_in_memory();
@@ -1036,7 +1095,7 @@ fn the_committed_version_1_pack_still_imports() {
     assert_eq!(result.project.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0, encounters: 0, project_rulesets: 0 }
+        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0, encounters: 0, project_rulesets: 0, calendars: 0, timelines: 0, calendar_events: 0, sessions: 0, weather_days: 0, project_state: 0 }
     );
     let camp = result.project.id;
 
@@ -2271,4 +2330,59 @@ fn bad_encounter_and_ruleset_data_in_a_pack_is_skipped_with_warnings() {
     // The second encounter item has no saved state, which reads as a new encounter.
     let e2 = items::list(&conn, &result.project.id, "encounters", None).unwrap().into_iter().find(|i| i.name == "e2").unwrap();
     assert_eq!(encounters::get(&conn, &e2.id).unwrap(), None);
+}
+
+#[test]
+fn bad_time_data_in_a_pack_is_skipped_with_warnings_and_old_packs_have_none() {
+    let item = |id: &str, ty: &str, lib: &str| json!({ "id": id, "library": lib, "itemType": ty, "name": id, "icon": null, "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null });
+    let event = |id: &str, start: i64, end: Option<i64>| json!({ "itemId": id, "startDay": start, "endDay": end, "body": "", "createdAt": 1, "updatedAt": 1 });
+    let session = |id: &str, status: &str| json!({ "itemId": id, "realDate": "2026-10-10", "status": status, "createdAt": 1, "updatedAt": 1 });
+    let bytes = pack_with(&[
+        ("data/items.json", json!([
+            item("cal", "calendar", "calendar"), item("doc", "document", "worldbuilding"), item("ev", "event", "calendar"),
+            item("ev2", "event", "calendar"), item("ses", "session", "worldbuilding"), item("ses2", "session", "worldbuilding"),
+            item("tl", "timeline", "calendar"),
+        ])),
+        ("data/calendars.json", json!([
+            { "itemId": "cal", "calendarJson": "{}", "createdAt": 1, "updatedAt": 1 },
+            { "itemId": "doc", "calendarJson": "{}", "createdAt": 1, "updatedAt": 1 },   // not a calendar
+            { "itemId": "cal", "calendarJson": "{}", "createdAt": 1, "updatedAt": 1 },   // repeated
+        ])),
+        ("data/timelines.json", json!([{ "itemId": "tl", "configJson": "oops", "createdAt": 1, "updatedAt": 1 }])),
+        ("data/calendar_events.json", json!([
+            event("ev", 5, Some(7)),
+            event("ev2", 9, Some(3)),            // ends before it starts
+            event("doc", 1, None),               // not an event
+        ])),
+        ("data/sessions.json", json!([session("ses", "ended"), session("ses2", "someday")])),
+        ("data/weather_days.json", json!([
+            { "day": 3, "weatherJson": "{}", "createdAt": 1, "updatedAt": 1 },
+            { "day": 3, "weatherJson": "{}", "createdAt": 1, "updatedAt": 1 },
+            { "day": 4, "weatherJson": "[]", "createdAt": 1, "updatedAt": 1 },
+        ])),
+        ("data/project_state.json", json!([
+            { "mainCalendarId": "cal", "nowDay": 77, "nowMinute": 5, "sessionId": "gone", "createdAt": 1, "updatedAt": 1 },
+            { "nowDay": 1, "nowMinute": 1, "createdAt": 1, "updatedAt": 1 },
+        ])),
+    ]);
+    let pack = read_pack(&bytes).unwrap();
+    assert_eq!((pack.calendars.len(), pack.timelines.len(), pack.calendar_events.len(), pack.sessions.len(), pack.weather_days.len(), pack.project_state.len()), (1, 0, 1, 1, 1, 1));
+    for word in ["calendar", "timeline", "event", "session", "weather", "project state"] {
+        assert!(pack.warnings.iter().any(|w| w.contains(word)), "{word}: {:?}", pack.warnings);
+    }
+
+    let conn = open_in_memory();
+    let result = import_parsed(&conn, &pack, 9000).unwrap();
+    let state = project_state::get(&conn, &result.project.id).unwrap();
+    assert_eq!((state.now_day, state.now_minute), (77, 5));
+    // The calendar came with the pack and is the main one; the session it named wasn't in the pack, so none is current.
+    let cal = items::list(&conn, &result.project.id, "calendar", None).unwrap().into_iter().find(|i| i.name == "cal").unwrap();
+    assert_eq!(state.main_calendar_id.as_deref(), Some(cal.id.as_str()));
+    assert_eq!(state.session_id, None);
+
+    // A pack made before time existed has none of these files and imports without a word about them.
+    let old = pack_with(&[("data/items.json", json!([item("doc", "document", "worldbuilding")]))]);
+    let parsed = read_pack(&old).unwrap();
+    assert!(parsed.warnings.is_empty(), "{:?}", parsed.warnings);
+    assert_eq!(parsed.counts().calendars + parsed.counts().project_state + parsed.counts().sessions, 0);
 }

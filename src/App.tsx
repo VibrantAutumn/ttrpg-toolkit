@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ItemView } from "./components/item/ItemView";
 import { QuickToolsPanel } from "./components/quick/QuickToolsPanel";
 import { QuickMenu } from "./components/shell/QuickMenu";
+import { StatusBar } from "./components/shell/StatusBar";
 import { Sidebar } from "./components/shell/Sidebar";
 import { registry } from "./registry";
 import { CurrentProjectProvider, useCurrentProject } from "./state/CurrentProject";
 import { NavigationProvider } from "./state/Navigation";
 import { RenameReviewProvider } from "./state/renameReview";
 import { rollLog } from "./state/rollLog";
+import { TimeProvider } from "./state/timeState";
 import "./App.css";
 
 /**
@@ -110,6 +112,7 @@ function Shell() {
         {quickId && <QuickToolsPanel widgetId={quickId} onClose={() => setQuickId(null)} />}
         <QuickMenu openId={quickId} onToggle={toggleQuick} />
         <main className="app">
+          <StatusBar />
           {/* The tool stays mounted (just hidden) so its folder, search and so on are still there on Back. */}
           <div hidden={currentItemId !== undefined}>
             {active ? <active.component /> : <p>No tools are registered.</p>}
@@ -131,7 +134,9 @@ function App() {
   return (
     <CurrentProjectProvider>
       <RenameReviewProvider>
-        <Shell />
+        <TimeProvider>
+          <Shell />
+        </TimeProvider>
       </RenameReviewProvider>
     </CurrentProjectProvider>
   );

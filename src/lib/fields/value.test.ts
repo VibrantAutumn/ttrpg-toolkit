@@ -264,3 +264,38 @@ describe("comparing values", () => {
     expect(compareValues(def("number"), null, null)).toBe(0);
   });
 });
+
+describe("date values", () => {
+  const single = newDefinition("date", "d1", "Born");
+  const range = { ...newDefinition("date", "d2", "Reign"), config: { range: true } } as FieldDefinition;
+
+  it("accepts a day and a range where ranges are allowed", () => {
+    expect(coerceValue(single, { day: 730119 })).toEqual({ ok: true, value: { day: 730119, endDay: null } });
+    expect(coerceValue(range, { day: 10, endDay: 20 })).toEqual({ ok: true, value: { day: 10, endDay: 20 } });
+    expect(coerceValue(range, { day: 10, endDay: 10 })).toEqual({ ok: true, value: { day: 10, endDay: null } });
+    expect(coerceValue(single, null)).toEqual({ ok: true, value: null });
+  });
+  it("refuses what is not a date", () => {
+    for (const bad of ["x", 5, [], { day: 1.5 }, { day: "3" }, { day: 2_000_000_000 }, {}]) {
+      expect(coerceValue(single, bad).ok, JSON.stringify(bad)).toBe(false);
+    }
+    expect(coerceValue(single, { day: 1, endDay: 5 }).ok).toBe(false);
+    expect(coerceValue(range, { day: 9, endDay: 3 }).ok).toBe(false);
+  });
+  it("is stable under coercion", () => {
+    const first = coerceValue(range, { day: -5, endDay: 12, extra: true });
+    expect(first.ok && coerceValue(range, first.value)).toEqual(first);
+  });
+  it("shows dates through the calendar when given, else as day numbers", () => {
+    expect(formatValue(range, { day: 10, endDay: 20 })).toBe("Day 10 to Day 20");
+    expect(formatValue(single, { day: 3, endDay: null }, { formatDay: (d) => `D${d}` })).toBe("D3");
+    expect(formatValue(single, null)).toBe("");
+  });
+  it("sorts by the first day, empties last, and keeps the day as the sort key", () => {
+    expect(indexValue(single, { day: -40, endDay: null }).sortNum).toBe(-40);
+    expect(indexValue(single, null).sortNum).toBeNull();
+    expect(compareValues(single, { day: 1, endDay: null }, { day: 2, endDay: null })).toBeLessThan(0);
+    expect(compareValues(single, null, { day: 2, endDay: null })).toBeGreaterThan(0);
+    expect(compareValues(single, { day: 1, endDay: null }, { day: 2, endDay: null }, "desc")).toBeGreaterThan(0);
+  });
+});

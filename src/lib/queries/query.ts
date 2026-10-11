@@ -109,6 +109,7 @@ export function testsForKind(kind: FieldKind): FieldCheck[] {
       return ["contains", "equals", "empty"];
     case "number":
     case "bar":
+    case "date":
       return ["number", "between", "empty"];
     case "dropdown":
       return ["choice", "empty"];

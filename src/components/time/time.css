@@ -1,0 +1,277 @@
+/* Time: date pickers, the status bar, the calendar tool */
+.date-picker {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.date-picker-row,
+.time-picker {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.date-picker .date-day {
+  width: 4rem;
+}
+
+.date-picker .date-year {
+  width: 6rem;
+}
+
+.time-picker input {
+  width: 3.5rem;
+}
+
+/* The status bar above the page */
+.status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 0.9rem;
+}
+
+.status-bar button.status-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 8px;
+  font-size: inherit;
+  max-width: 100%;
+}
+
+.status-bar button.status-step {
+  padding: 0.15rem 0.5rem;
+  font-size: inherit;
+  line-height: 1;
+}
+
+.status-bar .status-part .status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-panel {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.5rem 0.25rem 0.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.status-panel .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.status-panel .row > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+@media (max-width: 700px) {
+  .status-bar .status-optional {
+    display: none;
+  }
+}
+
+/* Calendar tool */
+.calendar-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.calendar-tabs button[aria-pressed="true"] {
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--week-length, 7), minmax(0, 1fr));
+  gap: 2px;
+}
+
+.month-head {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.2rem 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.month-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.1rem;
+  min-height: 4.5rem;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  text-align: left;
+  font-size: 0.75rem;
+  overflow: hidden;
+}
+
+.month-cell.blank {
+  border-color: transparent;
+  background: transparent;
+}
+
+.month-cell.today {
+  border: 2px solid var(--accent);
+}
+
+.month-cell.selected {
+  background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+}
+
+.month-cell .num {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.month-cell .chip {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 0.25rem;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.month-cell .chip.note {
+  background: color-mix(in srgb, #f08c00 25%, transparent);
+}
+
+.month-cell .chip.session {
+  background: color-mix(in srgb, #2f9e44 25%, transparent);
+}
+
+.month-cell .moons {
+  letter-spacing: 0.1em;
+}
+
+.day-detail {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.row-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.4rem 0;
+}
+
+.editor-list {
+  list-style: none;
+  margin: 0.25rem 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.editor-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Timeline */
+.timeline {
+  position: relative;
+  margin-top: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow-x: auto;
+}
+
+.timeline-lane {
+  position: relative;
+  min-height: 2.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.timeline-lane:first-child {
+  border-top: 0;
+}
+
+.timeline-lane-label {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--surface);
+  border-radius: 0 0 6px 0;
+}
+
+.timeline-item {
+  position: absolute;
+  height: 1.2rem;
+  min-width: 0.5rem;
+  padding: 0 0.3rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  font-size: 0.7rem;
+  line-height: 1.1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.timeline-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--danger);
+  pointer-events: none;
+}
+
+.timeline-axis {
+  position: relative;
+  height: 1.4rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.7rem;
+}
+
+.timeline-axis span {
+  position: absolute;
+  top: 0;
+  padding-left: 0.2rem;
+  border-left: 1px solid var(--border);
+  white-space: nowrap;
+}
