@@ -10,7 +10,6 @@ pub mod generators;
 pub mod items;
 pub mod links;
 pub mod migrations;
-pub mod name_presets;
 pub mod play_decks;
 pub mod query;
 pub mod saved_draws;

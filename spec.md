@@ -163,10 +163,10 @@ A new project should be playable within a minute.
 
 - **Rulesets:** a generic d20 system and a generic narrative system, plus a blank one to build from.
 - **Decks:** a standard tarot deck and a standard playing-card deck, with names, meanings and reversals filled in. You supply or pick the card art.
-- **Tables:** fantasy name tables (several cultures, each entry tagged with its culture, with a name preset per culture), tavern names, NPC quirks, rumors and weather by climate. An adventure-hook generator using entity slots comes with Phase 4.
+- **Tables:** fantasy name tables (several cultures, each entry tagged with its culture), tavern names, NPC quirks, rumors and weather by climate. An adventure-hook generator using entity slots comes with Phase 4.
 - **Templates:** NPC, Location, Faction, Item, Quest, Session. Other tools get starter blueprints where they help (spread layouts, travel-mode sets).
 - **Calendars:** a real-world-style calendar and a simple fantasy calendar with one moon.
-- **GM screen:** a default layout with dice, a name generator and pinned documents.
+- **GM screen:** a default layout with dice, a generator and pinned documents.
 
 **Ease of use**
 
@@ -234,7 +234,7 @@ One dice notation used everywhere: the roller, tables, stat blocks and encounter
 
 ## Tool: Random tables and generators
 
-Tables roll text, dice, cards and your own documents; generators combine rolls into new documents. Tables and the name generator are built (Phase 3); parts marked *(Phase 4)* wait for documents with fields and the query system.
+Tables roll text, dice, cards and your own documents; generators combine rolls into new documents. Tables are built (Phase 3); parts marked *(Phase 4)* wait for documents with fields and the query system.
 
 **Tables**
 
@@ -244,15 +244,9 @@ Tables roll text, dice, cards and your own documents; generators combine rolls i
 - **Labels** reuse a roll: `[Person as A] ... [A]`. **Field references** pull data: `[A.Faction]` *(Phase 4, once documents have fields)*.
 - **Unique picks** (`[3 unique Rumors]`), **avoid recent** results (skip the last N entries rolled from a table; remembered on the device, and relaxed with a note when every entry would be skipped), and a depth limit on nesting. A slot that can't be rolled (a deleted table, a deck with too few cards) shows a warning in the result instead of stopping the roll.
 - **Lock and reroll** any slot of a result.
-- **Tag filtering:** entries carry the project's tags. The name generator already filters by them: all of the chosen tags by default, or any one of them, and a tag nested under a chosen tag counts. Filtering other rolls by tag arrives with the query system *(Phase 4)*.
+- **Tag filtering:** entries carry the project's tags. Filtering rolls by tag arrives as a chip option (Phase 4b, stage 8) and with the query system *(Phase 4)*.
 
-**Name generator:** one tool, not a list of generators, working like the dice roller and card draw.
-
-- A name has one, two or three parts (a whole name; prefix + suffix; prefix + middle + suffix). Each part comes from a table chosen while generating, so any table can serve: an adjective table and an object table make a place name, and prefix, middle and suffix tables make an elven name.
-- **Tag filter:** only use entries with the chosen tags, so one set of tables can hold several cultures, each entry tagged with its culture.
-- **Joining rules:** a separator at each join (nothing, a space, a hyphen or an apostrophe), capital letters (as typed, first letter of the name, or first letter of every part), and an option to merge a letter doubled where two parts meet (Dar + rin = Darin).
-- Lock a part and reroll the rest. Save a result back to a table, or to a new one.
-- **Presets** save a whole setup ("Elven name", "Place name") as an item in the Tables library; the last setup used is remembered on the device. Also available in the quick tools panel.
+**Name generator:** removed in Phase 4b (stage 7). Names are made by tables and generators instead: a table of prefixes, one of suffixes and an entry like `[Prefixes][Suffixes]`; the slot format option and tag filter in stage 8 replace the joining rules and the culture filter.
 
 **Roll context:** a query applied to the whole roll and its nested slots (only documents tagged Sword Coast). Can default to the party's current region from project state. *(Phase 4)*
 
@@ -382,7 +376,7 @@ Nine phases, each usable at the table. Shared engines are **designed** in Phase 
 
 1. **Foundation:** app shell, SQLite with migrations, module registry, projects, library framework (folders, tags, search, trash), links and backlinks, a plain document editor, basic command palette, content pack export/import (backups). A test build running on Android.
 2. **Dice, results and cards:** dice notation, results engine and roll log, widget framework and quick tools panel, deck library, cards, sets, pools, draws, spreads, decks in play. Starter tarot and playing-card decks.
-3. **Random tables:** tables with weights and number ranges, nesting, dice and card slots, labels, unique picks, avoid recent, entry tags, a slot-chip editor, rename-with-update, and the name generator (draws from chosen tables, tag filter, presets). Starter tables. *(Done.)*
+3. **Random tables:** tables with weights and number ranges, nesting, dice and card slots, labels, unique picks, avoid recent, entry tags, a slot-chip editor, rename-with-update, Starter tables. *(Done.)*
 4. **Worldbuilding:** rich text editor, nested document tabs, fields and field sets, templates, queries and smart collections, field views, global search. Then entity slots, roll context and generators. Starter templates. *(Built; awaiting testing.)*
 5. **Rulesets and encounters:** ruleset editor, stat blocks, encounter library and runner, first version of the player display. Starter rulesets.
 6. **Time:** calendar builder, multiple calendars, project state and status bar, sessions, weather, events, timelines.

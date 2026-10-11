@@ -28,11 +28,11 @@ function escapeText(text: string): string {
 function renamedPart(part: EntryPart, from: string, to: string): unknown {
   if (part.kind === "text") return part.text;
   const slot = part.slot.type === "table" && key(part.slot.name) === key(from) ? { ...part.slot, name: to.trim() } : part.slot;
-  return { slot, label: part.label ?? null };
+  return { slot, label: part.label ?? null, format: part.format ?? null };
 }
 
 function plainPart(part: EntryPart): unknown {
-  return part.kind === "text" ? part.text : { slot: part.slot, label: part.label ?? null };
+  return part.kind === "text" ? part.text : { slot: part.slot, label: part.label ?? null, format: part.format ?? null };
 }
 
 /** The entry's text with the matching slots rewritten, in the explicit form if `explicit` forces it. */
@@ -49,7 +49,8 @@ function splice(text: string, parts: readonly EntryPart[], from: string, to: str
       (wasExplicit || forceExplicit ? "table:" : "") +
       prefix +
       escapeText(to.trim()) +
-      (part.label !== undefined ? ` as ${part.label}` : "");
+      (part.label !== undefined ? ` as ${part.label}` : "") +
+      (part.format !== undefined ? ` | ${part.format}` : "");
     out += text.slice(cursor, part.start) + `[${inner}]`;
     cursor = part.end;
   }

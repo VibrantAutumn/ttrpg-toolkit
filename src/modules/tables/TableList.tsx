@@ -8,7 +8,7 @@ import { rollTableById } from "../../state/tableActions";
 import { RollContextBar } from "./RollContextBar";
 
 /** Every table in the project with a Roll button, and the log of table rolls below. */
-export function TableList() {
+export function TableList({ onOpenLibrary }: { onOpenLibrary: () => void }) {
   const { project } = useCurrentProject();
   const { openItem } = useNavigation();
   const dataVersion = useDataVersion();
@@ -40,10 +40,15 @@ export function TableList() {
 
   return (
     <div>
-      <h2>Your tables</h2>
       <RollContextBar />
       {tables.length === 0 ? (
-        <p className="empty">No tables yet. Make one in the Library tab.</p>
+        <p className="empty">
+          No tables yet. Make or add some in the{" "}
+          <button type="button" className="link" onClick={onOpenLibrary}>
+            Library
+          </button>
+          .
+        </p>
       ) : (
         <ul className="list">
           {tables.map((t) => (

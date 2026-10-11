@@ -4,8 +4,6 @@ import { parseDice, type ParseError } from "../dice/parse";
 import { createRng, newSeed } from "../dice/rng";
 import { rerollDice, rollDice, type DiceResult } from "../dice/roll";
 import { formatTableResult } from "../tables/format";
-import { generateName as generateNameParts } from "../tables/nameGen";
-import type { NameGenerator, NamePick, PartKey } from "../tables/nameGen";
 import {
   rerollTable as rerollTableRoll,
   rollTable as rollTableRoll,
@@ -16,7 +14,7 @@ import {
 import { formatDiceResult } from "./format";
 
 /** The kinds of result the log can hold. Generators join later. */
-export type ResultKind = "dice" | "draw" | "table" | "name";
+export type ResultKind = "dice" | "draw" | "table";
 
 /** What every kind of log entry has. */
 interface EntryBase {
@@ -68,32 +66,18 @@ export interface TableLogEntry extends EntryBase {
   locked: number[];
 }
 
-export interface NameLogEntry extends EntryBase {
-  kind: "name";
-  /** The finished name. */
-  name: string;
-  /** The lists the name was drawn from, as they were then, so a reroll uses the same ones. */
-  generator: NameGenerator;
-  /** The part drawn for each place in the name, in order. */
-  picks: NamePick[];
-  /** The parts that stay as they are when rerolling. */
-  locked: PartKey[];
-}
-
 /** One line in the roll log. Entries are never edited in place; changes make a new object. */
-export type RollLogEntry = DiceLogEntry | DrawLogEntry | TableLogEntry | NameLogEntry;
+export type RollLogEntry = DiceLogEntry | DrawLogEntry | TableLogEntry;
 
 export type RollOutcome = { ok: true; entry: DiceLogEntry } | { ok: false; error: ParseError };
 export type DrawLogOutcome = { ok: true; entry: DrawLogEntry } | { ok: false; message: string };
 export type TableLogOutcome = { ok: true; entry: TableLogEntry } | { ok: false; message: string };
-export type NameLogOutcome = { ok: true; entry: NameLogEntry } | { ok: false; message: string };
 
 export interface RollLog {
   /** Newest first. The same array is returned until the log changes. */
   entries(kind: "dice"): readonly DiceLogEntry[];
   entries(kind: "draw"): readonly DrawLogEntry[];
   entries(kind: "table"): readonly TableLogEntry[];
-  entries(kind: "name"): readonly NameLogEntry[];
   entries(kind?: ResultKind | "all"): readonly RollLogEntry[];
   roll(notation: string, seed?: number, label?: string): RollOutcome;
   /** Draws from `candidates` (a set, deck or pool's distinct cards) and logs the result. */
@@ -122,11 +106,7 @@ export interface RollLog {
   rollTable(table: RollableTable, world: TableWorld, seed?: number): TableLogOutcome;
   /** Rerolls the unlocked slots of a table result as a new entry; null if unknown or not a table result. */
   rerollTable(id: string, world: TableWorld, seed?: number): TableLogEntry | null;
-  /** Makes a name from a generator and logs it. `label` is what the setup is called (a preset's name), if it has one. */
-  generateName(generator: NameGenerator, seed?: number, label?: string | null): NameLogOutcome;
-  /** Draws the unlocked parts of a name again, from the same lists, as a new entry; null if unknown or not a name. */
-  rerollName(id: string, seed?: number): NameLogEntry | null;
-  /** Dice: keeps or releases one term of a result. Table: one slot of the entry (text and references can't be locked). Name: one part. */
+  /** Dice: keeps or releases one term of a result. Table: one slot of the entry (text and references can't be locked). */
   toggleLock(id: string, index: number): void;
   markSaved(id: string, itemId: string): void;
   clear(): void;
@@ -210,28 +190,6 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
       tableId,
       tableName,
       roll,
-      locked,
-    };
-  }
-
-  function makeNameEntry(
-    generator: NameGenerator,
-    result: { name: string; picks: NamePick[] },
-    seed: number,
-    locked: PartKey[],
-    label: string | null,
-  ): NameLogEntry {
-    return {
-      id: newId(),
-      kind: "name",
-      createdAt: now(),
-      seed,
-      label,
-      text: formatTableResult(label ?? "Name", result.name),
-      savedItemId: null,
-      name: result.name,
-      generator,
-      picks: result.picks,
       locked,
     };
   }
@@ -342,36 +300,8 @@ export function createRollLog(options: RollLogOptions = {}): RollLog {
       return entry;
     },
 
-    generateName(generator, seed = newSeed(), label = null) {
-      const made = generateNameParts(generator, createRng(seed));
-      if (!made.ok) return made;
-      const entry = makeNameEntry(generator, made.result, seed, [], label);
-      push(entry);
-      return { ok: true, entry };
-    },
-
-    rerollName(id, seed = newSeed()) {
-      const old = list.find((e) => e.id === id);
-      if (!old || old.kind !== "name") return null;
-      const made = generateNameParts(old.generator, createRng(seed), {
-        picks: old.picks,
-        locked: new Set(old.locked),
-      });
-      if (!made.ok) return null; // can't happen: the same lists made a name before
-      const entry = makeNameEntry(old.generator, made.result, seed, [...old.locked], old.label);
-      push(entry);
-      return entry;
-    },
-
     toggleLock(id, index) {
       replace(id, (e) => {
-        if (e.kind === "name") {
-          const pick = Number.isInteger(index) ? e.picks[index] : undefined;
-          if (!pick) return e;
-          const wanted = new Set(e.locked);
-          if (!wanted.delete(pick.part)) wanted.add(pick.part);
-          return { ...e, locked: e.picks.map((p) => p.part).filter((part) => wanted.has(part)) };
-        }
         if (e.kind === "dice") {
           if (!Number.isInteger(index) || index < 0 || index >= e.result.terms.length) return e;
         } else if (e.kind === "table") {

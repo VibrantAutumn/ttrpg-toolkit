@@ -1655,7 +1655,8 @@ input.narrow {
   overflow-wrap: anywhere;
 }
 
-.slot-chip.slot-entity {
+.slot-chip.slot-entity,
+.slot-chip.slot-link {
   border-color: var(--accent);
 }
 

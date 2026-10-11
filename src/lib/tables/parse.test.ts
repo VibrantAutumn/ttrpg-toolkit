@@ -441,3 +441,33 @@ describe("slotCanonical and slotDisplay", () => {
     expect(slotDisplay(parts[2])).toBe("A.Faction");
   });
 });
+
+describe("link slots", () => {
+  const id = "3f1c2a9e-5b7d-4e8a-9c01-2d4f6a8b0c1e";
+  it("reads a link to one particular page, with the name shown", () => {
+    const r = parseEntry(`Ask [link:${id} Syra Pyroc] about it`);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const slot = r.parts.find((p) => p.kind === "slot");
+    expect(slot && slot.kind === "slot" && slot.slot).toEqual({ type: "link", itemId: id, name: "Syra Pyroc" });
+    expect(slot && slot.kind === "slot" && slotDisplay(slot)).toBe("Syra Pyroc");
+    expect(slot && slot.kind === "slot" && slotCanonical(slot)).toBe(`link:${id} Syra Pyroc`);
+  });
+  it("keeps brackets in the name through the escapes", () => {
+    const r = parseEntry(`[link:${id} The \\[Old\\] Inn]`);
+    expect(r.ok).toBe(true);
+    if (r.ok && r.parts[0].kind === "slot") {
+      expect(r.parts[0].slot).toMatchObject({ type: "link", name: "The [Old] Inn" });
+      expect(slotCanonical(r.parts[0])).toBe(`link:${id} The \\[Old\\] Inn`);
+    }
+  });
+  it("refuses a link without a page id, pointing at the menu", () => {
+    const r = parseEntry("[link:Syra]");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.message).toMatch(/Link to a page/);
+  });
+  it("can be named for reuse like any slot", () => {
+    const r = parseEntry(`[link:${id} Syra as A] met [A]`);
+    expect(r.ok).toBe(true);
+  });
+});

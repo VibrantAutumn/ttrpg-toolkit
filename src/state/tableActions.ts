@@ -1,8 +1,9 @@
 import { listCollections, resolveCollectionCards } from "../api/cards";
-import { getItem } from "../api/library";
+import { getItem, getItems } from "../api/library";
 import { loadRollableTables, recordTableRecent } from "../api/tables";
-import type { TableWorld, RollableDeck } from "../lib/tables/roll";
-import { buildWorld, neededDeckNames } from "../lib/tables/world";
+import type { TableWorld, RollableDeck, RollableTable } from "../lib/tables/roll";
+import { rememberLinkNames } from "../lib/tables/linkNames";
+import { buildWorld, linkIdsIn, neededDeckNames } from "../lib/tables/world";
 import { loadEntityData } from "./entityWorld";
 import type { TableLogOutcome } from "../lib/results/rollLog";
 import { rollLog } from "./rollLog";
@@ -15,9 +16,11 @@ const key = (name: string) => name.trim().toLowerCase();
  * entry draws from (only those, so a big card library isn't loaded for nothing), and the
  * documents that entity slots may pick (narrowed by the roll context).
  */
-export async function loadTableWorld(projectId: string) {
+export async function loadTableWorld(projectId: string, extra: readonly RollableTable[] = []) {
   const tables = await loadRollableTables(projectId);
-  const names = neededDeckNames(tables);
+  // `extra` is text that is rolled but isn't a stored table (a generator): its decks and documents are loaded too.
+  const needed = [...tables, ...extra];
+  const names = neededDeckNames(needed);
   let decks: RollableDeck[] = [];
   if (names.length > 0) {
     const wanted = new Set(names.map(key));
@@ -30,7 +33,14 @@ export async function loadTableWorld(projectId: string) {
       })),
     );
   }
-  const world: TableWorld = buildWorld(tables, decks, await loadEntityData(projectId, tables));
+  // Linked pages are shown by their name now, so a rename is followed (a missing or trashed page keeps the name it was linked with).
+  const linkIds = linkIdsIn(needed.flatMap((t) => t.entries.map((e) => e.text)));
+  const linkNames = new Map<string, string>();
+  if (linkIds.length > 0) {
+    for (const item of await getItems(linkIds)) if (item.deletedAt === null) linkNames.set(item.id.toLowerCase(), item.name);
+    rememberLinkNames(linkNames);
+  }
+  const world: TableWorld = buildWorld(tables, decks, await loadEntityData(projectId, needed), linkNames);
   return { tables, world };
 }
 
@@ -40,7 +50,7 @@ function failure(e: unknown): { ok: false; message: string } {
 
 /**
  * Rolls a table and logs the result, then remembers the entries it picked for
- * "avoid recent". Used by the table's page, the Tables tab, the quick tools
+ * "avoid recent". Used by the table's page, the Generators tab, the quick tools
  * panel and "Roll again" in the roll log, so they always agree.
  */
 export async function rollTableById(tableId: string): Promise<TableLogOutcome> {

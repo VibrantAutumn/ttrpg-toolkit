@@ -134,6 +134,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "rename_campaigns_to_projects",
         sql: include_str!("../../migrations/0024_rename_campaigns_to_projects.sql"),
     },
+    Migration {
+        version: 25,
+        name: "remove_name_presets",
+        sql: include_str!("../../migrations/0025_remove_name_presets.sql"),
+    },
 ];
 
 #[derive(Debug)]
@@ -332,6 +337,28 @@ mod tests {
         .unwrap();
         conn.execute("UPDATE table_entries SET text = 'a kraken' WHERE id = 'more'", []).unwrap();
         conn.execute("DELETE FROM table_entries WHERE id = 'more'", []).unwrap();
+    }
+
+    #[test]
+    fn a_database_with_name_presets_loses_them_and_keeps_the_tables() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", true).unwrap();
+        migrate(&mut conn, &MIGRATIONS[..24]).unwrap();
+        let exec = |sql: &str| conn.execute(sql, []).unwrap();
+        exec("INSERT INTO projects (id, name, created_at, updated_at) VALUES ('c', 'C', 1, 1)");
+        exec("INSERT INTO items (id, project_id, library, item_type, name, created_at, updated_at) VALUES ('p', 'c', 'tables', 'name_preset', 'Elven name', 1, 1)");
+        exec("INSERT INTO items (id, project_id, library, item_type, name, created_at, updated_at) VALUES ('t', 'c', 'tables', 'table', 'Prefixes', 1, 1)");
+        exec("INSERT INTO name_presets (item_id, setup_json, created_at, updated_at) VALUES ('p', '{}', 1, 1)");
+        exec("INSERT INTO links (source_item_id, target_item_id, source_ref, created_at, updated_at) VALUES ('p', 't', 'manual', 1, 1)");
+
+        assert_eq!(migrate(&mut conn, MIGRATIONS).unwrap(), MIGRATIONS.last().unwrap().version);
+
+        assert!(!table_exists(&conn, "name_presets"));
+        let count = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap();
+        assert_eq!(count("SELECT COUNT(*) FROM items WHERE item_type = 'name_preset'"), 0);
+        assert_eq!(count("SELECT COUNT(*) FROM items WHERE id = 't'"), 1);
+        assert_eq!(count("SELECT COUNT(*) FROM links"), 0);
+        assert_eq!(count("SELECT COUNT(*) FROM pragma_foreign_key_check"), 0);
     }
 
     #[test]

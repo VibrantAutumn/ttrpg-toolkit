@@ -12,6 +12,7 @@ export type SlotChoice =
   | { type: "dice"; notation: string; label?: string }
   | { type: "table"; name: string; count: number; unique: boolean; label?: string }
   | { type: "entity"; name: string; count: number; unique: boolean; label?: string }
+  | { type: "link"; itemId: string; name: string }
   | { type: "draw"; source: string; count: number; label?: string }
   | { type: "ref"; label: string; field?: string };
 
@@ -32,6 +33,10 @@ export function buildSlotSource(choice: SlotChoice): string {
       body = `entity:${count}${choice.name.trim()}`;
       break;
     }
+    case "link": {
+      const name = choice.name.trim().replace(/[[\]\\]/g, (c) => `\\${c}`);
+      return `link:${choice.itemId}${name !== "" ? ` ${name}` : ""}`;
+    }
     case "draw":
       body = `draw:${choice.count} from ${choice.source.trim()}`;
       break;
@@ -41,7 +46,6 @@ export function buildSlotSource(choice: SlotChoice): string {
   const label = choice.label?.trim();
   return label ? `${body} as ${label}` : body;
 }
-
 const LABEL_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
 
 function checkCount(count: number, max: number, what: string): string | null {
@@ -53,7 +57,7 @@ function checkCount(count: number, max: number, what: string): string | null {
 
 /** Says what is wrong with a choice (before building it), or null when it is fine. */
 export function checkSlotChoice(choice: SlotChoice): string | null {
-  if (choice.type !== "ref") {
+  if (choice.type !== "ref" && choice.type !== "link") {
     const label = choice.label?.trim();
     if (label && !LABEL_NAME.test(label)) {
       return "A label uses letters, digits or _, starting with a letter (like A or Hero).";
@@ -71,6 +75,8 @@ export function checkSlotChoice(choice: SlotChoice): string | null {
     case "entity":
       if (choice.name.trim() === "") return "Choose a filter set or a tag.";
       return checkCount(choice.count, MAX_PICKS, "pick");
+    case "link":
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(choice.itemId) ? null : "Choose a page.";
     case "draw":
       if (choice.source.trim() === "") return "Choose a deck, set or pool.";
       return checkCount(choice.count, MAX_DRAW, "card");

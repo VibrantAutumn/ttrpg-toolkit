@@ -8,6 +8,7 @@ import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { docToModel, modelToDoc } from "../../lib/tables/editorDoc";
 import { describeSlots, entryToModel, modelToEntry, type InlineNode } from "../../lib/tables/editorModel";
+import { FORMATTABLE_KINDS, FORMAT_LABELS, SLOT_FORMATS, withFormat, type SlotFormat } from "../../lib/tables/slotFormat";
 import { InsertSlotMenu } from "./InsertSlotMenu";
 import { SlotNode } from "./slotNode";
 
@@ -42,10 +43,13 @@ export function ChipEditor({
   value,
   onChange,
   ariaLabel,
+  namesVersion = 0,
 }: {
   value: string;
   onChange: (text: string) => void;
   ariaLabel: string;
+  /** Changes when the names linked pages are shown with changed, so the chips are drawn again. */
+  namesVersion?: number;
 }) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -102,6 +106,11 @@ export function ChipEditor({
     if (model.ok) editor.commands.setContent(modelToDoc(model.nodes), { emitUpdate: false });
   }, [editor, value]);
 
+  // Redraw the chips when a linked page's name changed (an empty change recomputes their decorations).
+  useEffect(() => {
+    if (editor && namesVersion > 0) editor.view.dispatch(editor.state.tr);
+  }, [editor, namesVersion]);
+
   if (!editor) return null;
 
   function insertChip(source: string) {
@@ -141,6 +150,25 @@ export function ChipEditor({
           setPanel(null);
         }}
       >
+        {now && now.ok && FORMATTABLE_KINDS.has(now.type) && (
+          <label className="field">
+            <span>Format</span>
+            <select
+              value={now.format ?? ""}
+              onChange={(e) => {
+                const value = e.currentTarget.value;
+                setPanel({ ...panel, draft: withFormat(panel.draft, value === "" ? undefined : (value as SlotFormat)) });
+              }}
+            >
+              <option value="">As written</option>
+              {SLOT_FORMATS.map((f) => (
+                <option key={f} value={f}>
+                  {FORMAT_LABELS[f]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="field">
           <span>Slot text (what goes between the brackets)</span>
           <input

@@ -11,6 +11,7 @@
 
 import { parseEntry, slotDisplay } from "./parse";
 import type { EntryParseError, Slot } from "./parse";
+import type { SlotFormat } from "./slotFormat";
 
 export type InlineNode =
   | { type: "text"; text: string }
@@ -67,6 +68,8 @@ export type SlotDescription =
       display: string;
       /** The name this slot gives its result (`as A`), if any. */
       label?: string;
+      /** How the result is written (`| upper`), if a format was chosen. */
+      format?: SlotFormat;
     }
   | { ok: false; message: string };
 
@@ -84,6 +87,7 @@ function describeSlot(source: string, labelsBefore: readonly string[]): SlotDesc
     type: part.slot.type,
     display: slotDisplay(part),
     ...(part.label !== undefined ? { label: part.label } : {}),
+    ...(part.format !== undefined ? { format: part.format } : {}),
   };
 }
 

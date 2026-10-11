@@ -12,7 +12,7 @@ use crate::db::projects::{self, Project};
 use crate::db::fields;
 use crate::db::tabs;
 use crate::db::{
-    cards, collections, documents, formulas, generators, name_presets, play_decks, saved_draws, saved_rolls, settings, smart_collections, spreads, tables,
+    cards, collections, documents, formulas, generators, play_decks, saved_draws, saved_rolls, settings, smart_collections, spreads, tables,
 };
 use rusqlite::{params, Connection, ErrorCode};
 use serde::de::DeserializeOwned;
@@ -62,7 +62,6 @@ pub struct ParsedPack {
     pub random_tables: Vec<RandomTableRecord>,
     pub table_entries: Vec<TableEntryRecord>,
     pub table_entry_tags: Vec<TableEntryTagRecord>,
-    pub name_presets: Vec<NamePresetRecord>,
     pub field_definitions: Vec<FieldDefinitionRecord>,
     pub field_sets: Vec<FieldSetRecord>,
     pub field_set_members: Vec<FieldSetMemberRecord>,
@@ -97,7 +96,6 @@ impl ParsedPack {
             random_tables: self.random_tables.len() as u32,
             table_entries: self.table_entries.len() as u32,
             table_entry_tags: self.table_entry_tags.len() as u32,
-            name_presets: self.name_presets.len() as u32,
             field_definitions: self.field_definitions.len() as u32,
             field_sets: self.field_sets.len() as u32,
             field_set_members: self.field_set_members.len() as u32,
@@ -201,7 +199,6 @@ pub fn read_pack_with(bytes: &[u8], limits: &Limits) -> Result<ParsedPack, PackE
         random_tables: read_list(&mut archive, RANDOM_TABLES_FILE, limits, &mut total)?,
         table_entries: read_list(&mut archive, TABLE_ENTRIES_FILE, limits, &mut total)?,
         table_entry_tags: read_list(&mut archive, TABLE_ENTRY_TAGS_FILE, limits, &mut total)?,
-        name_presets: read_list(&mut archive, NAME_PRESETS_FILE, limits, &mut total)?,
         field_definitions: read_list(&mut archive, FIELD_DEFINITIONS_FILE, limits, &mut total)?,
         field_sets: read_list(&mut archive, FIELD_SETS_FILE, limits, &mut total)?,
         field_set_members: read_list(&mut archive, FIELD_SET_MEMBERS_FILE, limits, &mut total)?,
@@ -418,6 +415,10 @@ fn sanitize(pack: &mut ParsedPack) {
             && seen.insert(i.id.clone())
     });
     note(before - pack.items.len(), "item(s) were incomplete or duplicated and were skipped.");
+    // The name generator is gone, and with it its saved setups (packs from before that still carry them).
+    let before = pack.items.len();
+    pack.items.retain(|i| i.item_type != "name_preset");
+    note(before - pack.items.len(), "saved name setup(s) were skipped, because the name generator no longer exists.");
     let (mut bad_visibility, mut bad_folder) = (0, 0);
     for i in &mut pack.items {
         i.name = name_or_untitled(&i.name);
@@ -748,15 +749,6 @@ fn sanitize(pack: &mut ParsedPack) {
     });
     note(before - pack.table_entry_tags.len(), "tag(s) on table entries referred to something missing and were skipped.");
 
-    let before = pack.name_presets.len();
-    let mut seen = HashSet::new();
-    pack.name_presets.retain(|p| {
-        item_type.get(p.item_id.as_str()) == Some(&name_presets::PRESET_TYPE)
-            && name_presets::validate(&p.setup_json).is_ok()
-            && seen.insert(p.item_id.clone())
-    });
-    note(before - pack.name_presets.len(), "name preset(s) belonged to something missing or were unreadable and were skipped.");
-
     let before = pack.smart_collections.len();
     let mut seen = HashSet::new();
     pack.smart_collections.retain(|s| {
@@ -917,11 +909,41 @@ fn remapped_json(text: &str, ids: &HashMap<String, String>) -> String {
 /// An id that is not in the map (an item outside the pack) is left as it was, so the mention
 /// stays readable and simply points at nothing. Text without mentions comes back unchanged.
 pub(super) fn remapped_body(body: &str, ids: &HashMap<String, String>) -> String {
-    const PREFIX: &str = "item:";
+    remapped_after(body, "item:", ids)
+}
+
+/// Entry or generator text with the item ids in its link slots (`[link:<uuid> Name]`) replaced by
+/// the new ids; ids outside the pack are left as they were.
+pub(super) fn remapped_slots(text: &str, ids: &HashMap<String, String>) -> String {
+    remapped_after(text, "link:", ids)
+}
+
+/// A generator's definition: ids inside (a version 1 template or field) are replaced as in any JSON,
+/// and so are the link slots in a version 2 generator's text.
+fn remapped_generator(definition_json: &str, ids: &HashMap<String, String>) -> String {
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(definition_json) else {
+        return definition_json.to_string();
+    };
+    let mut changed = remap_ids(&mut value, ids);
+    if let Some(text) = value.get("text").and_then(|t| t.as_str()) {
+        let new_text = remapped_slots(text, ids);
+        if new_text != text {
+            value["text"] = serde_json::Value::String(new_text);
+            changed = true;
+        }
+    }
+    if changed {
+        value.to_string()
+    } else {
+        definition_json.to_string()
+    }
+}
+
+fn remapped_after(body: &str, prefix: &str, ids: &HashMap<String, String>) -> String {
     let mut out = String::with_capacity(body.len());
     let mut rest = body;
-    while let Some(at) = rest.find(PREFIX) {
-        let (before, after) = rest.split_at(at + PREFIX.len());
+    while let Some(at) = rest.find(prefix) {
+        let (before, after) = rest.split_at(at + prefix.len());
         out.push_str(before);
         match after.get(..36) {
             Some(candidate) if looks_like_uuid(candidate) => {
@@ -1131,7 +1153,7 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
             "INSERT INTO table_entries (id, table_id, position, text, weight, created_at, updated_at, deleted_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
-                entry_ids[&e.id], item_ids[&e.table_id], e.position, e.text, e.weight,
+                entry_ids[&e.id], item_ids[&e.table_id], e.position, remapped_slots(&e.text, &item_ids), e.weight,
                 e.created_at, e.updated_at, e.deleted_at
             ],
         )
@@ -1142,18 +1164,6 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
             "INSERT INTO table_entry_tags (entry_id, tag_id, created_at, updated_at, deleted_at)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![entry_ids[&l.entry_id], tag_ids[&l.tag_id], l.created_at, l.updated_at, l.deleted_at],
-        )
-        .map_err(db_error)?;
-    }
-    // A preset remembers its tables and tags by id: point them at the imported copies
-    // (ids that aren't in the pack are left alone, and the preset then asks for another).
-    let mut preset_ids = item_ids.clone();
-    preset_ids.extend(tag_ids.iter().map(|(old, new)| (old.clone(), new.clone())));
-    for p in &pack.name_presets {
-        let setup_json = remapped_json(&p.setup_json, &preset_ids);
-        tx.execute(
-            "INSERT INTO name_presets (item_id, setup_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
-            params![item_ids[&p.item_id], setup_json, p.created_at, p.updated_at],
         )
         .map_err(db_error)?;
     }
@@ -1175,7 +1185,7 @@ pub fn import_parsed(conn: &Connection, pack: &ParsedPack, now: i64) -> Result<I
     let mut generator_ids = item_ids.clone();
     generator_ids.extend(field_ids.iter().map(|(old, new)| (old.clone(), new.clone())));
     for g in &pack.generators {
-        let definition_json = remapped_json(&g.definition_json, &generator_ids);
+        let definition_json = remapped_generator(&g.definition_json, &generator_ids);
         tx.execute(
             "INSERT INTO generators (item_id, definition_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
             params![item_ids[&g.item_id], definition_json, g.created_at, g.updated_at],

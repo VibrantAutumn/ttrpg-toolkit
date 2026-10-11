@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { resolveCollectionCards, saveDraw } from "../../api/cards";
 import { saveRoll } from "../../api/dice";
+import { pickedItemsOf } from "../../lib/tables/roll";
 import { termTexts } from "../../lib/results/format";
 import { copyText } from "../../lib/copyText";
-import type { DiceLogEntry, DrawLogEntry, NameLogEntry, RollLogEntry, TableLogEntry } from "../../lib/results/rollLog";
+import type { DiceLogEntry, DrawLogEntry, RollLogEntry, TableLogEntry } from "../../lib/results/rollLog";
 import { useCurrentProject } from "../../state/CurrentProject";
 import { bumpDataVersion } from "../../state/dataVersion";
 import { useNavigation } from "../../state/Navigation";
@@ -13,7 +14,6 @@ import { drawSpreadById } from "../../state/spreadActions";
 import { rollLog } from "../../state/rollLog";
 import { rerollTableResult, rollTableById } from "../../state/tableActions";
 import { DrawnCards } from "../cards/DrawnCards";
-import { SaveNameToList } from "./SaveNameToList";
 
 /**
  * One result in the roll log, whatever its kind: what happened, and what you
@@ -27,14 +27,12 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
 
   async function copy() {
     setError(null);
-    // A generated name is copied on its own, without the "Name → " in front.
-    const text = entry.kind === "name" ? entry.name : entry.text;
-    setNote((await copyText(text)) ? "Copied." : "Couldn't copy; select the text instead.");
+    setNote((await copyText(entry.text)) ? "Copied." : "Couldn't copy; select the text instead.");
   }
 
   async function save() {
-    // Table results and names are copied for now (a name can be added to a table); saving them waits for sessions (Phase 6).
-    if (!project || entry.kind === "table" || entry.kind === "name") return;
+    // Table results are copied for now; saving them waits for sessions (Phase 6).
+    if (!project || entry.kind === "table") return;
     try {
       const item =
         entry.kind === "dice"
@@ -122,10 +120,8 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
       {entry.kind === "draw" && <DrawnCards cards={entry.cards} positions={entry.positions} />}
       {entry.kind === "dice" && <LockButtons entry={entry} />}
       {entry.kind === "table" && <TableDetails entry={entry} />}
-      {entry.kind === "name" && <NameDetails entry={entry} />}
       <div className="row wrap">
         {entry.kind === "dice" && <button onClick={() => rollLog.reroll(entry.id)}>Reroll</button>}
-        {entry.kind === "name" && <button onClick={() => rollLog.rerollName(entry.id)}>Reroll</button>}
         {entry.kind === "draw" && <button onClick={() => void drawAgain(entry)}>Draw again</button>}
         {entry.kind === "table" && (
           <>
@@ -139,7 +135,6 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
         )}
         <button onClick={() => void copy()}>Copy</button>
         {entry.kind !== "table" &&
-          entry.kind !== "name" &&
           (entry.savedItemId ? (
             <button onClick={() => openItem(entry.savedItemId!)}>Saved ✓ Open</button>
           ) : (
@@ -151,30 +146,6 @@ export function LogEntryView({ entry }: { entry: RollLogEntry }) {
       {note && <p className="meta" role="status">{note}</p>}
       {error && <p className="error" role="alert">{error}</p>}
     </li>
-  );
-}
-
-/** A generated name: which parts a reroll keeps, and a way to add the name to a table. */
-function NameDetails({ entry }: { entry: NameLogEntry }) {
-  return (
-    <>
-      {entry.picks.length > 1 && (
-        <div className="row wrap">
-          <small className="meta">Keep when rerolling:</small>
-          {entry.picks.map((pick, i) => (
-            <button
-              key={pick.part}
-              aria-pressed={entry.locked.includes(pick.part)}
-              className={entry.locked.includes(pick.part) ? "active" : undefined}
-              onClick={() => rollLog.toggleLock(entry.id, i)}
-            >
-              {entry.locked.includes(pick.part) ? "🔒" : "🔓"} {pick.text}
-            </button>
-          ))}
-        </div>
-      )}
-      <SaveNameToList name={entry.name} />
-    </>
   );
 }
 
@@ -204,7 +175,7 @@ function PickedItems({ items }: { items: { id: string; name: string }[] }) {
 function TableDetails({ entry }: { entry: TableLogEntry }) {
   const slots = lockableSlots(entry);
   const cards = entry.roll.parts.flatMap((p) => (p.kind === "slot" && p.outcome.type === "draw" ? p.outcome.cards : []));
-  const picked = entry.roll.parts.flatMap((p) => (p.kind === "slot" && p.outcome.type === "entity" ? p.outcome.picks : []));
+  const picked = pickedItemsOf(entry.roll.parts);
   return (
     <>
       {cards.length > 0 && <DrawnCards cards={cards} />}

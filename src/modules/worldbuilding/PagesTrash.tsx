@@ -39,7 +39,7 @@ export function PagesTrash() {
   return (
     <section>
       <h1>Trash</h1>
-      <p className="meta">Pages, folders and templates you deleted. The cards, dice and tables tools keep their own trash.</p>
+      <p className="meta">Pages, folders and templates you deleted. The cards, dice and generators tools keep their own trash.</p>
       {error && <p className="error">{error}</p>}
       <TrashPanel trash={trash} run={run} emptyAll={() => emptyTrash(projectId, LIBRARY)} />
     </section>

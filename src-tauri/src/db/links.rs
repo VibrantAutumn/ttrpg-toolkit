@@ -129,15 +129,24 @@ pub fn outgoing(conn: &Connection, item_id: &str) -> Result<Vec<Item>, DbError> 
     )
 }
 
-/// Live items that link to this item, alphabetical.
+/// Live items that link to this item, alphabetical: those with a link row (a hand-made link, a mention
+/// or a link field), plus the live tables that have a live entry with a link slot to it
+/// (`[link:<id> Name]`) and the generators whose text has one. Link slots are read straight from the
+/// text, so they can never be out of date and need no rows of their own.
 pub fn backlinks(conn: &Connection, item_id: &str) -> Result<Vec<Item>, DbError> {
     query_items(
         conn,
         &format!(
-            "SELECT DISTINCT {} FROM links l JOIN items i ON i.id = l.source_item_id
-             WHERE l.target_item_id = ?1 AND l.deleted_at IS NULL AND i.deleted_at IS NULL
+            "SELECT DISTINCT {cols} FROM items i
+             WHERE i.deleted_at IS NULL AND i.id <> ?1 AND (
+                 EXISTS (SELECT 1 FROM links l
+                         WHERE l.source_item_id = i.id AND l.target_item_id = ?1 AND l.deleted_at IS NULL)
+              OR EXISTS (SELECT 1 FROM table_entries e
+                         WHERE e.table_id = i.id AND e.deleted_at IS NULL AND e.text LIKE '%[link:' || ?1 || '%')
+              OR EXISTS (SELECT 1 FROM generators g
+                         WHERE g.item_id = i.id AND g.definition_json LIKE '%[link:' || ?1 || '%'))
              ORDER BY i.name COLLATE NOCASE, i.created_at",
-            items::qualified_columns("i")
+            cols = items::qualified_columns("i")
         ),
         item_id,
     )
@@ -350,5 +359,32 @@ mod tests {
         trash::purge_item(&conn, &a.id).unwrap();
         assert_eq!(link_rows(&conn), 0);
         assert!(items::get(&conn, &b.id).is_ok() && items::get(&conn, &c.id).is_ok());
+    }
+
+    #[test]
+    fn tables_and_generators_with_a_link_slot_are_backlinks_of_the_page() {
+        let (conn, camp) = setup();
+        let syra = doc(&conn, &camp, "Syra Pyroc");
+        let table = items::create(&conn, &camp, "tables", "table", "Allies", None, 2).unwrap();
+        let entry = crate::db::tables::add_entry(&conn, &table.id, &format!("[link:{} Syra Pyroc] and [2d4]", syra.id), 1, 3).unwrap();
+        let other = items::create(&conn, &camp, "tables", "table", "Plain", None, 4).unwrap();
+        crate::db::tables::add_entry(&conn, &other.id, "[2d4] goblins", 1, 5).unwrap();
+        let generator = items::create(&conn, &camp, "tables", "generator", "Raid", None, 6).unwrap();
+        let definition = serde_json::json!({ "version": 2, "text": format!("[link:{}] attacks", syra.id) }).to_string();
+        crate::db::generators::set_definition(&conn, &generator.id, &definition, 7).unwrap();
+        assert_eq!(names(backlinks(&conn, &syra.id).unwrap()), ["Allies", "Raid"]);
+
+        // A deleted entry, or a table in the trash, no longer counts; restoring brings it back.
+        crate::db::tables::delete_entry(&conn, &entry.id, 8).unwrap();
+        assert_eq!(names(backlinks(&conn, &syra.id).unwrap()), ["Raid"]);
+        crate::db::tables::restore_entry(&conn, &entry.id, 9).unwrap();
+        items::soft_delete(&conn, &table.id, 10).unwrap();
+        assert_eq!(names(backlinks(&conn, &syra.id).unwrap()), ["Raid"]);
+        trash::restore_item(&conn, &table.id, 11).unwrap();
+        assert_eq!(names(backlinks(&conn, &syra.id).unwrap()), ["Allies", "Raid"]);
+
+        // A page linked both ways is listed once, and the page never lists itself.
+        add(&conn, &table.id, &syra.id, MANUAL, 12).unwrap();
+        assert_eq!(names(backlinks(&conn, &syra.id).unwrap()), ["Allies", "Raid"]);
     }
 }

@@ -24,6 +24,7 @@ import { rollNotation } from "../dice/roll";
 import type { DiceResult } from "../dice/roll";
 import { DEFAULT_DRAW_OPTIONS, drawCards } from "../cards/draw";
 import type { DrawCard, DrawnCard } from "../cards/draw";
+import { applyFormat } from "./slotFormat";
 import { parseEntry } from "./parse";
 import type { Slot, SlotPart } from "./parse";
 
@@ -80,6 +81,8 @@ export interface TableWorld {
   recent(tableId: string): readonly string[];
   findEntities?(name: string): EntitySource | null;
   entityField?(itemId: string, field: string): FieldLookup;
+  /** The current name of a page a link slot points at; unknown pages keep the name they were linked with. */
+  itemName?(itemId: string): string | undefined;
 }
 
 /** One entry picked from a table slot, with its filled-in text. */
@@ -93,7 +96,7 @@ export type SlotOutcome =
   | { type: "table"; tableId: string; tableName: string; picks: TablePick[] }
   | { type: "dice"; result: DiceResult }
   | { type: "draw"; sourceId: string; sourceName: string; cards: DrawnCard[] }
-  | { type: "entity"; sourceName: string; kind: "collection" | "tag"; picks: EntityItem[] }
+  | { type: "entity"; sourceName: string; kind: "collection" | "tag" | "link"; picks: EntityItem[] }
   | { type: "ref"; text: string }
   | { type: "missing"; kind: "table" | "deck" | "entity"; name: string }
   | { type: "unknown"; kind: string; args: string }
@@ -143,6 +146,31 @@ function labelValueOf(part: ResultPart): LabelValue {
     return { text: part.text, itemId: part.outcome.picks[0].id };
   }
   return { text: part.text };
+}
+
+/**
+ * The parts of a result with every table slot replaced by the parts of the entries it picked (several
+ * picks are separated by ", "), all the way down. What is left is plain text and slots that don't
+ * contain more slots, so a document picked deep inside a nested table can still be found.
+ */
+export function leafParts(parts: readonly ResultPart[]): ResultPart[] {
+  const out: ResultPart[] = [];
+  for (const part of parts) {
+    if (part.kind === "slot" && part.outcome.type === "table") {
+      part.outcome.picks.forEach((pick, i) => {
+        if (i > 0) out.push({ kind: "text", text: ", " });
+        out.push(...leafParts(pick.parts));
+      });
+    } else {
+      out.push(part);
+    }
+  }
+  return out;
+}
+
+/** The documents or other items a result picked anywhere in it, in order. */
+export function pickedItemsOf(parts: readonly ResultPart[]): EntityItem[] {
+  return leafParts(parts).flatMap((p) => (p.kind === "slot" && p.outcome.type === "entity" ? p.outcome.picks : []));
 }
 
 function warn(ctx: Context, message: string): void {
@@ -256,7 +284,8 @@ function fillSlot(part: SlotPart, depth: number, ctx: Context, labels: ReadonlyM
     ...(part.label !== undefined ? { label: part.label } : {}),
     source: part.source,
     outcome,
-    text,
+    // Only the shown words change; the picks inside the outcome keep their own text.
+    text: applyFormat(text, part.format),
   };
 }
 
@@ -305,6 +334,12 @@ function evaluateSlot(slot: Slot, depth: number, ctx: Context, labels: ReadonlyM
     }
     case "entity":
       return evaluateEntitySlot(slot.name, slot.count, slot.unique, true, ctx);
+    case "link":
+      // A fixed pick: the same page every time, shown by the name it was linked with.
+      {
+        const name = ctx.world.itemName?.(slot.itemId) ?? slot.name;
+        return { outcome: { type: "entity", sourceName: name, kind: "link", picks: [{ id: slot.itemId, name }] }, text: name };
+      }
     case "unknown": {
       warn(ctx, `This version doesn't know the slot type "${slot.kind}", so [${slot.kind}:${slot.args}] was skipped.`);
       return {

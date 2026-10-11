@@ -8,7 +8,6 @@ use crate::db::fields::{self, ValueIndex};
 use crate::db::tabs;
 use crate::db::formulas;
 use crate::db::spreads::{self, PositionInput};
-use crate::db::name_presets;
 use crate::db::generators;
 use crate::db::smart_collections;
 use crate::db::tables::{self, EntryInput, Pick};
@@ -175,11 +174,6 @@ mind the [Rumors]".into(), weight: 1 },
     let hooks = items::create(conn, c, "tables", "table", "Hooks", None, 4200).unwrap();
     tables::add_entry(conn, &hooks.id, "[3 unique Rumors] and [table:Rumors as R] [R]", 1, 4210).unwrap();
 
-    // A saved name setup (its table and tag ids are made-up ones here, so the whole project can be
-    // compared by content; a test of its own checks that real ids follow the import).
-    let preset = r#"{"version":1,"mode":"two","sources":{"first":"some-table","last":"another-table"},"tagIds":["some-tag"],"tagMatch":"any","join1":"apostrophe","join2":"none","capitalisation":"everyPart","mergeDoubles":true}"#;
-    name_presets::create(conn, c, "Elven name", None, preset, 4400).unwrap();
-
     // Fields: a text field, a link field and a dropdown, a set holding the first two (a third was
     // taken out again), a deleted field and a deleted set, values (one secret, one cleared) and
     // a link field that made links.
@@ -267,7 +261,6 @@ struct Snapshot {
     random_tables: Vec<String>,
     table_entries: Vec<String>,
     table_entry_tags: Vec<String>,
-    name_presets: Vec<String>,
     field_definitions: Vec<String>,
     field_sets: Vec<String>,
     field_set_members: Vec<String>,
@@ -343,9 +336,6 @@ fn snapshot(conn: &Connection, project_id: &str) -> Snapshot {
             "SELECT i.name, e.text, t.name, l.created_at, l.updated_at, l.deleted_at
              FROM table_entry_tags l JOIN table_entries e ON e.id = l.entry_id
              JOIN items i ON i.id = e.table_id JOIN tags t ON t.id = l.tag_id WHERE i.project_id = ?1", project_id),
-        name_presets: lines(conn,
-            "SELECT i.name, i.library, p.setup_json, p.created_at, p.updated_at, i.deleted_at
-             FROM name_presets p JOIN items i ON i.id = p.item_id WHERE i.project_id = ?1", project_id),
         field_definitions: lines(conn,
             "SELECT name, kind, description, config_json, created_at, updated_at, deleted_at
              FROM field_definitions WHERE project_id = ?1", project_id),
@@ -427,12 +417,12 @@ fn the_manifest_describes_the_pack() {
         m.counts,
         // 4 documents have text: Strahd, Ireena, Barovia and Old Note ("Scrap" and the map have none).
         // The saved rolls, formulas and cards are items too (22 items: 5 documents, a map, 2 rolls,
-        // 2 formulas, 3 cards, a set, a deck, a pool, a saved draw, a deck in play, a spread, 2 tables and a name preset). 2 cards have details, 1 a picture, 7 membership rows.
+        // 2 formulas, 3 cards, a set, a deck, a pool, a saved draw, a deck in play, a spread, 2 tables). 2 cards have details, 1 a picture, 7 membership rows.
         // 1 table has settings; the 2 tables have 4 entries in all (one deleted) and 2 entry tags (one removed).
         Counts {
-            folders: 3, items: 25, tags: 4, item_tags: 4, links: 5, documents: 5, saved_rolls: 2, formulas: 2,
+            folders: 3, items: 24, tags: 4, item_tags: 4, links: 5, documents: 5, saved_rolls: 2, formulas: 2,
             card_details: 2, collection_members: 7, card_images: 1, saved_draws: 1, play_decks: 1, spreads: 1, spread_positions: 3,
-            random_tables: 1, table_entries: 4, table_entry_tags: 2, name_presets: 1,
+            random_tables: 1, table_entries: 4, table_entry_tags: 2,
             // 4 fields (one deleted), 2 sets (one deleted) with 3 member rows (one removed), 2 applied sets (one taken off),
             // and 4 values (one cleared); the link field made 2 of the 5 links.
             field_definitions: 4, field_sets: 2, field_set_members: 3, item_field_sets: 2, field_values: 4,
@@ -471,7 +461,7 @@ fn a_round_trip_into_the_same_database_makes_an_identical_independent_copy() {
         )
         .unwrap();
     assert_eq!(shared, 0);
-    assert_eq!(count(&conn, "items"), 50);
+    assert_eq!(count(&conn, "items"), 48);
 }
 
 #[test]
@@ -519,7 +509,7 @@ fn imported_items_remember_where_they_came_from() {
             .map(|r| r.unwrap())
             .collect()
     };
-    assert_eq!(rows.len(), 25);
+    assert_eq!(rows.len(), 24);
     for (name, origin_pack, origin_item) in rows {
         assert_eq!(origin_pack.as_deref(), Some(pack_id.as_str()), "{name}");
         // The origin id is the item's id in the ORIGINAL project.
@@ -891,7 +881,7 @@ fn inconsistent_data_is_repaired_and_reported_not_fatal() {
     assert!(pack.warnings.iter().all(|w| w.chars().next().unwrap().is_ascii_digit()));
     assert_eq!(
         pack.counts(),
-        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0 }
+        Counts { folders: 0, items: 2, tags: 3, item_tags: 1, links: 1, documents: 1, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0 }
     );
 
     let conn = open_in_memory();
@@ -1012,7 +1002,7 @@ fn the_committed_version_1_pack_still_imports() {
     assert_eq!(result.project.name, "Strahd (imported)");
     assert_eq!(
         result.counts,
-        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, name_presets: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0 }
+        Counts { folders: 3, items: 6, tags: 4, item_tags: 4, links: 3, documents: 4, saved_rolls: 0, formulas: 0, card_details: 0, collection_members: 0, card_images: 0, saved_draws: 0, play_decks: 0, spreads: 0, spread_positions: 0, random_tables: 0, table_entries: 0, table_entry_tags: 0, field_definitions: 0, field_sets: 0, field_set_members: 0, item_field_sets: 0, field_values: 0, item_tabs: 0, smart_collections: 0, generators: 0 }
     );
     let camp = result.project.id;
 
@@ -1831,51 +1821,6 @@ fn a_failed_import_also_rolls_back_tables() {
     }
 }
 
-// ------------------------------------------------------ name generator presets
-
-fn preset_setup(conn: &Connection, id: &str) -> serde_json::Value {
-    serde_json::from_str(&name_presets::get(conn, id).unwrap().setup_json).unwrap()
-}
-
-#[test]
-fn a_preset_follows_its_tables_and_tags_to_the_imported_copies() {
-    let conn = open_in_memory();
-    let camp = projects::create(&conn, "Names", 1).unwrap().id;
-    let prefixes = items::create(&conn, &camp, "tables", "table", "Elf prefixes", None, 2).unwrap();
-    let suffixes = items::create(&conn, &camp, "tables", "table", "Elf suffixes", None, 3).unwrap();
-    let elf = tags::create(&conn, &camp, None, "Elf", None, 4).unwrap();
-    let setup = json!({
-        "version": 1, "mode": "two",
-        "sources": { "first": prefixes.id, "last": suffixes.id },
-        "tagIds": [elf.id, "a-tag-that-is-not-in-the-pack"],
-        "tagMatch": "all", "join1": "apostrophe", "join2": "none",
-        "capitalisation": "everyPart", "mergeDoubles": true
-    });
-    let preset = name_presets::create(&conn, &camp, "Elven name", None, &setup.to_string(), 5).unwrap();
-
-    let bytes = export_project(&conn, &camp, 5000).unwrap();
-    let imported = import_pack(&conn, &bytes, 6000).unwrap().project.id;
-
-    let find = |project: &str, name: &str| {
-        items::list(&conn, project, "tables", None).unwrap().into_iter().find(|i| i.name == name).unwrap()
-    };
-    let new_preset = find(&imported, "Elven name");
-    assert_ne!(new_preset.id, preset.id);
-    let got = preset_setup(&conn, &new_preset.id);
-
-    // Tables and tags are the imported project's own; ids not in the pack and the rules are left as they were.
-    assert_eq!(got["sources"]["first"], json!(find(&imported, "Elf prefixes").id));
-    assert_eq!(got["sources"]["last"], json!(find(&imported, "Elf suffixes").id));
-    let imported_elf = tags::list(&conn, &imported).unwrap().into_iter().find(|t| t.name == "Elf").unwrap();
-    assert_eq!(got["tagIds"], json!([imported_elf.id, "a-tag-that-is-not-in-the-pack"]));
-    for key in ["version", "mode", "tagMatch", "join1", "join2", "capitalisation", "mergeDoubles"] {
-        assert_eq!(got[key], setup[key], "{key}");
-    }
-    // The original preset still points at the original tables.
-    assert_eq!(preset_setup(&conn, &preset.id), setup);
-    assert_eq!(search::search(&conn, &imported, "elven", Some("tables"), 10).unwrap().len(), 1);
-}
-
 #[test]
 fn a_smart_collections_query_follows_its_tags_folders_fields_and_items_to_the_imported_copies() {
     let conn = open_in_memory();
@@ -2019,77 +1964,53 @@ fn bad_smart_collection_data_in_a_pack_is_skipped_with_warnings() {
 }
 
 #[test]
-fn a_preset_keeps_its_trash_state_and_old_packs_have_no_presets() {
-    let conn = open_in_memory();
-    let camp = projects::create(&conn, "Names", 1).unwrap().id;
-    let keep = name_presets::create(&conn, &camp, "Keep", None, "{}", 2).unwrap();
-    let gone = name_presets::create(&conn, &camp, "Gone", None, "{}", 3).unwrap();
-    items::soft_delete(&conn, &gone.id, 4).unwrap();
-    let imported = import_pack(&conn, &export_project(&conn, &camp, 5000).unwrap(), 6000).unwrap().project.id;
-    let live = name_presets::list(&conn, &imported).unwrap();
-    assert_eq!(live.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Keep"]);
-    assert_ne!(live[0].item_id, keep.id);
-    // The trashed one came back as trashed, and restores.
-    let trashed = items::list(&conn, &imported, "tables", None).unwrap();
-    assert!(trashed.iter().all(|i| i.name != "Gone"));
-    let id: String = conn
-        .query_row(
-            "SELECT id FROM items WHERE project_id = ?1 AND name = 'Gone' AND deleted_at IS NOT NULL",
-            [&imported],
-            |r| r.get(0),
-        )
-        .unwrap();
-    crate::db::trash::restore_item(&conn, &id, 7000).unwrap();
-    assert_eq!(name_presets::list(&conn, &imported).unwrap().len(), 2);
-
-    let pack = read_pack(&pack_with(&[])).unwrap();
-    assert_eq!(pack.name_presets.len(), 0);
-    assert!(pack.warnings.is_empty());
-}
-
-#[test]
-fn bad_preset_data_in_a_pack_is_skipped_with_warnings() {
+fn name_presets_in_an_old_pack_are_skipped_with_a_warning_and_the_rest_imports() {
     let item = |id: &str, kind: &str| json!({
         "id": id, "library": "tables", "itemType": kind, "name": id, "icon": null,
         "folderId": null, "visibility": "default", "createdAt": 1, "updatedAt": 1, "deletedAt": null
     });
-    let preset = |id: &str, setup: &str| json!({ "itemId": id, "setupJson": setup, "createdAt": 1, "updatedAt": 1 });
-    let big = format!(r#"{{"x":"{}"}}"#, "a".repeat(name_presets::MAX_SETUP_BYTES));
     let bytes = pack_with(&[
-        (ITEMS_FILE, json!([item("p", "name_preset"), item("t", "table"), item("p2", "name_preset"), item("p3", "name_preset")])),
-        (NAME_PRESETS_FILE, json!([
-            preset("p", r#"{"mode":"two"}"#),
-            preset("p", r#"{"mode":"three"}"#), // twice
-            preset("t", "{}"),                   // not a preset
-            preset("ghost", "{}"),               // nothing there
-            preset("p2", "[1, 2]"),              // not an object
-            preset("p3", &big),                  // too big
-        ])),
+        (ITEMS_FILE, json!([item("p", "name_preset"), item("t", "table")])),
+        ("data/name_presets.json", json!([{ "itemId": "p", "setupJson": "{}", "createdAt": 1, "updatedAt": 1 }])),
+        (LINKS_FILE, json!([{ "sourceItemId": "p", "targetItemId": "t", "sourceRef": "manual", "createdAt": 1, "updatedAt": 1, "deletedAt": null }])),
     ]);
     let pack = read_pack(&bytes).unwrap();
-    assert_eq!(pack.name_presets.len(), 1);
-    assert!(pack.warnings.iter().any(|w| w.starts_with("5 name preset(s)")), "{:?}", pack.warnings);
+    assert!(pack.warnings.iter().any(|w| w.starts_with("1 saved name setup(s)")), "{:?}", pack.warnings);
     let conn = open_in_memory();
     let camp = import_parsed(&conn, &pack, 10).unwrap().project.id;
-    let rows = name_presets::list(&conn, &camp).unwrap();
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].setup_json, r#"{"mode":"two"}"#);
-}
-
-#[test]
-fn a_failed_import_also_rolls_back_presets() {
-    let source = open_in_memory();
-    let camp = populate(&source);
-    let bytes = export_project(&source, &camp, 5000).unwrap();
-    let target = open_in_memory();
-    target.execute_batch("DROP TABLE name_presets").unwrap();
-    assert!(import_pack(&target, &bytes, 6000).is_err());
-    for table in ["projects", "items", "random_tables", "table_entries"] {
-        assert_eq!(count(&target, table), 0, "{table} should be empty after a failed import");
-    }
+    let names: Vec<_> = items::list(&conn, &camp, "tables", None).unwrap().into_iter().map(|i| i.name).collect();
+    assert_eq!(names, ["t"]);
+    assert_eq!(count(&conn, "links"), 0);
 }
 
 // ------------------------------------------------------------- mentions
+
+#[test]
+fn link_slots_in_table_entries_and_generators_follow_their_pages_to_the_imported_copies() {
+    let source = open_in_memory();
+    let c = projects::create(&source, "Links", 1).unwrap().id;
+    let syra = items::create(&source, &c, "worldbuilding", "document", "Syra Pyroc", None, 2).unwrap();
+    let table = items::create(&source, &c, "tables", "table", "Allies", None, 3).unwrap();
+    let outside = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    tables::add_entry(&source, &table.id, &format!("[link:{} Syra Pyroc] and [link:{outside} Gone] with [2d4]", syra.id), 1, 4).unwrap();
+    let generator = items::create(&source, &c, "tables", "generator", "Raid", None, 5).unwrap();
+    let definition = json!({ "version": 2, "text": format!("[link:{} Syra Pyroc] attacks", syra.id) }).to_string();
+    generators::set_definition(&source, &generator.id, &definition, 6).unwrap();
+
+    let bytes = export_project(&source, &c, 5000).unwrap();
+    let imported = import_pack(&source, &bytes, 6000).unwrap().project.id;
+
+    let new_syra = items::list(&source, &imported, "worldbuilding", None).unwrap().remove(0);
+    assert_ne!(new_syra.id, syra.id);
+    let new_table = find_table(&source, &imported, "Allies");
+    let entry = &tables::get(&source, &new_table.id).unwrap().entries[0];
+    assert_eq!(entry.text, format!("[link:{} Syra Pyroc] and [link:{outside} Gone] with [2d4]", new_syra.id));
+    let new_generator = items::list(&source, &imported, "tables", None).unwrap().into_iter().find(|i| i.name == "Raid").unwrap();
+    let text: serde_json::Value = serde_json::from_str(&generators::get(&source, &new_generator.id).unwrap().definition_json).unwrap();
+    assert_eq!(text["text"], json!(format!("[link:{} Syra Pyroc] attacks", new_syra.id)));
+    // The original is untouched.
+    assert!(tables::get(&source, &table.id).unwrap().entries[0].text.contains(&syra.id));
+}
 
 #[test]
 fn mentions_in_document_text_follow_their_items_into_an_imported_project() {

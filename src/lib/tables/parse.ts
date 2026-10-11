@@ -11,6 +11,8 @@
  *   entity   [entity:Person]  [entity:2 unique Person]   (documents or other items, from a smart
  *            collection or a tag of that name; there is no shorthand, but a table slot whose
  *            table doesn't exist is tried as an entity when it is rolled, so [Person] works too)
+ *   link     [link:<page id> Syra Pyroc]   (one particular page or other item; the name after the id
+ *            is what is shown, and the roll gives that item, so output can link to it)
  *   draw     [draw:1 from Tarot]   [draw 1 from Tarot]
  *   ref      [ref:A]  [ref:A.Faction]   [A]  [A.Faction]   (shorthand: only if A was
  *            set earlier in the same entry, otherwise it is a table name)
@@ -26,6 +28,9 @@
 
 import { parseDice } from "../dice/parse";
 import { MAX_DRAW } from "../cards/draw";
+import { linkName } from "./linkNames";
+import { FORMATTABLE_KINDS, splitFormat } from "./slotFormat";
+import type { SlotFormat } from "./slotFormat";
 
 /** Most slots one entry may hold. */
 export const MAX_SLOTS = 30;
@@ -35,6 +40,7 @@ export const MAX_PICKS = 20;
 export type Slot =
   | { type: "table"; name: string; count: number; unique: boolean }
   | { type: "entity"; name: string; count: number; unique: boolean }
+  | { type: "link"; itemId: string; name: string }
   | { type: "dice"; notation: string }
   | { type: "draw"; count: number; source: string }
   | { type: "ref"; label: string; field?: string }
@@ -50,6 +56,8 @@ export interface SlotPart {
   slot: Slot;
   /** The name this slot's result is given (`as A`), spelled as written. */
   label?: string;
+  /** How the result is written (`| upper`), see `format.ts`. */
+  format?: SlotFormat;
   /** What was written between the brackets, trimmed (escapes resolved). */
   source: string;
   /** Index of the `[` in the original text. */
@@ -138,10 +146,18 @@ function scan(text: string): EntryPart[] {
       slots += 1;
       if (slots > MAX_SLOTS) throw new SlotError(`An entry can hold at most ${MAX_SLOTS} slots`, start);
       const source = inner.trim();
-      const { slot, label } = interpret(source, start, labels);
+      const { slot, label, format } = interpret(source, start, labels);
       if (label !== undefined) labels.set(label.toLowerCase(), label);
       flush();
-      parts.push({ kind: "slot", slot, ...(label !== undefined ? { label } : {}), source, start, end: i });
+      parts.push({
+        kind: "slot",
+        slot,
+        ...(label !== undefined ? { label } : {}),
+        ...(format !== undefined ? { format } : {}),
+        source,
+        start,
+        end: i,
+      });
     } else {
       buffer += c;
       i += 1;
@@ -154,14 +170,22 @@ function scan(text: string): EntryPart[] {
 interface Interpreted {
   slot: Slot;
   label?: string;
+  format?: SlotFormat;
 }
 
 const LABEL_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+const ITEM_ID = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\s+([\s\S]*))?$/i;
 const REF = /^([A-Za-z][A-Za-z0-9_]*)(?:\.(.+))?$/;
 
 /** Works out what one slot means. `labels` holds the labels set earlier in the entry. */
-function interpret(source: string, at: number, labels: Map<string, string>): Interpreted {
-  if (source === "") throw new SlotError("This slot is empty: put a table name, dice or a draw between the brackets", at);
+function interpret(written: string, at: number, labels: Map<string, string>): Interpreted {
+  if (written === "") throw new SlotError("This slot is empty: put a table name, dice or a draw between the brackets", at);
+
+  // A trailing ` | format` only counts on slots that give words; dice, draws and unknown types keep it as text.
+  const writtenKind = /^([a-z][a-z0-9_]*):/.exec(written)?.[1];
+  const split = writtenKind === undefined || FORMATTABLE_KINDS.has(writtenKind) ? splitFormat(written) : { base: written };
+  const source = split.base;
+  const format = "format" in split ? split.format : undefined;
 
   const explicit = /^([a-z][a-z0-9_]*):([\s\S]*)$/.exec(source);
   const { base, label } = splitLabel(source, explicit ? explicit[2].trim() : undefined, at);
@@ -197,7 +221,10 @@ function interpret(source: string, at: number, labels: Map<string, string>): Int
   if (slot.type === "ref" && label !== undefined) {
     throw new SlotError("A reference reuses an earlier result, so it can't get a label of its own", at);
   }
-  return label !== undefined ? { slot, label } : { slot };
+  if (format !== undefined && (slot.type === "dice" || slot.type === "draw")) {
+    throw new SlotError("A format only works on words (a table, a page or a reuse), not on dice or card draws", at);
+  }
+  return { slot, ...(label !== undefined ? { label } : {}), ...(format !== undefined ? { format } : {}) };
 }
 
 /**
@@ -221,6 +248,11 @@ function explicitSlot(kind: string, args: string, at: number, labels: Map<string
     case "entity": {
       const picked = tableSlot(args, at, "An entity slot needs the name of a filter set or a tag");
       return picked.type === "table" ? { type: "entity", name: picked.name, count: picked.count, unique: picked.unique } : picked;
+    }
+    case "link": {
+      const m = ITEM_ID.exec(args);
+      if (!m) throw new SlotError("A link slot needs a page: [link:<id> Name]. Use Insert slot > Link to a page", at);
+      return { type: "link", itemId: m[1].toLowerCase(), name: m[2].trim() };
     }
     case "dice": {
       if (args === "") throw new SlotError("Dice slot needs a formula, like [dice:2d4]", at);
@@ -287,6 +319,9 @@ export function slotCanonical(part: SlotPart): string {
     case "entity":
       body = `entity:${slot.count !== 1 || slot.unique ? `${slot.count} ${slot.unique ? "unique " : ""}` : ""}${escapeText(slot.name)}`;
       break;
+    case "link":
+      body = `link:${slot.itemId}${slot.name !== "" ? ` ${escapeText(slot.name)}` : ""}`;
+      break;
     case "dice":
       body = `dice:${slot.notation}`;
       break;
@@ -294,12 +329,16 @@ export function slotCanonical(part: SlotPart): string {
       body = `draw:${slot.count} from ${escapeText(slot.source)}`;
       break;
     case "ref":
-      return `ref:${slot.label}${slot.field !== undefined ? `.${escapeText(slot.field)}` : ""}`;
+      return `ref:${slot.label}${slot.field !== undefined ? `.${escapeText(slot.field)}` : ""}${formatSuffix(part)}`;
     case "unknown":
       body = `${slot.kind}:${escapeText(slot.args)}`;
       break;
   }
-  return part.label !== undefined ? `${body} as ${part.label}` : body;
+  return (part.label !== undefined ? `${body} as ${part.label}` : body) + formatSuffix(part);
+}
+
+function formatSuffix(part: SlotPart): string {
+  return part.format !== undefined ? ` | ${part.format}` : "";
 }
 
 /** Short readable text for a slot chip (the editor adds the type's icon). */
@@ -313,6 +352,9 @@ export function slotDisplay(part: SlotPart): string {
     case "entity":
       body = `${slot.count !== 1 || slot.unique ? `${slot.count} ${slot.unique ? "unique " : ""}` : ""}${slot.name}`;
       break;
+    case "link":
+      body = linkName(slot.itemId) ?? (slot.name !== "" ? slot.name : "(a page)");
+      break;
     case "dice":
       body = slot.notation;
       break;
@@ -320,10 +362,10 @@ export function slotDisplay(part: SlotPart): string {
       body = `draw ${slot.count} from ${slot.source}`;
       break;
     case "ref":
-      return slot.field !== undefined ? `${slot.label}.${slot.field}` : slot.label;
+      return (slot.field !== undefined ? `${slot.label}.${slot.field}` : slot.label) + formatSuffix(part);
     case "unknown":
       body = `${slot.kind}: ${slot.args}`;
       break;
   }
-  return part.label !== undefined ? `${body} as ${part.label}` : body;
+  return (part.label !== undefined ? `${body} as ${part.label}` : body) + formatSuffix(part);
 }

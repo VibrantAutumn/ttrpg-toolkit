@@ -1,5 +1,4 @@
-//! Starter tables: ready-made random tables (and saved name setups that use them)
-//! that come with the app, added to a project in one all-or-nothing step.
+//! Starter tables: ready-made random tables that come with the app, added to a project in one all-or-nothing step.
 //!
 //! The app builds a "bundle" (plain data, see `TableBundle`) and this module
 //! writes it, the same way `starters.rs` writes a starter deck. Everything made
@@ -7,14 +6,8 @@
 //! how "already added" is known. Once added they are ordinary tables: rename,
 //! edit, tag or delete them freely.
 //!
-//! A preset in a bundle names the bundle's own tables and tags by placeholder
-//! strings inside its setup JSON: `table:<table key>` and `tag:<tag name>`. Install
-//! replaces each with the id of the table or tag it made (or reused), so the
-//! preset works at once.
-
 use super::cards::MAX_NOTES_BYTES;
 use super::error::{clean_name, DbError};
-use super::name_presets::{self, PRESET_TYPE};
 use super::starters::{installed, BundleTag, ID_PREFIX};
 use super::tables::{self, LIBRARY, TABLE_TYPE};
 use super::{projects, folders, items, tags};
@@ -26,7 +19,6 @@ use uuid::Uuid;
 const MAX_TABLES: usize = 40;
 const MAX_ENTRIES_PER_TABLE: usize = 500;
 const MAX_ENTRIES_TOTAL: usize = 3_000;
-const MAX_PRESETS: usize = 30;
 const MAX_TAGS: usize = 60;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -39,8 +31,6 @@ pub struct TableBundle {
     #[serde(default)]
     pub tags: Vec<BundleTag>,
     pub tables: Vec<BundleTable>,
-    #[serde(default)]
-    pub presets: Vec<BundlePreset>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -72,47 +62,12 @@ fn one() -> i64 {
     1
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BundlePreset {
-    pub name: String,
-    /// The setup as JSON text, with `table:<key>` and `tag:<name>` placeholders.
-    pub setup_json: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TableInstallResult {
     pub folder_id: String,
     pub tables: u32,
     pub entries: u32,
-    pub presets: u32,
-}
-
-/// Every string anywhere inside a JSON value.
-fn strings<'a>(value: &'a serde_json::Value, out: &mut Vec<&'a str>) {
-    use serde_json::Value;
-    match value {
-        Value::String(s) => out.push(s),
-        Value::Array(list) => list.iter().for_each(|v| strings(v, out)),
-        Value::Object(map) => map.values().for_each(|v| strings(v, out)),
-        _ => {}
-    }
-}
-
-/// Replaces every string that is a key of `replacements` with its value.
-fn replace_strings(value: &mut serde_json::Value, replacements: &HashMap<String, String>) {
-    use serde_json::Value;
-    match value {
-        Value::String(s) => {
-            if let Some(new) = replacements.get(s.as_str()) {
-                *s = new.clone();
-            }
-        }
-        Value::Array(list) => list.iter_mut().for_each(|v| replace_strings(v, replacements)),
-        Value::Object(map) => map.values_mut().for_each(|v| replace_strings(v, replacements)),
-        _ => {}
-    }
 }
 
 /// Checks the whole bundle before anything is written.
@@ -124,7 +79,7 @@ fn validate(bundle: &TableBundle) -> Result<(), DbError> {
     if bundle.tables.is_empty() || bundle.tables.len() > MAX_TABLES {
         return Err(DbError::Invalid("A starter needs between 1 and 40 tables."));
     }
-    if bundle.presets.len() > MAX_PRESETS || bundle.tags.len() > MAX_TAGS {
+    if bundle.tags.len() > MAX_TAGS {
         return Err(DbError::Invalid("That starter is too large."));
     }
 
@@ -163,26 +118,6 @@ fn validate(bundle: &TableBundle) -> Result<(), DbError> {
     }
     if total > MAX_ENTRIES_TOTAL {
         return Err(DbError::Invalid("That starter has too many entries."));
-    }
-
-    for preset in &bundle.presets {
-        clean_name(&preset.name)?;
-        name_presets::validate(&preset.setup_json)?;
-        let value: serde_json::Value = serde_json::from_str(&preset.setup_json)
-            .map_err(|_| DbError::Invalid("A starter's name setup can't be read."))?;
-        let mut found = Vec::new();
-        strings(&value, &mut found);
-        for s in found {
-            if let Some(key) = s.strip_prefix("table:") {
-                if !keys.contains(key) {
-                    return Err(DbError::Invalid("A starter's name setup uses a table the starter doesn't have."));
-                }
-            } else if let Some(tag) = s.strip_prefix("tag:") {
-                if !tag_names.contains(&tag.trim().to_lowercase()) {
-                    return Err(DbError::Invalid("A starter's name setup uses a tag the starter doesn't define."));
-                }
-            }
-        }
     }
     Ok(())
 }
@@ -239,10 +174,6 @@ pub fn install(conn: &Connection, project_id: &str, bundle: &TableBundle, now: i
         Ok(item.id)
     };
 
-    let mut placeholders: HashMap<String, String> = HashMap::new();
-    for tag in &bundle.tags {
-        placeholders.insert(format!("tag:{}", tag.name), tag_ids[&tag.name.trim().to_lowercase()].clone());
-    }
     let mut entry_count = 0;
     for table in &bundle.tables {
         let id = make(TABLE_TYPE, &table.name, &table.key)?;
@@ -269,18 +200,6 @@ pub fn install(conn: &Connection, project_id: &str, bundle: &TableBundle, now: i
             }
             entry_count += 1;
         }
-        placeholders.insert(format!("table:{}", table.key), id);
-    }
-
-    for preset in &bundle.presets {
-        let id = make(PRESET_TYPE, &preset.name, "preset")?;
-        let mut value: serde_json::Value = serde_json::from_str(&preset.setup_json)
-            .map_err(|_| DbError::Invalid("A starter's name setup can't be read."))?;
-        replace_strings(&mut value, &placeholders);
-        tx.execute(
-            "INSERT INTO name_presets (item_id, setup_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
-            params![id, value.to_string(), now],
-        )?;
     }
 
     tx.commit()?;
@@ -288,7 +207,6 @@ pub fn install(conn: &Connection, project_id: &str, bundle: &TableBundle, now: i
         folder_id: folder.id,
         tables: bundle.tables.len() as u32,
         entries: entry_count,
-        presets: bundle.presets.len() as u32,
     })
 }
 
@@ -305,7 +223,7 @@ mod tests {
         BundleTable { key: key.into(), name: name.into(), notes: String::new(), die_size: None, avoid_recent: 0, entries }
     }
 
-    /// Two name tables, a table with a slot, two tags and a preset using them.
+    /// Two name tables, a table with a slot, and two tags.
     fn bundle() -> TableBundle {
         TableBundle {
             id: "starter:test".into(),
@@ -324,10 +242,6 @@ mod tests {
                 },
                 table("quest", "Quests", vec![entry("Find [2d4] [Prefixes]", 1, &[])]),
             ],
-            presets: vec![BundlePreset {
-                name: "Elven name".into(),
-                setup_json: r#"{"version":1,"mode":"two","sources":{"first":"table:pre","last":"table:suf"},"tagIds":["tag:Elf"],"tagMatch":"all","join1":"none","join2":"none","capitalisation":"firstLetter","mergeDoubles":false}"#.into(),
-            }],
         }
     }
 
@@ -347,10 +261,10 @@ mod tests {
     }
 
     #[test]
-    fn installing_makes_a_folder_with_tables_entries_tags_and_presets() {
+    fn installing_makes_a_folder_with_tables_entries_and_tags() {
         let (conn, camp) = setup();
         let result = install(&conn, &camp, &bundle(), 100).unwrap();
-        assert_eq!((result.tables, result.entries, result.presets), (3, 6, 1));
+        assert_eq!((result.tables, result.entries), (3, 6));
 
         let folders = folders::list(&conn, &camp, LIBRARY).unwrap();
         assert_eq!(folders.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), ["Test names"]);
@@ -358,7 +272,7 @@ mod tests {
         let kinds: Vec<_> = in_folder.iter().map(|i| (i.name.as_str(), i.item_type.as_str())).collect();
         assert_eq!(
             kinds,
-            [("Elven name", "name_preset"), ("Prefixes", "table"), ("Quests", "table"), ("Suffixes", "table")]
+            [("Prefixes", "table"), ("Quests", "table"), ("Suffixes", "table")]
         );
 
         // Entries keep their order, weights and tags; settings and notes are stored.
@@ -386,23 +300,6 @@ mod tests {
             .unwrap();
         assert_eq!(origin, ("starter:test".to_string(), "suf".to_string()));
         assert_eq!(installed(&conn, &camp).unwrap(), ["starter:test"]);
-    }
-
-    #[test]
-    fn a_preset_points_at_the_tables_and_tags_that_were_made() {
-        let (conn, camp) = setup();
-        install(&conn, &camp, &bundle(), 100).unwrap();
-        let preset = name_presets::get(&conn, &find(&conn, &camp, "Elven name").id).unwrap();
-        let setup: serde_json::Value = serde_json::from_str(&preset.setup_json).unwrap();
-        assert_eq!(setup["sources"]["first"], serde_json::json!(find(&conn, &camp, "Prefixes").id));
-        assert_eq!(setup["sources"]["last"], serde_json::json!(find(&conn, &camp, "Suffixes").id));
-        let elf = tags::list(&conn, &camp).unwrap().into_iter().find(|t| t.name == "Elf").unwrap();
-        assert_eq!(setup["tagIds"], serde_json::json!([elf.id]));
-        // Everything else in the setup is untouched.
-        for (key, value) in [("mode", "two"), ("tagMatch", "all"), ("capitalisation", "firstLetter")] {
-            assert_eq!(setup[key], serde_json::json!(value), "{key}");
-        }
-        assert!(!preset.setup_json.contains("table:") && !preset.setup_json.contains("tag:"));
     }
 
     #[test]
@@ -490,18 +387,13 @@ mod tests {
             ("duplicate tag names", Box::new(|b| b.tags[1].name = "ELF".into())),
             ("a bad die", Box::new(|b| b.tables[1].die_size = Some(1))),
             ("too much avoiding", Box::new(|b| b.tables[1].avoid_recent = 51)),
-            ("a preset that is not JSON", Box::new(|b| b.presets[0].setup_json = "nope".into())),
-            ("a preset that is an array", Box::new(|b| b.presets[0].setup_json = "[]".into())),
-            ("a preset with a missing table", Box::new(|b| b.presets[0].setup_json = r#"{"s":"table:ghost"}"#.into())),
-            ("a preset with a missing tag", Box::new(|b| b.presets[0].setup_json = r#"{"t":["tag:Ghost"]}"#.into())),
-            ("a blank preset name", Box::new(|b| b.presets[0].name = " ".into())),
         ];
         for (what, change) in cases {
             let mut b = bundle();
             change(&mut b);
             assert!(install(&conn, &camp, &b, 100).is_err(), "{what}");
         }
-        for table in ["items", "folders", "tags", "table_entries", "name_presets", "random_tables"] {
+        for table in ["items", "folders", "tags", "table_entries", "random_tables"] {
             assert_eq!(count(&conn, table), 0, "{table} should be empty after refused installs");
         }
     }
@@ -509,9 +401,10 @@ mod tests {
     #[test]
     fn a_failure_part_way_leaves_the_project_exactly_as_it_was() {
         let (conn, camp) = setup();
-        conn.execute_batch("DROP TABLE name_presets").unwrap(); // the last thing install writes
+        // The second table's settings are written after the first table's entries, so this fails part-way.
+        conn.execute_batch("DROP TABLE random_tables").unwrap();
         assert!(install(&conn, &camp, &bundle(), 100).is_err());
-        for table in ["items", "folders", "tags", "table_entries", "table_entry_tags", "random_tables"] {
+        for table in ["items", "folders", "tags", "table_entries", "table_entry_tags"] {
             assert_eq!(count(&conn, table), 0, "{table} should be empty after a failed install");
         }
     }

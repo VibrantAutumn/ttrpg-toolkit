@@ -27,11 +27,10 @@ export interface TableInstallResult {
   folderId: string;
   tables: number;
   entries: number;
-  presets: number;
 }
 
 /**
- * Adds a set of starter tables (and the name setups that use them) to a project
+ * Adds a set of starter tables to a project
  * in one all-or-nothing step. Refuses if it was added before or a table with the
  * same name as one of its tables already exists.
  */

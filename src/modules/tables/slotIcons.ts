@@ -4,6 +4,7 @@ import type { SlotDescription } from "../../lib/tables/editorModel";
 export const SLOT_ICONS: Record<string, string> = {
   table: "📋",
   entity: "🧑",
+  link: "🔗",
   dice: "🎲",
   draw: "🃏",
   ref: "↩",

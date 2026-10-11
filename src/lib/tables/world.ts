@@ -16,7 +16,13 @@ const key = (name: string) => name.trim().toLowerCase();
  * matched ignoring case; when two tables share a name the first in the list
  * wins (the database lists the oldest first).
  */
-export function buildWorld(tables: readonly WorldTable[], decks: readonly RollableDeck[], entities?: EntityData): TableWorld {
+export function buildWorld(
+  tables: readonly WorldTable[],
+  decks: readonly RollableDeck[],
+  entities?: EntityData,
+  /** The current names of linked pages, by id (lower case). */
+  linkNames?: ReadonlyMap<string, string>,
+): TableWorld {
   const byName = new Map<string, WorldTable>();
   const byId = new Map<string, WorldTable>();
   for (const t of tables) {
@@ -30,8 +36,21 @@ export function buildWorld(tables: readonly WorldTable[], decks: readonly Rollab
     findTable: (name) => byName.get(key(name)) ?? null,
     findDeck: (name) => decksByName.get(key(name)) ?? null,
     recent: (tableId) => byId.get(tableId)?.recent ?? [],
+    ...(linkNames ? { itemName: (id: string) => linkNames.get(id.toLowerCase()) } : {}),
     ...(entities ? buildEntityLookups(entities) : {}),
   };
+}
+
+/** The ids of the pages that link slots in these texts point at (each once, lower case). */
+export function linkIdsIn(texts: Iterable<string>): string[] {
+  const seen = new Set<string>();
+  for (const text of texts) {
+    if (!text.includes("link:")) continue;
+    const parsed = parseEntry(text);
+    if (!parsed.ok) continue;
+    for (const part of parsed.parts) if (part.kind === "slot" && part.slot.type === "link") seen.add(part.slot.itemId);
+  }
+  return [...seen];
 }
 
 /**

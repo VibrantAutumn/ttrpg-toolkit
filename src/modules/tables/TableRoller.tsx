@@ -49,7 +49,7 @@ export function TableRoller() {
   }, [projectId, dataVersion]);
 
   if (!projectId) return <p className="empty">Choose a project to roll its tables.</p>;
-  if (tables.length === 0) return <p className="empty">No tables yet. Make one in the Tables tool.</p>;
+  if (tables.length === 0) return <p className="empty">No tables yet. Make one in the Generators tool.</p>;
 
   // The remembered table may be gone (deleted or in another project): fall back to the first.
   const selected = tables.find((t) => t.itemId === chosen) ?? tables[0];

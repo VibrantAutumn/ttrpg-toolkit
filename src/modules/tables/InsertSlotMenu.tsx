@@ -1,9 +1,10 @@
 import { useId, useState } from "react";
 import { buildSlotSource, checkSlotChoice, type SlotChoice } from "../../lib/tables/slotSource";
 import { SLOT_ICONS } from "./slotIcons";
+import { LinkSlotPicker } from "./LinkSlotPicker";
 import { useSlotChoices } from "./SlotChoices";
 
-type Kind = "dice" | "table" | "entity" | "draw" | "ref";
+type Kind = "dice" | "table" | "entity" | "draw" | "ref" | "link";
 
 /**
  * The "Insert slot" menu: pick a kind of slot, fill in a few boxes, and it hands
@@ -60,6 +61,7 @@ export function InsertSlotMenu({
           <button onClick={() => setKind("dice")}>{SLOT_ICONS.dice} Dice…</button>
           <button onClick={() => setKind("table")}>{SLOT_ICONS.table} Table…</button>
           <button onClick={() => setKind("entity")}>{SLOT_ICONS.entity} Document…</button>
+          <button onClick={() => setKind("link")}>{SLOT_ICONS.link} Link to a page…</button>
           <button onClick={() => setKind("draw")}>{SLOT_ICONS.draw} Card draw…</button>
           <button onClick={() => setKind("ref")} disabled={labels.length === 0} title={labels.length === 0 ? "Name a result first (“Name this result” on another slot)" : undefined}>
             {SLOT_ICONS.ref} Reuse a result…
@@ -68,6 +70,10 @@ export function InsertSlotMenu({
         </div>
       </div>
     );
+  }
+
+  if (kind === "link") {
+    return <LinkSlotPicker onPick={(item) => onInsert(buildSlotSource({ type: "link", itemId: item.id, name: item.name }))} onClose={onClose} />;
   }
 
   const options =

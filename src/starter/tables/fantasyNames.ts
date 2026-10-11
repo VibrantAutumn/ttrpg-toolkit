@@ -1,29 +1,18 @@
-import type { StarterEntry, StarterPreset, TableStarterDef } from "../../lib/tables/starterTables";
+import type { StarterEntry, TableStarterDef } from "../../lib/tables/starterTables";
 
 /** Entries for one culture: each text gets that culture's tag. */
 const culture = (tag: string, texts: string[]): StarterEntry[] => texts.map((text) => ({ text, tags: [tag] }));
 
-const twoParts = (tag: string): StarterPreset["setup"] => ({
-  mode: "two",
-  sources: { first: "prefixes", last: "suffixes" },
-  tags: [tag],
-  tagMatch: "all",
-  join1: "none",
-  join2: "none",
-  capitalisation: "firstLetter",
-  mergeDoubles: true,
-});
-
 /**
  * Made-up name syllables for five cultures, in three tables. Every entry carries
- * its culture's tag, so a name setup that filters by that tag draws only that
- * culture's syllables (and with no filter the cultures mix).
+ * its culture's tag, so a table slot or generator that filters by that tag can
+ * draw only that culture's syllables.
  */
 export const fantasyNames: TableStarterDef = {
   id: "starter:fantasy-names",
   name: "Fantasy names",
   description:
-    "Name syllables for elves, dwarves, humans, orcs and halflings, each tagged with its culture, and a ready name setup for each.",
+    "Name syllables for elves, dwarves, humans, orcs and halflings, each tagged with its culture, to build names from.",
   tags: [
     { name: "Elf", color: "#2b8a3e" },
     { name: "Dwarf", color: "#c2255c" },
@@ -36,7 +25,7 @@ export const fantasyNames: TableStarterDef = {
       key: "prefixes",
       name: "Name prefixes",
       notes:
-        "The start of a name. Each entry is tagged with its culture (Elf, Dwarf, Human, Orc, Halfling), so a name setup can use just one culture. Add your own, and tag them.",
+        "The start of a name. Each entry is tagged with its culture (Elf, Dwarf, Human, Orc, Halfling), so a generator can use just one culture. Add your own, and tag them.",
       entries: [
         ...culture("Elf", ["Ael", "Cal", "Fen", "Ilu", "Syl", "Tal"]),
         ...culture("Dwarf", ["Brak", "Dur", "Grim", "Kaz", "Mord", "Rok"]),
@@ -68,15 +57,5 @@ export const fantasyNames: TableStarterDef = {
         ...culture("Halfling", ["bottom", "wick", "foot", "brook", "dale", "ley"]),
       ],
     },
-  ],
-  presets: [
-    {
-      name: "Elven name",
-      setup: { ...twoParts("Elf"), mode: "three", sources: { first: "prefixes", middle: "middles", last: "suffixes" } },
-    },
-    { name: "Dwarven name", setup: twoParts("Dwarf") },
-    { name: "Human name", setup: twoParts("Human") },
-    { name: "Orcish name", setup: twoParts("Orc") },
-    { name: "Halfling name", setup: twoParts("Halfling") },
   ],
 };

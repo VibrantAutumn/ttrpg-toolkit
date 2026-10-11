@@ -1,32 +1,36 @@
 import type { ModuleDefinition } from "../../registry/types";
 import { generatorType } from "./generatorType";
-import { namePresetType } from "./namePresetType";
 import { QuickTableWidget } from "./QuickTableWidget";
 import { tableType } from "./tableType";
-import { TablesScreen } from "./TablesScreen";
+import { GeneratorsScreen } from "./GeneratorsScreen";
 
-/** Random tables: entries with weights and ranges, rolled into the roll log (rules in `lib/tables`). */
+/**
+ * Generators: random tables (entries with weights and ranges, rolled into the roll log; rules in `lib/tables`)
+ * and generators that fill in new documents (rules in `lib/generators`). The library id stays `tables`,
+ * so nothing stored changes; only the tool's own id and name do.
+ */
 export const tablesModule: ModuleDefinition = {
   id: "tables",
   tools: [
     {
-      id: "tables",
-      label: "Tables",
-      icon: "📋",
+      id: "generators",
+      label: "Generators",
+      icon: "✨",
       order: 25,
-      component: TablesScreen,
+      component: GeneratorsScreen,
+      libraryLabels: { tables: "Generators" },
     },
   ],
-  itemTypes: [tableType, namePresetType, generatorType],
+  itemTypes: [tableType, generatorType],
   widgets: [
     { id: "tables.quick-roll", label: "Quick table roll", icon: "📋", order: 25, component: QuickTableWidget },
   ],
   commands: [
     {
-      id: "tables.open",
-      label: "Go to Tables",
-      keywords: ["tables", "random", "table", "roll", "rumors", "names", "generator"],
-      run: (ctx) => ctx.openTool("tables"),
+      id: "generators.open",
+      label: "Go to Generators",
+      keywords: ["generators", "generator", "tables", "random", "table", "roll", "rumors", "names"],
+      run: (ctx) => ctx.openTool("generators"),
     },
   ],
 };

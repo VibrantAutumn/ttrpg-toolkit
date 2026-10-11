@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { MAX_PICKS, parseEntry } from "./parse";
+import { rememberLinkNames } from "./linkNames";
+import { MAX_PICKS, parseEntry, slotDisplay } from "./parse";
+import { linkIdsIn } from "./world";
 import { describeSlots, entryToModel, modelToEntry } from "./editorModel";
 import { buildSlotSource, checkSlotChoice } from "./slotSource";
 import type { SlotChoice } from "./slotSource";
@@ -123,5 +125,36 @@ describe("entity slot choices", () => {
     expect(checkSlotChoice({ type: "entity", name: "Person", count: 1, unique: false })).toBeNull();
     expect(checkSlotChoice({ type: "entity", name: "  ", count: 1, unique: false })).toMatch(/filter set or a tag/);
     expect(checkSlotChoice({ type: "entity", name: "P", count: 0, unique: false })).not.toBeNull();
+  });
+});
+
+describe("link slots", () => {
+  const id = "3f1c2a9e-5b7d-4e8a-9c01-2d4f6a8b0c1e";
+  it("builds the explicit form, escaping brackets in the name", () => {
+    expect(buildSlotSource({ type: "link", itemId: id, name: " Syra Pyroc " })).toBe(`link:${id} Syra Pyroc`);
+    expect(buildSlotSource({ type: "link", itemId: id, name: "The [Old] Inn" })).toBe(`link:${id} The \\[Old\\] Inn`);
+  });
+  it("needs a real page id", () => {
+    expect(checkSlotChoice({ type: "link", itemId: "nope", name: "x" })).toBe("Choose a page.");
+    expect(checkSlotChoice({ type: "link", itemId: id, name: "x" })).toBeNull();
+  });
+});
+
+describe("link names", () => {
+  const id = "3f1c2a9e-5b7d-4e8a-9c01-2d4f6a8b0c1e";
+  it("finds the pages entries link to, once each", () => {
+    expect(linkIdsIn([`[link:${id} A] and [link:${id.toUpperCase()} B]`, "no links", "[link:bad]"])).toEqual([id]);
+  });
+  it("shows a chip with the page's current name once it is known", () => {
+    const text = `[link:${id} Old name]`;
+    const chip = () => {
+      const r = parseEntry(text);
+      if (!r.ok || r.parts[0].kind !== "slot") throw new Error("should parse");
+      return slotDisplay(r.parts[0]);
+    };
+    expect(chip()).toBe("Old name");
+    expect(rememberLinkNames([[id, "New name"]])).toBe(true);
+    expect(chip()).toBe("New name");
+    expect(rememberLinkNames([[id, "New name"]])).toBe(false);
   });
 });

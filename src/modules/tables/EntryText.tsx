@@ -2,6 +2,7 @@ import { useState, type FocusEvent } from "react";
 import { entryToModel } from "../../lib/tables/editorModel";
 import { ChipEditor } from "./ChipEditor";
 import { StaticEntry, slotProblems } from "./StaticEntry";
+import { useLinkNames } from "./useLinkNames";
 
 /**
  * An entry's text. At rest it shows the text with slot chips; tap it to edit with
@@ -24,6 +25,7 @@ export function EntryText({
 }) {
   const [editing, setEditing] = useState(false);
   const [asText, setAsText] = useState(false);
+  const namesVersion = useLinkNames(value);
 
   const model = entryToModel(value);
   const textMode = asText || !model.ok;
@@ -48,7 +50,7 @@ export function EntryText({
           spellCheck
         />
       ) : editing ? (
-        <ChipEditor value={value} onChange={onChange} ariaLabel={ariaLabel} />
+        <ChipEditor value={value} onChange={onChange} ariaLabel={ariaLabel} namesVersion={namesVersion} />
       ) : (
         <div
           className="entry-static"

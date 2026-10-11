@@ -2,9 +2,10 @@ import type { Item } from "../../api/library";
 import { registry } from "../../registry";
 import { ItemFieldsPanel } from "../fields/ItemFieldsPanel";
 import { itemTypeLabel } from "./itemDisplay";
+import { LinkedFrom } from "./LinkedFrom";
 
 /**
- * What one item shows below its title: its Properties and its editor. It is the body of a page's Main tab and of each document tab.
+ * What one item shows below its title: its Properties, its editor and, when other things link to it, a "Linked from" list. It is the body of a page's Main tab and of each document tab.
  */
 export function ItemBody({ item }: { item: Item }) {
   // Each item type can bring its own editor (registered by its module).
@@ -22,6 +23,7 @@ export function ItemBody({ item }: { item: Item }) {
         <p className="empty">This {itemTypeLabel(item).toLowerCase()} has nothing to edit yet.</p>
       )}
 
+      {!trashed && <LinkedFrom itemId={item.id} />}
     </>
   );
 }

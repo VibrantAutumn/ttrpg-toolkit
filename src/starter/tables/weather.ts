@@ -56,5 +56,4 @@ export const weather: TableStarterDef = {
       ],
     },
   ],
-  presets: [],
 };

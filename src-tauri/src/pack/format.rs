@@ -13,7 +13,8 @@
 //!   data/card_details.json, data/collection_members.json, data/card_images.json (likewise)
 //!   data/saved_draws.json, data/play_decks.json, data/spreads.json, data/spread_positions.json    (likewise)
 //!   data/random_tables.json, data/table_entries.json, data/table_entry_tags.json    (likewise; recent picks are never exported)
-//!   data/name_presets.json    (likewise; a saved name generator setup, with table and tag ids inside)
+//!   (data/name_presets.json existed in packs made before the name generator was removed; it is ignored,
+//!   and the `name_preset` items in those packs are skipped with a warning)
 //!   data/field_definitions.json, data/field_sets.json, data/field_set_members.json, data/item_field_sets.json,
 //!   data/field_values.json    (likewise; fields and their values. A link field's value holds item ids)
 //!   data/item_tabs.json    (likewise; a page's tabs: nested documents and embeds)
@@ -53,7 +54,6 @@ pub const SPREAD_POSITIONS_FILE: &str = "data/spread_positions.json";
 pub const RANDOM_TABLES_FILE: &str = "data/random_tables.json";
 pub const TABLE_ENTRIES_FILE: &str = "data/table_entries.json";
 pub const TABLE_ENTRY_TAGS_FILE: &str = "data/table_entry_tags.json";
-pub const NAME_PRESETS_FILE: &str = "data/name_presets.json";
 pub const FIELD_DEFINITIONS_FILE: &str = "data/field_definitions.json";
 pub const FIELD_SETS_FILE: &str = "data/field_sets.json";
 pub const FIELD_SET_MEMBERS_FILE: &str = "data/field_set_members.json";
@@ -109,7 +109,6 @@ pub struct Counts {
     pub random_tables: u32,
     pub table_entries: u32,
     pub table_entry_tags: u32,
-    pub name_presets: u32,
     pub field_definitions: u32,
     pub field_sets: u32,
     pub field_set_members: u32,
@@ -323,17 +322,6 @@ pub struct TableEntryTagRecord {
     pub created_at: i64,
     pub updated_at: i64,
     pub deleted_at: Option<i64>,
-}
-
-/// A saved name generator setup (the preset itself is an item). `setup_json` names tables and
-/// tags by id; import points those at the imported copies.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NamePresetRecord {
-    pub item_id: String,
-    pub setup_json: String,
-    pub created_at: i64,
-    pub updated_at: i64,
 }
 
 /// A saved query (the smart collection itself is an item). `query_json` names tags, folders, fields

@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../../lib/dice/rng";
-import { generateName } from "../../lib/tables/nameGen";
-import { buildGenerator, parseSetup, type NameSetup } from "../../lib/tables/nameSetup";
 import { parseEntry } from "../../lib/tables/parse";
 import { rollTable, type RollableTable } from "../../lib/tables/roll";
-import { toTableBundle, type TableStarterDef } from "../../lib/tables/starterTables";
+import type { TableStarterDef } from "../../lib/tables/starterTables";
 import { buildWorld } from "../../lib/tables/world";
 import { STARTER_TABLES } from ".";
 
@@ -12,7 +10,6 @@ import { STARTER_TABLES } from ".";
 const MAX_TABLES = 40;
 const MAX_ENTRIES_PER_TABLE = 500;
 const MAX_ENTRIES_TOTAL = 3_000;
-const MAX_PRESETS = 30;
 const MAX_TAGS = 60;
 const MAX_ENTRY_BYTES = 2_000;
 const MAX_WEIGHT = 10_000;
@@ -50,18 +47,16 @@ for (const def of STARTER_TABLES) {
       expect(def.id.length).toBeLessThanOrEqual(64);
       expect(def.tables.length).toBeGreaterThan(0);
       expect(def.tables.length).toBeLessThanOrEqual(MAX_TABLES);
-      expect(def.presets.length).toBeLessThanOrEqual(MAX_PRESETS);
       expect(def.tags.length).toBeLessThanOrEqual(MAX_TAGS);
       expect(def.tables.reduce((n, t) => n + t.entries.length, 0)).toBeLessThanOrEqual(MAX_ENTRIES_TOTAL);
       expect(def.description.trim()).not.toBe("");
     });
 
-    it("has unique keys, table names, tag names and preset names", () => {
+    it("has unique keys, table names and tag names", () => {
       const unique = (values: string[]) => expect(new Set(values.map(key)).size).toBe(values.length);
       unique(def.tables.map((t) => t.key));
       unique(def.tables.map((t) => t.name));
       unique(def.tags.map((t) => t.name));
-      unique(def.presets.map((p) => p.name));
       for (const tag of def.tags) if (tag.color) expect(tag.color).toMatch(/^#[0-9a-fA-F]{6}$/);
     });
 
@@ -129,75 +124,11 @@ for (const def of STARTER_TABLES) {
         }
       }
     });
-
-    it("writes name setups that point only at its own tables and tags", () => {
-      const bundle = toTableBundle(def);
-      const keys = new Set(def.tables.map((t) => t.key));
-      const tagNames = new Set(def.tags.map((t) => t.name));
-      expect(bundle.presets).toHaveLength(def.presets.length);
-      for (const preset of bundle.presets) {
-        const setup = parseSetup(preset.setupJson);
-        expect(setup, preset.name).not.toBeNull();
-        if (!setup) continue;
-        for (const id of Object.values(setup.sources)) {
-          expect(id?.startsWith("table:"), preset.name).toBe(true);
-          expect(keys.has(String(id).slice("table:".length)), preset.name).toBe(true);
-        }
-        for (const id of setup.tagIds) {
-          expect(id.startsWith("tag:"), preset.name).toBe(true);
-          expect(tagNames.has(id.slice("tag:".length)), preset.name).toBe(true);
-        }
-      }
-    });
-
-    it("makes names from every preset, using only entries with the wanted tags", () => {
-      const tags = def.tags.map((t) => ({ id: t.name, name: t.name, parentId: null }));
-      const tables = def.tables.map((t) => ({
-        id: t.key,
-        name: t.name,
-        entries: t.entries.map((e, i) => ({ id: `${t.key}-${i}`, text: e.text, weight: e.weight ?? 1, tagIds: e.tags ?? [] })),
-      }));
-      for (const preset of def.presets) {
-        const setup: NameSetup = { ...preset.setup, sources: preset.setup.sources, tagIds: preset.setup.tags };
-        const built = buildGenerator(setup, tables, tags);
-        if (!built.ok) throw new Error(`${preset.name}: ${built.message}`);
-        const tagsOf = new Map(tables.flatMap((t) => t.entries.map((e) => [e.id, e.tagIds] as const)));
-        for (let seed = 1; seed <= 200; seed++) {
-          const made = generateName(built.generator, createRng(seed));
-          if (!made.ok) throw new Error(`${preset.name} (seed ${seed}): ${made.message}`);
-          expect(made.result.name.trim(), preset.name).not.toBe("");
-          expect(made.result.picks.length).toBe(preset.setup.mode === "three" ? 3 : preset.setup.mode === "two" ? 2 : 1);
-          for (const pick of made.result.picks) {
-            for (const wanted of preset.setup.tags) {
-              expect(tagsOf.get(pick.entryId), `${preset.name}: ${pick.text}`).toContain(wanted);
-            }
-          }
-        }
-      }
-    });
   });
 }
 
 describe("the fantasy names starter", () => {
   const def = STARTER_TABLES.find((s) => s.id === "starter:fantasy-names")!;
-  const tags = def.tags.map((t) => ({ id: t.name, name: t.name, parentId: null }));
-  const tables = def.tables.map((t) => ({
-    id: t.key,
-    name: t.name,
-    entries: t.entries.map((e, i) => ({ id: `${t.key}-${i}`, text: e.text, weight: e.weight ?? 1, tagIds: e.tags ?? [] })),
-  }));
-
-  it("has a preset for each culture, and the elven one has three parts", () => {
-    expect(def.presets.map((p) => p.name)).toEqual([
-      "Elven name",
-      "Dwarven name",
-      "Human name",
-      "Orcish name",
-      "Halfling name",
-    ]);
-    expect(def.presets[0].setup.mode).toBe("three");
-    expect(def.presets.slice(1).every((p) => p.setup.mode === "two")).toBe(true);
-  });
 
   it("gives every culture plenty of syllables to draw from", () => {
     for (const tag of def.tags) {
@@ -206,28 +137,6 @@ describe("the fantasy names starter", () => {
         expect(table.entries.filter((e) => e.tags?.includes(tag.name)).length, `${tag.name} ${key}`).toBeGreaterThanOrEqual(6);
       }
     }
-  });
-
-  it("makes different elven names, all built from elven syllables", () => {
-    const elven = def.presets[0];
-    const built = buildGenerator({ ...elven.setup, tagIds: elven.setup.tags }, tables, tags);
-    if (!built.ok) throw new Error(built.message);
-    const names = new Set<string>();
-    for (let seed = 1; seed <= 100; seed++) {
-      const made = generateName(built.generator, createRng(seed));
-      if (made.ok) names.add(made.result.name);
-    }
-    expect(names.size).toBeGreaterThan(50);
-    // No orc or dwarf syllable can appear: "gash" and "mund" belong to other cultures.
-    for (const name of names) expect(name).not.toMatch(/gash|mund|bottom|ford/i);
-  });
-
-  it("mixes the cultures when nothing is filtered", () => {
-    const setup: NameSetup = { ...def.presets[1].setup, tagIds: [] };
-    const built = buildGenerator(setup, tables, tags);
-    if (!built.ok) throw new Error(built.message);
-    expect(built.generator.parts.first.length).toBe(30);
-    expect(built.generator.parts.last.length).toBe(30);
   });
 });
 

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { listFieldDefinitions } from "../../api/fields";
 import { setGeneratorDefinition } from "../../api/generators";
 import { createItem, deleteItem, listItemsOfType } from "../../api/library";
 import { toDefinition, type StarterGeneratorDef } from "../../lib/generators/starterGenerators";
@@ -10,14 +9,9 @@ import { STARTER_GENERATORS } from "../../starter/generators";
 const key = (text: string) => text.trim().toLowerCase();
 
 async function install(projectId: string, starter: StarterGeneratorDef): Promise<void> {
-  const [templates, fields] = await Promise.all([listItemsOfType(projectId, "worldbuilding", "template"), listFieldDefinitions(projectId)]);
-  const def = toDefinition(starter, {
-    templateIdByName: (n) => templates.find((t) => key(t.name) === key(n))?.id ?? null,
-    fieldIdByName: (n) => fields.find((f) => key(f.name) === key(n))?.id ?? null,
-  });
   const item = await createItem(projectId, "tables", "generator", starter.name, null);
   try {
-    await setGeneratorDefinition(item.id, def);
+    await setGeneratorDefinition(item.id, toDefinition(starter));
   } catch (e) {
     await deleteItem(item.id).catch(() => undefined); // don't leave an empty generator behind
     throw e;
@@ -68,7 +62,7 @@ export function StarterGenerators() {
   return (
     <details className="starter-generators">
       <summary>Add starter generators</summary>
-      <p className="meta">Ready-made generators that fill in a new document. They roll the starter tables (Fantasy names, NPC quirks and rumors).</p>
+      <p className="meta">Ready-made generators. They roll the starter tables (Fantasy names, NPC quirks and rumors).</p>
       {error && <p className="error">{error}</p>}
       {message && <p className="meta">{message}</p>}
       <ul className="list">

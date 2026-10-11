@@ -10,7 +10,7 @@ const key = (text: string) => text.trim().toLowerCase();
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /**
- * "Add starter tables": ready-made tables (and name setups that use them) that
+ * "Add starter tables": ready-made tables that
  * come with the app. Adding one puts ordinary tables in the open project (all or
  * nothing); after that they are yours to rename, edit or delete.
  */
@@ -51,8 +51,7 @@ export function StarterTables() {
     try {
       const result = await installTableBundle(projectId, toTableBundle(starter));
       bumpDataVersion();
-      const presets = result.presets > 0 ? ` and ${plural(result.presets, "name setup")}` : "";
-      setAdded(`Added ${starter.name}: ${plural(result.tables, "table")}${presets}, in a folder of that name.`);
+      setAdded(`Added ${starter.name}: ${plural(result.tables, "table")}, in a folder of that name.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -81,7 +80,6 @@ export function StarterTables() {
                 <strong>{starter.name}</strong>{" "}
                 <small className="meta">
                   {plural(starter.tables.length, "table")}, {plural(entries, "entry", "entries")}
-                  {starter.presets.length > 0 && `, ${plural(starter.presets.length, "name setup")}`}
                 </small>
                 <br />
                 <small className="meta">{starter.description}</small>

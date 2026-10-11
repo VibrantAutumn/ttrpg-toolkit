@@ -34,7 +34,6 @@ pub fn export_project(conn: &Connection, project_id: &str, now: i64) -> Result<V
     let random_tables = read_random_tables(conn, project_id)?;
     let table_entries = read_table_entries(conn, project_id)?;
     let table_entry_tags = read_table_entry_tags(conn, project_id)?;
-    let name_presets = read_name_presets(conn, project_id)?;
     let field_definitions = read_field_definitions(conn, project_id)?;
     let field_sets = read_field_sets(conn, project_id)?;
     let field_set_members = read_field_set_members(conn, project_id)?;
@@ -71,7 +70,6 @@ pub fn export_project(conn: &Connection, project_id: &str, now: i64) -> Result<V
             random_tables: random_tables.len() as u32,
             table_entries: table_entries.len() as u32,
             table_entry_tags: table_entry_tags.len() as u32,
-            name_presets: name_presets.len() as u32,
             field_definitions: field_definitions.len() as u32,
             field_sets: field_sets.len() as u32,
             field_set_members: field_set_members.len() as u32,
@@ -102,7 +100,6 @@ pub fn export_project(conn: &Connection, project_id: &str, now: i64) -> Result<V
     put(&mut zip, options, RANDOM_TABLES_FILE, &random_tables, false)?;
     put(&mut zip, options, TABLE_ENTRIES_FILE, &table_entries, false)?;
     put(&mut zip, options, TABLE_ENTRY_TAGS_FILE, &table_entry_tags, false)?;
-    put(&mut zip, options, NAME_PRESETS_FILE, &name_presets, false)?;
     put(&mut zip, options, FIELD_DEFINITIONS_FILE, &field_definitions, false)?;
     put(&mut zip, options, FIELD_SETS_FILE, &field_sets, false)?;
     put(&mut zip, options, FIELD_SET_MEMBERS_FILE, &field_set_members, false)?;
@@ -663,18 +660,6 @@ fn read_smart_collections(conn: &Connection, project_id: &str) -> Result<Vec<Sma
     )?;
     let rows = stmt.query_map([project_id], |r| {
         Ok(SmartCollectionRecord { item_id: r.get(0)?, query_json: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)? })
-    })?;
-    Ok(rows.collect::<Result<_, _>>()?)
-}
-
-fn read_name_presets(conn: &Connection, project_id: &str) -> Result<Vec<NamePresetRecord>, PackError> {
-    let mut stmt = conn.prepare(
-        "SELECT p.item_id, p.setup_json, p.created_at, p.updated_at
-         FROM name_presets p JOIN items i ON i.id = p.item_id
-         WHERE i.project_id = ?1 ORDER BY p.created_at, p.item_id",
-    )?;
-    let rows = stmt.query_map([project_id], |r| {
-        Ok(NamePresetRecord { item_id: r.get(0)?, setup_json: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)? })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
 }

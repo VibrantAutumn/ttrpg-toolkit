@@ -2,7 +2,7 @@ import type { TableStarterDef } from "../../lib/tables/starterTables";
 
 const plain = (...texts: string[]) => texts.map((text) => ({ text }));
 
-/** Tavern names, built two ways: from a table of whole-name patterns that use the other two, or as a name setup. */
+/** Tavern names, from a table of whole-name patterns that use the adjectives and things tables. */
 export const tavernNames: TableStarterDef = {
   id: "starter:tavern-names",
   name: "Tavern names",
@@ -37,21 +37,6 @@ export const tavernNames: TableStarterDef = {
         { text: "The [Tavern things]'s Rest", weight: 2 },
         { text: "The [Tavern adjectives] [Tavern things] Inn", weight: 2 },
       ],
-    },
-  ],
-  presets: [
-    {
-      name: "Tavern name",
-      setup: {
-        mode: "two",
-        sources: { first: "adjectives", last: "things" },
-        tags: [],
-        tagMatch: "all",
-        join1: "space",
-        join2: "none",
-        capitalisation: "everyPart",
-        mergeDoubles: false,
-      },
     },
   ],
 };

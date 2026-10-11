@@ -81,5 +81,4 @@ export const questsAndRumors: TableStarterDef = {
       ),
     },
   ],
-  presets: [],
 };
